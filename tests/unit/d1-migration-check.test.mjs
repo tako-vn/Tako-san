@@ -244,6 +244,16 @@ describe('production D1 evidence verification', () => {
       ),
     ).toMatchObject({ mode: 'certify', count: 3 });
     expect(() => classifyPreLedger(manifest, ledger('0033_a.sql'))).toThrow('stop and reconcile');
+    try {
+      classifyPreLedger(manifest, ledger('0033_a.sql'));
+      throw new Error('expected classifyPreLedger to throw');
+    } catch (error) {
+      expect(error.message).toBe(
+        'Migration ledger is neither at the expected pre-tip nor exactly at the candidate migration; stop and reconcile',
+      );
+      expect(error.message).not.toMatch(/Production migration ledger/);
+    }
+
     expect(() =>
       classifyPreLedger(
         manifest,
