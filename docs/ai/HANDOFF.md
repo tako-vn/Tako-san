@@ -1,3 +1,40 @@
+# Handoff — Staging D1 0033→0038 historical catch-up PR
+
+**Current: `STAGING_D1_0033_0038_CATCHUP_PR_READY`.** Do not dispatch the new
+workflow until this PR is reviewed and merged. Do not apply 0039 from catch-up.
+
+Canonical `main`: `8147dde`. Exact-main CI `36274587084` SUCCESS. Deploy
+`36274945067` SUCCESS. Implementation `718abef` on
+`feat/staging-d1-catchup-0033-0038`.
+
+What landed:
+- `.github/workflows/staging-d1-catchup.yml` — `workflow_dispatch` only, staging
+  Environment, `confirm_staging_catchup` default false, contents/actions read,
+  concurrency `frigo-deploy-staging` (shared with the 0039 workflow).
+- `scripts/staging-d1-catchup-check.mjs` — one-step target gate, prefix builder
+  (0001…target, never 0039), ephemeral D1-only Wrangler config, exact catalog
+  certification from local replay, fresh Time Travel bookmark, production D1
+  hard reject.
+- Shared `classifyPreLedger` wording is now environment-neutral; behavior
+  unchanged.
+- Existing 0039 workflow / `PRE_TIP` / `TIP` / Wrangler DB IDs unchanged.
+
+Local gates: typecheck, lint, Vitest 208/4,644, migration smoke, build PASS.
+Local replay certified 59 → 71 → 71 → 101 → 500 → 500. Staging mutation was
+not performed. Production D1/R2/deploy untouched. T20 remains false.
+
+After merge, execute separately: target 0034, inspect receipt, then 0035, 0036,
+0037, 0038. Only then use **Staging D1 Migration** for 0038→0039.
+
+## Resume point
+
+1. Review/merge the catch-up PR. Do not auto-merge.
+2. Re-prove staging Cloudflare secrets after the repo transfer.
+3. Dispatch catch-up from `main` with exact current main SHA, one target per run.
+4. Do not start Content Refresh V2, 0040, or T20 enablement from this path.
+
+---
+
 # Handoff — Runtime Ingredient Model V2 staging blocker and offline checkpoint
 
 Canonical `main` after PR #11: `8687ff9f3e8f6b6cbf466ee61968bb5f3469498c`.

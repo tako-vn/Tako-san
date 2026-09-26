@@ -1,3 +1,20 @@
+# Current — Staging D1 0033→0038 historical catch-up (2026-09-26)
+
+**Status: `STAGING_D1_0033_0038_CATCHUP_PR_READY`. Remote D1 mutation: NO.**
+Branch `feat/staging-d1-catchup-0033-0038` from `origin/main` `8147dde`.
+Implementation `718abef`.
+
+- [done] Dedicated staging-only historical catch-up workflow and checker.
+- [done] One migration per run; prefix isolation excludes 0039.
+- [done] Local 0033–0038 replay certified.
+- [done] Existing 0039 staging migrate workflow left authoritative for 0038→0039.
+- [open] PR review/merge. No remote catch-up dispatch until then.
+
+Next authorized step after merge: dispatch target=0034 only, inspect receipt,
+stop. Do not chain 0034–0038 automatically.
+
+---
+
 # Current — Ingredient icon pack v2 (2026-09-27)
 
 **Status: `ICON_V2_IMPLEMENTED_LOCAL_GATES_RUNNING`. Remote systems:

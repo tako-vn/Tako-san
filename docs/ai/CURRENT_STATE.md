@@ -1,3 +1,50 @@
+# Current state — Staging D1 0033→0038 historical catch-up PR
+
+**2026-09-26: `STAGING_D1_0033_0038_CATCHUP_PR_READY` (implementation). Staging mutation=NO.**
+Exact current `main` is `8147dde` (PR #13). Exact-main hosted CI run
+`36274587084` SUCCESS; Deploy run `36274945067` SUCCESS. No catch-up branch
+or PR existed on `origin` before this work. Repository ID `1385308553` is
+`takovn1/Tako-san` after the `tako-vn2` → `takovn1` owner transfer.
+
+Implementation checkpoint `718abef` on `feat/staging-d1-catchup-0033-0038`
+adds a dedicated workflow and fail-closed checker so staging can catch up
+**one historical migration per run**:
+
+0033 → 0034 → certify → 0035 → certify → 0036 → certify → 0037 → certify → 0038 → certify
+
+It does **not** apply 0039. The existing `.github/workflows/staging-d1-migrate.yml`
+gate remains `PRE_TIP=0038_auth_onboarding_completion.sql` /
+`TIP=0039_meal_composition_v2.sql`. Catch-up uses the same concurrency group
+`frigo-deploy-staging` so the two workflows cannot race. T20 remains off.
+
+Local gates on implementation `718abef`: `pnpm typecheck` PASS, `pnpm lint` PASS,
+`pnpm test` 208 files / 4,644 tests PASS (main CI baseline was 207 / 4,622;
++1 file / +22 catch-up tests), `pnpm check:migrations` PASS, `pnpm build` PASS.
+Focused catch-up + shared D1 checks: 22 + 32 + 6 tests PASS. Local historical
+replay (same prefix mechanism, `node:sqlite`) certified:
+
+| tip | recipes | status |
+|-----|---------|--------|
+| 0033 | 59 | STAGING_0033_BASELINE_CERTIFIED |
+| 0034 | 71 | STAGING_0034_CERTIFIED |
+| 0035 | 71 | STAGING_0035_CERTIFIED |
+| 0036 | 101 | STAGING_0036_CERTIFIED |
+| 0037 | 500 | STAGING_0037_CERTIFIED |
+| 0038 | 500 | STAGING_0038_CERTIFIED |
+
+Previous staging-only 0039 attempt run `36274472100` authenticated and proved
+staging D1 `frigo-db-staging-v3` / `7854298a-20f5-46aa-9cbf-917079c2a3dd`, then failed closed on
+the ledger read. Migration apply was SKIPPED. Reported ledger 0033 / 59 recipes
+is **not** recertified until the new workflow runs after merge. Prior Time Travel
+bookmark `0000004a-00000000-000050f2-7928d4b4454c106316cc7063bd854d3e` is historical only; every mutation run captures
+a fresh bookmark. Production D1 `frigo-db` / `f975ec39-b2c8-4a2a-80e1-0366054599d3` was not contacted.
+
+Next: open/review the catch-up PR; do **not** dispatch remote catch-up until
+merge. After merge, operator runs 0034, stop, 0035, stop, 0036, stop, 0037,
+stop, 0038, stop; then the existing 0039 workflow.
+
+---
+
 # Current state — Runtime Ingredient Model V2 review candidate
 
 **2026-09-27: staging 0039 certification blocked before remote identity; offline
