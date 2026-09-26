@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, cpSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { parseWranglerJsonc } from '../../scripts/d1-migration-check.mjs';
 import { PRE_TIP as STAGING_0039_PRE_TIP, TIP as STAGING_0039_TIP } from '../../scripts/staging-d1-migration-check.mjs';
 import {
@@ -42,6 +42,23 @@ import {
 const { load } = createRequire(createRequire(import.meta.url).resolve('eslint/package.json'))('js-yaml');
 const catchupWorkflow = readFileSync('.github/workflows/staging-d1-catchup.yml', 'utf8');
 const migrateWorkflow = readFileSync('.github/workflows/staging-d1-migrate.yml', 'utf8');
+function originMainSha() {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', 'refs/remotes/origin/main^{commit}'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/main', head]);
+    return head;
+  }
+}
+
+beforeAll(() => {
+  originMainSha();
+});
+
 const dirs = [];
 const temporary = () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'staging-catchup-'));
@@ -347,7 +364,7 @@ describe('catch-up plan and main-moved / ledger-changed gates', () => {
 
 describe('candidate SHA and hosted CI gates', () => {
   it('requires the catch-up ref to equal current origin/main', () => {
-    const mainSha = execFileSync('git', ['rev-parse', 'origin/main'], { encoding: 'utf8' }).trim();
+    const mainSha = originMainSha();
     expect(validateCatchupCandidate({ ref: mainSha, target: '0034' })).toMatchObject({
       sha: mainSha, mainSha, chain: ['0034_global_recipe_catalog_parity.sql'],
     });
@@ -413,7 +430,7 @@ describe('recheck CI and ledger races', () => {
   });
 
   it('rejects unsuccessful exact-main CI and a ledger that changed after preflight', async () => {
-    const mainSha = execFileSync('git', ['rev-parse', 'origin/main'], { encoding: 'utf8' }).trim();
+    const mainSha = originMainSha();
     const dir = temporary();
     const dest = path.join(dir, 'migrations');
     const prefix = buildMigrationPrefix({ target: '0034', destDir: dest });
