@@ -1,3 +1,17 @@
+# Task board — T20 live staging planner prerequisite PR #17 (2026-09-27)
+
+- [x] Deploy run `36305024017` succeeded on exact main `b44e935`, T20=true/static/0, production skipped; live health matched.
+- [x] Create registered staging test User A and User B; retain opaque IDs and private mode-0600 sessions.
+- [x] Reproduce live 401 for unauthenticated picker and 404 `MEAL_PLANNER_DISABLED` for authenticated picker.
+- [x] Obtain operator authorization for staging-only parent planner flags.
+- [x] Implement staging Worker/UI planner flags and fail-closed T20 release prerequisite on PR #17; local focused/lint/typecheck/build/migration gates pass.
+- [ ] Hosted exact-head CI and independent review/merge PR #17.
+- [ ] Exact-main CI; explicit staging-only Deploy with T20=true/static/0 and production=false.
+- [ ] Full live UI/API, Manual, hard restriction, simple food, swap, Assisted, Auto, role, concurrency, ownership, shopping, D1 health and Worker error certification.
+- [ ] Clean isolated test records if safe; preserve production/T19/0040 boundary.
+
+---
+
 # Task board — T20 staging account fix PR #16 (2026-09-27)
 
 - [x] Push implementation branch and open PR #16 against exact main `dff7446855964d9fc60008c370ef656371652a13`.

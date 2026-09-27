@@ -2,6 +2,7 @@
 // T20 release guard: the Worker var and the build-time UI flag must ship as one decision.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { parseWranglerJsonc } from './d1-migration-check.mjs';
 
 export const COMPOSITION_FLAG_BUILD_RECORD = 'dist/composition-flags.json';
 const CANONICAL = ['true', 'false'];
@@ -30,17 +31,36 @@ export function verifyCompositionRelease({ server, ui, manifest, buildRecord }) 
   return value;
 }
 
+/** Staging T20 must not ship behind a disabled planner route or a hidden planner UI. */
+export function verifyStagingPlannerPrerequisite({ composition, config, buildRecord }) {
+  if (config?.vars?.ENVIRONMENT !== 'staging')
+    throw new Error('Planner prerequisite must use the staging Wrangler configuration');
+  if (composition !== 'true') return;
+  if (config.vars.MEAL_PLANNER_ENABLED !== 'true')
+    throw new Error('Staging T20 requires MEAL_PLANNER_ENABLED=true in Wrangler config');
+  if (buildRecord?.VITE_MEAL_PLANNER_ENABLED !== 'true')
+    throw new Error('Staging T20 requires VITE_MEAL_PLANNER_ENABLED=true in the built UI');
+}
+
 function main() {
-  const [command, manifestFile = 'release-manifest.json', buildRecordFile = COMPOSITION_FLAG_BUILD_RECORD] =
+  const [command, manifestFile = 'release-manifest.json', buildRecordFile = COMPOSITION_FLAG_BUILD_RECORD, stagingConfigFile] =
     process.argv.slice(2);
   if (command !== 'verify')
-    throw new Error('Usage: composition-flags.mjs verify [release-manifest.json] [dist/composition-flags.json]');
+    throw new Error('Usage: composition-flags.mjs verify [release-manifest.json] [dist/composition-flags.json] [wrangler.staging.jsonc]');
+  const buildRecord = JSON.parse(readFileSync(buildRecordFile, 'utf8'));
   const value = verifyCompositionRelease({
     server: process.env.MEAL_COMPOSITION_V2_ENABLED,
     ui: process.env.VITE_MEAL_COMPOSITION_V2_ENABLED,
     manifest: JSON.parse(readFileSync(manifestFile, 'utf8')),
-    buildRecord: JSON.parse(readFileSync(buildRecordFile, 'utf8')),
+    buildRecord,
   });
+  if (stagingConfigFile) {
+    verifyStagingPlannerPrerequisite({
+      composition: value,
+      config: parseWranglerJsonc(readFileSync(stagingConfigFile, 'utf8'), stagingConfigFile),
+      buildRecord,
+    });
+  }
   console.log(`Meal Composition V2 flags consistent: server=${value} ui=${value}`);
 }
 

@@ -1,5 +1,32 @@
 # Architecture Decisions
 
+## ADR-037 — Staging T20 requires the planner Worker and UI gates to be on
+
+**Status:** Proposed 2026-09-27 for review. Staging-only configuration and
+release guard; production planner configuration is unchanged.
+
+**Context:** The T20 staging deploy at `b44e9355ce8988e7acb7c3b12c55bc2b27340e1a`
+passed its paired T20 flag checks, yet an authenticated composition picker
+returned 404 `MEAL_PLANNER_DISABLED`. All planner routes first require
+`MEAL_PLANNER_ENABLED=true`, and the web app exposes `/planner` only when
+`VITE_MEAL_PLANNER_ENABLED=true`. Neither flag was set by the staging release.
+Two registered test accounts can sign in but cannot exercise T20.
+
+**Decision:** Set `MEAL_PLANNER_ENABLED=true` in the committed staging Wrangler
+configuration and compile staging assets with `VITE_MEAL_PLANNER_ENABLED=true`.
+The staging T20 release guard reads the committed Wrangler config and Vite's
+build record and rejects any T20=true release unless both planner gates are
+exactly true. The existing T20 Worker/UI pair and recipe authority gates stay
+in force. Production build/deploy configuration is unchanged.
+
+**Consequences:** A reviewed, exact-main staging redeploy is required before
+live T20 certification. Staging's legacy planner UI becomes accessible along
+with T20; this is an intentional staging-only exposure. A future T20-off staging
+release may retain the planner gate; disabling the planner again needs a
+separate explicit decision. The guard prevents another green T20 deploy whose
+planner API and UI are unreachable.
+
+
 ## ADR-036 — Require explicit Deploy dispatch while staging T20 is enabled
 
 **Status:** Proposed 2026-09-27 for PR review. Applies to Deploy trigger only;

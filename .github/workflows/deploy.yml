@@ -163,6 +163,7 @@ jobs:
         if: env.STAGING_UNCONFIGURED != 'true'
         env:
           GIT_COMMIT: ${{ needs.release.outputs.deploy_sha }}
+          VITE_MEAL_PLANNER_ENABLED: 'true'
           VITE_MEAL_COMPOSITION_V2_ENABLED: ${{ needs.release.outputs.meal_composition_v2_enabled }}
         run: pnpm build
 
@@ -171,7 +172,7 @@ jobs:
         env:
           MEAL_COMPOSITION_V2_ENABLED: ${{ needs.release.outputs.meal_composition_v2_enabled }}
           VITE_MEAL_COMPOSITION_V2_ENABLED: ${{ needs.release.outputs.meal_composition_v2_enabled }}
-        run: node scripts/composition-flags.mjs verify release-manifest.json dist/composition-flags.json
+        run: node scripts/composition-flags.mjs verify release-manifest.json dist/composition-flags.json wrangler.staging.jsonc
 
       - name: Recheck exact-head CI after environment approval
         if: env.STAGING_UNCONFIGURED != 'true'
