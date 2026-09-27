@@ -1,11 +1,10 @@
 # Required production Environment reviewers are operator-managed, never configured by this workflow.
 name: Deploy
 
+# Staging currently serves T20=true. A main-push workflow_run would normalize
+# its missing T20 input to false and silently roll the feature back. Deploy only
+# an explicitly approved main SHA with paired T20 flags through workflow_dispatch.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:

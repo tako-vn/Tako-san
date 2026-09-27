@@ -1,3 +1,27 @@
+# Task board — T20 staging account fix PR #16 (2026-09-27)
+
+- [x] Push implementation branch and open PR #16 against exact main `dff7446855964d9fc60008c370ef656371652a13`.
+- [x] Fix staging test Turnstile pairing; require token and explicit Siteverify success; keep production verification unchanged.
+- [x] Remove automatic Deploy trigger so a merge cannot turn currently enabled staging T20 off; retain manual exact-main release gates.
+- [x] Hosted PR CI `36299373601` SUCCESS on implementation `ef5ebd8`: 208 files / 4,725 tests, lint, typecheck, migration smoke, build.
+- [ ] Verify CI on the final documentation checkpoint head.
+- [ ] Independent review and merge PR #16; then exact-main CI and explicit staging dispatch with T20=true/static/0.
+- [ ] Create two registered staging test users and perform full LIVE T20 certification. No accounts or plans created yet.
+
+---
+
+# Task board — T20 staging account fix (2026-09-27)
+
+- [x] Confirm canonical main `dff7446855964d9fc60008c370ef656371652a13`, live staging SHA, and registration 403 `TURNSTILE_FAILED`.
+- [x] Verify official test pair with Siteverify; inspect staging site key and verifier.
+- [x] Commit exact staging test-key pairing with fail-closed token/provider behavior (`027c628`); add unit and registration/OTP coverage.
+- [x] Canonical clone `pnpm check` PASS: 208 files / 4,724 tests, lint, typecheck, migration smoke, build.
+- [x] Inspect deploy gate: requires reviewed main SHA and exact-head hosted CI; automatic main push staging deploy defaults T20 to false.
+- [ ] Review/publish the branch without pushing main directly or turning T20 off.
+- [ ] Resolve safe staging-only release sequence preserving T20=true; then create User A/B and execute full LIVE T20 certification.
+
+---
+
 # Task board — T20-R1 staging release observability (2026-09-27)
 
 - [x] Re-fetch main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`; branch

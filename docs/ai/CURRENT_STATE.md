@@ -1,3 +1,71 @@
+# Current state — T20 staging account fix PR #16 (2026-09-27)
+
+**Status: `T20_STAGING_PR16_REVIEW_PENDING`.** Canonical main remains
+`dff7446855964d9fc60008c370ef656371652a13`; live staging Worker also
+serves this SHA with T20 enabled, static recipe authority and healthy D1.
+PR #16 (`codex/t20-staging-turnstile`) contains Turnstile test-key pairing,
+registration/OTP coverage, and a manual-only Deploy trigger so a main merge
+cannot automatically redeploy staging with T20=false. ADR-035/036 record both
+decisions. Implementation head `ef5ebd8a5c3d52475c0951b83a0bb6a6ca2eef06`
+passed hosted pull-request CI run `36299373601`: lint, typecheck, Vitest
+208 files / 4,725 tests, migration smoke and build. The final documentation
+checkpoint requires its own exact-head CI check after push.
+
+Local gates on this patch: Turnstile focused 2/106 PASS; release workflow 2/254
+PASS; lint, typecheck, migration smoke and build PASS. Local full Vitest had
+4,724/4,725 PASS with one unrelated existing staging D1 catch-up test timing
+out in the local Wrangler CLI, even with a longer timeout. Hosted CI passed
+that test. `git diff --check` PASS.
+
+No registered User A/B exists. No staging deploy, Worker var change, D1
+mutation, recipe-authority change, production action, T19 rollout or 0040 was
+performed. Next: independent PR review and merge; exact-main CI; explicit
+staging-only Deploy on the merge SHA with both T20 flags true, static recipe
+authority and zero canary. Then verify the new Worker SHA, register User A/B,
+and run the original LIVE T20 certification. Do not infer live success from CI.
+
+---
+
+# Current state — T20 staging account fix, release gate pending (2026-09-27)
+
+**Status: `T20_STAGING_FIX_BRANCH_READY_DEPLOY_BLOCKED_RELEASE_GATE`.** Canonical
+`takovn1/Tako-san` main is `dff7446855964d9fc60008c370ef656371652a13`.
+Implementation commit `027c628` on `codex/t20-staging-turnstile` changes only
+Turnstile verification and tests. This documentation checkpoint records the
+release constraints. The deployed staging Worker remains at `dff7446` and still
+has both T20 flags enabled, static recipe authority, and healthy D1.
+
+Live registration with the official Turnstile test widget token returned HTTP
+403 `TURNSTILE_FAILED` twice. Guest creation worked, but T20 requires a
+registered account; no User A/B or T20 test plan was created. The live Worker
+secret and its outbound Siteverify response were unavailable. A mismatched
+retained secret is the leading diagnosis, not a proven live cause; direct
+Siteverify with Cloudflare's published test token/secret pair succeeded.
+
+ADR-035 pairs the exact staging test site key with the matching public test
+secret while still requiring a token and explicit Siteverify success. Other
+staging keys fail closed without a secret; production verification is unchanged.
+Local focused Vitest 2 files / 106 tests PASS. On an exact-main canonical clone,
+`pnpm check` PASS: lint, typecheck, 208 files / 4,724 tests, migration smoke,
+build. `git diff --check` PASS. The inherited managed-worktree `origin/main`
+points to an old repository and caused at least one of two initial full-suite
+Git-history failures; the identical code passed the canonical clone.
+
+The standard Deploy workflow only accepts a reviewed exact-head SHA on main
+with hosted CI. A push to main triggers automatic staging deploy with T20
+input defaulting to `false`, which would turn off the currently enabled feature.
+Do not push directly to main or dispatch a release that weakens this gate. A
+separate reviewed release path that preserves T20=true is needed before live
+account creation and certification can continue. No staging deploy, Worker var,
+recipe-authority, D1, or production mutation was performed in this fix.
+
+Next: review branch and resolve the main/automatic-deploy flag coupling with
+the release operator. Then deploy staging with T20 server and UI flags true,
+prove the new Worker SHA, register User A/B, and run the original LIVE matrix.
+Production/T19/0040 remain out of scope.
+
+---
+
 # Current state — T20-R1 staging release observability convergence (2026-09-27)
 
 **Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`.** Branch
