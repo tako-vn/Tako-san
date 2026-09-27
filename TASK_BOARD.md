@@ -1,3 +1,12 @@
+# Current — T20 staging rollout preflight (2026-09-27)
+
+**Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`. T20 enablement: NO.**
+Main `0b2e0a17…`. Staging 0039 certified. Local T20/runtime gates PASS.
+Do not dispatch Deploy (`meal_composition_v2_enabled=true`) until staging
+`/health/recipe-authority` commit matches this SHA (failed on `36285175574`).
+
+---
+
 # Current — Staging D1 0033→0038 historical catch-up (2026-09-26)
 
 **Status: `STAGING_D1_0033_0038_CATCHUP_PR_READY`. Remote D1 mutation: NO.**

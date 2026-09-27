@@ -1,3 +1,28 @@
+# Handoff — T20 staging rollout preflight (2026-09-27)
+
+**Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`.** Do not enable T20.
+Do not dispatch Deploy. Do not touch production.
+
+Main `0b2e0a17578bdc744427944b90db5b76bdbfe33c` (unmoved). CI `36284857635`
+SUCCESS. Staging 0039 run `36287079403` / artifact `10919819859` /
+`STAGING_0039_CERTIFIED`. Flags OFF in `wrangler.jsonc` and
+`wrangler.staging.jsonc`.
+
+T20 runtime (flags off) certified locally: candidate cap 320, shared T03
+`evaluateHardRestrictions` for Manual/Assisted/Auto/save/apply, simple foods
+fail-closed, T19 authority, 500-recipe picker, persistence, IDOR, stale 409,
+shopping. Focused T20 120 PASS; Vitest 208/4654 PASS; lint/typecheck/migrations/
+build PASS. No code changes.
+
+Blocker: Deploy `36285175574` failed `release-check.mjs authority` after smoke
+PASS (`recipe-authority.commit` `8147dde8…` != release SHA). Same SHA T20
+enablement would hit the same gate after Worker deploy.
+
+Next: reconcile staging recipe-authority commit identity, then staging-only
+Deploy with paired T20 flags. Do not start production.
+
+---
+
 # Handoff — Staging D1 0033→0038 historical catch-up PR
 
 **Remediation (2026-09-27): `STAGING_D1_0033_0038_CATCHUP_PR_REMEDIATED_READY_FOR_REVIEW`.**
