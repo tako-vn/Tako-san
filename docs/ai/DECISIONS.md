@@ -1,5 +1,32 @@
 # Architecture Decisions
 
+## ADR-036 — Require explicit Deploy dispatch while staging T20 is enabled
+
+**Status:** Proposed 2026-09-27 for PR review. Applies to Deploy trigger only;
+production still requires its existing explicit confirmation and gates.
+
+**Context:** Staging currently serves T20 with both Worker and UI flags true.
+The automatic `workflow_run` Deploy after every successful main push has no
+operator T20 input. The release gate correctly normalizes that event to
+`MEAL_COMPOSITION_V2_ENABLED=false`; merging a registration fix would therefore
+silently turn off T20 before the operator's intended staging dispatch. The
+release policy requires an exact current-main SHA and successful hosted CI, so
+a branch cannot use the standard workflow to deploy directly.
+
+**Decision:** Remove the automatic CI-completion trigger from Deploy. Retain
+`workflow_dispatch` on reviewed main with the existing exact-SHA, hosted-CI,
+staging proof, paired Worker/UI flag and production confirmation gates. For the
+T20 staging continuation, the operator must dispatch `environment=staging`,
+`meal_composition_v2_enabled=true`, static recipe authority and zero canary
+only after the PR is reviewed and merged and exact-main CI succeeds.
+
+**Consequences:** A merge no longer deploys staging automatically. This
+prevents an unrequested T20 rollback, and it also means all future staging
+releases need an explicit dispatch until a separately reviewed automatic-state
+policy is implemented. Production remains dispatch-only. Reverting this ADR's
+trigger change while T20 stays on would restore the unsafe automatic rollback.
+
+
 ## ADR-035 — Pair the staging Turnstile test widget with its public test secret
 
 **Status:** Proposed 2026-09-27 for review. No deployment or production change

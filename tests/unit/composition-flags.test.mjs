@@ -56,6 +56,11 @@ describe('T20 composition flags: release gate normalization', () => {
 });
 
 describe('T20 composition flags: deploy workflow wiring', () => {
+  it('requires an explicit dispatch so a main push cannot turn off live staging T20', () => {
+    expect(Object.keys(deploy.on)).toEqual(['workflow_dispatch']);
+    expect(deploy.jobs.release.if).toContain("github.ref == 'refs/heads/main'");
+    expect(deploy.jobs.release.if).toContain("inputs.environment == 'staging'");
+  });
   it('declares a boolean dispatch input defaulting to false', () => {
     const input = deploy.on.workflow_dispatch.inputs.meal_composition_v2_enabled;
     expect(input.type).toBe('boolean');
