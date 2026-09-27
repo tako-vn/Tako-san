@@ -1,5 +1,37 @@
 # Architecture Decisions
 
+
+## ADR-038 — Project unplanned slot fields explicitly and share slot time policy with T20
+
+**Status:** Proposed 2026-09-27 for review. Staging remains on
+`9d64178b8bbc8f07672a1e9f0434867f3699f339` until a separately gated
+release; this decision does not authorize production.
+
+**Context:** Live staging plan creation with `hardMaxTimeMinutes=10` or `20`
+returned HTTP 500 `MEAL_PLANNING_UNAVAILABLE` for test User B. An isolated
+local reproduction exposed a `ZodError`: the T05 shopping snapshot persisted
+the entire T04 `unplannedSlot`, including `hardMaxTimeMinutes`, while its
+strict schema accepts only the T05 subset. The V1 planner can legitimately
+leave a tightly time-capped slot unplanned. Source inspection also showed
+that T20 Manual restrictions and Assisted/Auto candidate generation used
+the base household ranking context without the slot's hard time cap, even
+though V1 uses `contextForSlot`.
+
+**Decision:** Project the explicit T05 fields of each unplanned slot before
+strict parsing; the saved plan intent retains its time constraint. Expose the
+existing V1 `contextForSlot` helper and use it in T20 for each slot's Manual
+hard-restriction evaluation, downstream legacy-family revalidation, and
+Assisted/Auto candidate generation. Keep the same T03 evaluator and preserve
+all household hard policies. An over-time component must return HTTP 422
+`HARD_CONSTRAINT_CONFLICT` without changing revision or composition.
+
+**Consequences:** A focused integration test creates a time-capped plan,
+checks a valid five-minute simple food, rejects a 25-minute simple food and
+a long recipe, rejects swap/save bypasses, and checks Assisted/Auto exclude
+the over-cap food. The change requires exact-head CI, review, exact-main CI,
+and a staging-only T20=true/static/0 deploy before repeating the LIVE hard
+restriction matrix. Production, T19 authority and 0040 remain out of scope.
+
 ## ADR-037 — Staging T20 requires the planner Worker and UI gates to be on
 
 **Status:** Proposed 2026-09-27 for review. Staging-only configuration and

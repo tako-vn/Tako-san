@@ -1,3 +1,17 @@
+# Task board — T20 live hard-time repair (2026-09-27)
+
+- [x] PR #17 merged at `9d64178`; exact-main CI `36306274814` SUCCESS and staging Deploy `36306554840` SUCCESS with T20/planner true, static/0; production SKIPPED.
+- [x] Live User A/B registered; Manual, UI, Assisted, Auto, ownership, revision, shopping and static 71-recipe API checks passed on isolated A plan.
+- [x] Reproduce B's hard-time plan HTTP 500 at caps 10 and 20; verify no B plan persisted; isolate strict T05 unplanned-slot projection ZodError locally.
+- [x] Patch explicit T05 projection and T20 slot-scoped time policies; focused integration 4/4, lint, typecheck, migration smoke and staging-style build PASS.
+- [x] Canonical-clone full `pnpm check` PASS; reviewed diff and opened PR #18 on exact main `9d64178`.
+- [ ] Hosted exact-head CI on final documentation checkpoint; review/merge PR #18.
+- [ ] Merge after review, require exact-main CI, deploy only staging with T20=true/static/0, then repeat LIVE hard-time Manual/Assisted/Auto/save/swap rejection and unchanged-state checks.
+- [ ] Obtain approved read-only staging D1 PRAGMA/ledger/catalog health and Worker smoke-window logs; do not certify without them.
+- [ ] Clean isolated test records only when safe. No production/T19/0040 mutation.
+
+---
+
 # Task board — T20 live staging planner prerequisite PR #17 (2026-09-27)
 
 - [x] Deploy run `36305024017` succeeded on exact main `b44e935`, T20=true/static/0, production skipped; live health matched.
