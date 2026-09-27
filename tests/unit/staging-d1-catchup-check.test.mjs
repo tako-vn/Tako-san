@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, cpSync, re
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { parseWranglerJsonc } from '../../scripts/d1-migration-check.mjs';
 import { PRE_TIP as STAGING_0039_PRE_TIP, TIP as STAGING_0039_TIP } from '../../scripts/staging-d1-migration-check.mjs';
 import {
@@ -497,6 +497,209 @@ describe('recheck CI and ledger races', () => {
       if (previousRepo === undefined) delete process.env.GITHUB_REPOSITORY;
       else process.env.GITHUB_REPOSITORY = previousRepo;
     }
+  });
+});
+
+describe('hostile pre-state checkpoint drift (stops before mutation)', () => {
+  const TIPS = {
+    '0034': '0034_global_recipe_catalog_parity.sql',
+    '0035': '0035_recipe_media_layer.sql',
+    '0036': '0036_recipe_catalog_pilot.sql',
+    '0037': '0037_recipe_catalog_scale.sql',
+  };
+  const dbs = {};
+
+  beforeAll(() => {
+    const names = readdirSync('migrations').filter((name) => name.endsWith('.sql')).sort();
+    for (const [key, tip] of Object.entries(TIPS)) {
+      const db = new DatabaseSync(':memory:');
+      db.exec('PRAGMA foreign_keys = ON');
+      for (const name of names.slice(0, names.indexOf(tip) + 1)) {
+        db.exec(readFileSync(path.join('migrations', name), 'utf8'));
+      }
+      dbs[key] = db;
+    }
+  }, 120_000);
+
+  afterAll(() => {
+    for (const db of Object.values(dbs)) db.close();
+  });
+
+  // Mutations run inside a savepoint so every case starts from the exact reviewed checkpoint.
+  const drifted = (key, sql) => {
+    const db = dbs[key];
+    db.exec('SAVEPOINT hostile');
+    try {
+      if (sql) db.exec(sql);
+      return collectCheckpointEvidence(db, TIPS[key]);
+    } finally {
+      db.exec('ROLLBACK TO hostile');
+      db.exec('RELEASE hostile');
+    }
+  };
+  const nextStep = { '0034': '0035', '0035': '0036', '0036': '0037', '0037': '0038' };
+  const preState = (key, evidence, options) => certifyPreState(CATCHUP_STEPS[nextStep[key]], evidence, options);
+  const idAt = (key, order) => dbs[key].prepare('SELECT recipe_id FROM recipe_runtime_fields WHERE runtime_order = ?').get(order).recipe_id;
+
+  it('K: exact 0034–0037 checkpoints pass the full pre-state contract', () => {
+    for (const key of Object.keys(TIPS)) {
+      expect(preState(key, drifted(key)).status).toBe(checkpointStatus(TIPS[key], 'pre'));
+    }
+    expect(checkpointStatus(TIPS['0035'], 'pre')).toBe('STAGING_0035_PRESTATE_CERTIFIED');
+  });
+
+  it('A/B: 0034 with exact count and IDs but a runtime_order gap or missing runtime field', () => {
+    expect(() => preState('0034', drifted('0034', 'UPDATE recipe_runtime_fields SET runtime_order = 71 WHERE runtime_order = 70')))
+      .toThrow(/STAGING_0034_PRESTATE_DRIFT.*runtime_order/);
+    expect(() => preState('0034', drifted('0034', "DELETE FROM recipe_runtime_fields WHERE recipe_id = 'gl-05'")))
+      .toThrow(/STAGING_0034_PRESTATE_DRIFT.*recipe_runtime_fields/);
+  });
+
+  it('C/D: 0035 with exact IDs but 70 pending media rows or a missing media index', () => {
+    expect(() => preState('0035', drifted('0035', "UPDATE recipe_media SET status = 'rejected' WHERE recipe_id = 'gl-01'")))
+      .toThrow(/STAGING_0035_PRESTATE_DRIFT.*(media_pending|recipe_media seed)/);
+    expect(() => preState('0035', drifted('0035', 'DROP INDEX idx_recipe_media_content_hash')))
+      .toThrow(/STAGING_0035_PRESTATE_DRIFT.*idx_recipe_media_content_hash|STAGING_0035_PRESTATE_DRIFT.*schema objects differ/);
+    const withoutMedia = { ...drifted('0035') };
+    delete withoutMedia.mediaSchema;
+    expect(() => preState('0035', withoutMedia)).toThrow(/recipe_media evidence missing/);
+  });
+
+  it('E/F: 0036 with exact IDs but runtime_order max=101, or tampered pilot batch provenance/marker', () => {
+    expect(() => preState('0036', drifted('0036', 'UPDATE recipe_runtime_fields SET runtime_order = 101 WHERE runtime_order = 100')))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*runtime_order/);
+    const pilotId = idAt('0036', 71);
+    expect(() => preState('0036', drifted('0036', `UPDATE recipes SET source_reference = 'T14F tampered batch' WHERE id = '${pilotId}'`)))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*(provenance)/);
+    const release = loadHistoricalRelease();
+    const tamperedRelease = {
+      ...release,
+      approvedImportBatches: release.approvedImportBatches.map((batch) => (
+        batch.batchId === CATCHUP_STEPS['0036'].batchId ? { ...batch, batchHash: 'f'.repeat(64) } : batch)),
+    };
+    expect(() => preState('0036', drifted('0036'), { release: tamperedRelease }))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*t14f-pilot-30-v1/);
+    const cwd = temporary();
+    mkdirSync(path.join(cwd, 'migrations'));
+    const pilotSql = readFileSync('migrations/0036_recipe_catalog_pilot.sql', 'utf8');
+    writeFileSync(path.join(cwd, 'migrations/0036_recipe_catalog_pilot.sql'),
+      pilotSql.replace(CATCHUP_STEPS['0036'].batchHash, 'e'.repeat(64)));
+    expect(() => preState('0036', drifted('0036'), { cwd, release }))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*migration marker/);
+  });
+
+  it('G/H/I: 0037 with 500 exact IDs but 499 runtime fields, a ready media row, or a moved ordered ID', () => {
+    const scaleId = idAt('0037', 300);
+    expect(() => preState('0037', drifted('0037', `DELETE FROM recipe_runtime_fields WHERE recipe_id = '${scaleId}'`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*recipe_runtime_fields/);
+    expect(() => preState('0037', drifted('0037', `UPDATE recipe_media SET status = 'ready',
+        storage_key = 'recipes/' || recipe_id || '/hero/v1.webp', mime_type = 'image/webp', width = 1, height = 1,
+        content_length = 1, content_hash = '${'a'.repeat(64)}' WHERE recipe_id = 'gl-01'`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*(media_ready|recipe_media seed)/);
+    expect(() => preState('0037', drifted('0037', `
+        UPDATE recipe_runtime_fields SET runtime_order = 100000 WHERE runtime_order = 200;
+        UPDATE recipe_runtime_fields SET runtime_order = 200 WHERE runtime_order = 201;
+        UPDATE recipe_runtime_fields SET runtime_order = 201 WHERE runtime_order = 100000;`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*(ordered recipe IDs|historical release order)/);
+  });
+
+  it('checker refuses to make 0036 eligible when ledger=0035 and IDs are exact but the media seed drifted', async () => {
+    const dir = temporary();
+    const evidence = drifted('0035', "UPDATE recipe_media SET status = 'superseded' WHERE recipe_id = 'vn-kho-01'");
+    const receipt = write(dir, 'receipt.json', {
+      step: CATCHUP_STEPS['0036'],
+      preLedger: { mode: 'apply', tip: TIPS['0035'] },
+      expected: { incoming: incomingCatalog(CATCHUP_STEPS['0036']) },
+      prefix: { included: [], sha256: 'x' },
+    });
+    const files = ['aggregates', 'identities', 'mediaSummary', 'mediaSlots', 'mediaSchema']
+      .map((key) => write(dir, `${key}.json`, evidence[key]));
+    await expect(run('pre-catalog', receipt, files)).rejects.toThrow(/STAGING_0035_PRESTATE_DRIFT/);
+    expect(JSON.parse(readFileSync(receipt, 'utf8')).preState).toBeUndefined();
+    await expect(run('plan', receipt, [write(dir, 'plan.txt', 'Migrations to be applied:\n│ 0036_recipe_catalog_pilot.sql │\n')]))
+      .rejects.toThrow(/missing (preHealth|preState)/);
+    await expect(run('apply-gate', receipt)).rejects.toThrow(/missing/);
+  });
+
+  it('J: certify-only mode certifies the already-applied target exactly and rejects checkpoint drift', async () => {
+    const dir = temporary();
+    const receiptFor = (name) => write(dir, `${name}.json`, {
+      step: CATCHUP_STEPS['0036'],
+      preLedger: { mode: 'certify', tip: TIPS['0036'] },
+      expected: { incoming: incomingCatalog(CATCHUP_STEPS['0036']) },
+      timeTravel: captureBookmark({ bookmark: 'certify-only-bookmark' }),
+    });
+    const filesFor = (evidence, name) => ['aggregates', 'identities', 'mediaSummary', 'mediaSlots', 'mediaSchema']
+      .map((key) => write(dir, `${name}-${key}.json`, evidence[key]));
+    const bad = receiptFor('bad');
+    await expect(run('pre-catalog', bad, filesFor(
+      drifted('0036', 'UPDATE recipe_runtime_fields SET runtime_order = 101 WHERE runtime_order = 100'), 'bad')))
+      .rejects.toThrow(/STAGING_0036_PRESTATE_DRIFT/);
+    const good = receiptFor('good');
+    const exact = drifted('0036');
+    await run('pre-catalog', good, filesFor(exact, 'good'));
+    expect(JSON.parse(readFileSync(good, 'utf8')).preState).toMatchObject({
+      tip: TIPS['0036'], mode: 'certify', media: 'PASS', health: 'PENDING',
+      batches: [{ batchId: CATCHUP_STEPS['0036'].batchId, batchHash: CATCHUP_STEPS['0036'].batchHash }],
+    });
+    await run('pre-health', good, [
+      write(dir, 'fk.json', exact.health.foreignKeys), write(dir, 'quick.json', exact.health.quickCheck),
+    ]);
+    expect(JSON.parse(readFileSync(good, 'utf8')).preState.status).toBe('STAGING_0036_PRESTATE_CERTIFIED');
+  });
+
+  it('requires onboarding evidence for an 0038 checkpoint and media evidence from 0035 on', () => {
+    const evidence38 = { ...expectedCheckpointEvidence('0038_auth_onboarding_completion.sql') };
+    delete evidence38.onboarding;
+    expect(() => certifyCheckpoint('0038_auth_onboarding_completion.sql', evidence38))
+      .toThrow(/STAGING_0038_PRESTATE_DRIFT.*onboarding evidence missing/);
+    const clean38 = expectedCheckpointEvidence('0038_auth_onboarding_completion.sql');
+    const onboarded = { ...clean38, onboarding: d1Result([{ ...clean38.onboarding[0].results[0], onboarded: 1 }]) };
+    expect(certifyCheckpoint('0038_auth_onboarding_completion.sql', onboarded).onboarding).toBe('PASS');
+    expect(() => certifyPostState(CATCHUP_STEPS['0038'], onboarded, {
+      pre: expectedSnapshot('0037_recipe_catalog_scale.sql'), mode: 'apply',
+    })).toThrow(/STAGING_0038_POSTSTATE_DRIFT.*onboarded/);
+  });
+});
+
+describe('apply gate immediately before mutation', () => {
+  const certifiedReceipt = (overrides = {}) => ({
+    step: CATCHUP_STEPS['0035'],
+    preLedger: { mode: 'apply', tip: CATCHUP_STEPS['0035'].preTip },
+    preState: { tip: CATCHUP_STEPS['0035'].preTip, health: 'PASS', status: 'STAGING_0034_PRESTATE_CERTIFIED' },
+    plan: { planned: [CATCHUP_STEPS['0035'].file] },
+    recheck: { ledger: 'PASS', plan: 'PASS', checkedAt: '2026-09-27T00:00:00.000Z' },
+    timeTravel: { ...captureBookmark({ bookmark: 'final-bookmark' }), capturedAt: '2026-09-27T00:00:01.000Z' },
+    ...overrides,
+  });
+
+  it('passes only with a certified pre-state, rechecked ledger/plan and a bookmark captured after recheck', async () => {
+    const dir = temporary();
+    await expect(run('apply-gate', write(dir, 'ok.json', certifiedReceipt()))).resolves.toMatchObject({
+      applyGate: { mode: 'apply' },
+    });
+    await expect(run('apply-gate', write(dir, 'pending.json', certifiedReceipt({
+      preState: { tip: CATCHUP_STEPS['0035'].preTip, health: 'PENDING', status: 'CATALOG_CERTIFIED_HEALTH_PENDING' },
+    })))).rejects.toThrow(/not fully certified/);
+    await expect(run('apply-gate', write(dir, 'stale.json', certifiedReceipt({
+      timeTravel: { ...captureBookmark({ bookmark: 'early' }), capturedAt: '2026-09-26T23:59:59.000Z' },
+    })))).rejects.toThrow(/after the final recheck/);
+    await expect(run('apply-gate', write(dir, 'no-plan-recheck.json', certifiedReceipt({
+      recheck: { ledger: 'PASS', plan: 'SKIPPED', checkedAt: '2026-09-27T00:00:00.000Z' },
+    })))).rejects.toThrow(/rechecked/);
+  });
+
+  it('is wired into the apply step before any wrangler migrations apply', () => {
+    const workflow = load(catchupWorkflow);
+    const steps = workflow.jobs.certify.steps;
+    const apply = steps.find((step) => step.name?.startsWith('Apply only the certified'));
+    const lines = apply.run.split('\n').map((line) => line.trim()).filter(Boolean);
+    expect(lines[0]).toBe('node scripts/staging-d1-catchup-check.mjs apply-gate staging-catchup-receipt.json');
+    expect(steps[steps.indexOf(apply) - 1].name).toMatch(/fresh Time Travel bookmark immediately before mutation/);
+    const pre = steps.find((step) => step.name?.startsWith('Certify the full historical pre-state'));
+    expect(pre.run).toContain('query media-schema');
+    expect(pre.run).toContain('query onboarding');
+    expect(steps.indexOf(pre)).toBeLessThan(steps.indexOf(apply));
   });
 });
 
