@@ -1,3 +1,33 @@
+# Handoff — T20 staging account fix and release gate (2026-09-27)
+
+**Status: `T20_STAGING_FIX_BRANCH_READY_DEPLOY_BLOCKED_RELEASE_GATE`.** Canonical
+main `dff7446855964d9fc60008c370ef656371652a13`; implementation commit
+`027c628` on `codex/t20-staging-turnstile`. T20 remains enabled on staging;
+Worker still serves `dff7446`. No live registered User A/B or T20 plan exists.
+
+Change: `src/worker/utils/turnstile.ts` pairs only the exact staging test site
+key with the official test secret and still calls Siteverify. Missing token or
+failed provider response is rejected. Other staging site keys require a secret;
+production behavior is unchanged. Unit/integration tests and ADR-035 document
+the scope. A mismatched live Worker secret is the leading, unproven diagnosis.
+
+Executed checks: focused Vitest 2/106 PASS; canonical exact-main clone
+`pnpm check` PASS (208/4,724, lint, typecheck, migration smoke, build),
+`git diff --check` PASS. Initial managed-worktree full run had two failures;
+at least one was confirmed due to its stale old-repository `origin/main`. The
+identical code passed the canonical clone.
+
+Release obstacle: Deploy workflow requires a reviewed exact-head SHA on main,
+with hosted CI. Direct main push triggers automatic staging deploy with
+T20=false by default, violating the requirement to keep T20 on. Do not push
+main directly, dispatch an off-flag release, or bypass the release gate. A
+release-operator decision is needed for a safe staged sequence preserving both
+T20 flags true. Once deployed, verify new SHA, register User A/B, and run the
+full LIVE T20 matrix. No staging deploy, Worker var, D1, production, T19, or
+0040 mutation was performed.
+
+---
+
 # Handoff — T20-R1 staging release observability convergence (2026-09-27)
 
 **Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`.** Do not deploy, do not

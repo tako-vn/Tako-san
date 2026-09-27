@@ -1,5 +1,28 @@
 # Architecture Decisions
 
+## ADR-035 — Pair the staging Turnstile test widget with its public test secret
+
+**Status:** Proposed 2026-09-27 for review. No deployment or production change
+is authorized by this ADR.
+
+**Context:** Staging advertises Cloudflare's official always-pass test site key,
+but a retained mismatched Worker secret can make registration return 403
+`TURNSTILE_FAILED`. Live Worker secret contents are not readable with available
+credentials, so this is the leading diagnosis rather than a proven live cause.
+Without registered users, T20's authenticated planner cannot be certified.
+
+**Decision:** For the exact `staging` environment and exact official test site
+key only, use the paired official public test secret for Siteverify. A token is
+still mandatory, and only an explicit successful Siteverify response passes.
+All other staging site keys require a configured secret; production requires
+its own configured site key and secret and is unchanged.
+
+**Consequences:** Staging test registration no longer depends on a retained
+Worker secret when the public test widget is configured. The public test keys
+are deliberately non-security keys and must never be configured in production.
+Live effect must be proved after an independently authorized staging release.
+
+
 ## ADR-034 — Staging captures the serving recipe-authority Worker before deploy; previous-Worker evidence is retried, never accepted (T20-R1)
 
 **Status:** Proposed 2026-09-27 for review (branch
