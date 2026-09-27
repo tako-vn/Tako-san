@@ -1,3 +1,28 @@
+# Handoff — T20 staging account fix PR #16 (2026-09-27)
+
+**Status: `T20_STAGING_PR16_REVIEW_PENDING`.** Main and live staging Worker
+remain `dff7446855964d9fc60008c370ef656371652a13`. PR #16 on
+`codex/t20-staging-turnstile` has implementation head
+`ef5ebd8a5c3d52475c0951b83a0bb6a6ca2eef06`. Hosted pull-request CI run
+`36299373601` SUCCESS: lint, typecheck, 208/4,725 Vitest, migration smoke,
+build. Final documentation checkpoint CI must be verified after push.
+
+The PR fixes staging registration with the official Turnstile test pair and
+makes Deploy manual-only to avoid automatic T20=false rollback on merge.
+Existing release gates still require current main, exact-SHA hosted CI,
+staging authority proof, paired T20 flags and production confirmation. See
+ADR-035/036 and the PR description. Local full Vitest had one unrelated
+Wrangler D1 catch-up timeout; hosted CI passed it.
+
+No live registered User A/B or T20 plan exists. No deploy, Worker var, D1,
+recipe-authority, production, T19 or 0040 change was made. Next: independent
+review/merge; successful exact-main CI; manual staging-only dispatch with
+T20=true/static/0; then verify Worker identity, create User A/B and execute
+the original full LIVE certification. Do not merge or dispatch from this handoff
+without the required review/release decision.
+
+---
+
 # Handoff — T20 staging account fix and release gate (2026-09-27)
 
 **Status: `T20_STAGING_FIX_BRANCH_READY_DEPLOY_BLOCKED_RELEASE_GATE`.** Canonical

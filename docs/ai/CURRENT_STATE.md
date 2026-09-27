@@ -1,3 +1,31 @@
+# Current state — T20 staging account fix PR #16 (2026-09-27)
+
+**Status: `T20_STAGING_PR16_REVIEW_PENDING`.** Canonical main remains
+`dff7446855964d9fc60008c370ef656371652a13`; live staging Worker also
+serves this SHA with T20 enabled, static recipe authority and healthy D1.
+PR #16 (`codex/t20-staging-turnstile`) contains Turnstile test-key pairing,
+registration/OTP coverage, and a manual-only Deploy trigger so a main merge
+cannot automatically redeploy staging with T20=false. ADR-035/036 record both
+decisions. Implementation head `ef5ebd8a5c3d52475c0951b83a0bb6a6ca2eef06`
+passed hosted pull-request CI run `36299373601`: lint, typecheck, Vitest
+208 files / 4,725 tests, migration smoke and build. The final documentation
+checkpoint requires its own exact-head CI check after push.
+
+Local gates on this patch: Turnstile focused 2/106 PASS; release workflow 2/254
+PASS; lint, typecheck, migration smoke and build PASS. Local full Vitest had
+4,724/4,725 PASS with one unrelated existing staging D1 catch-up test timing
+out in the local Wrangler CLI, even with a longer timeout. Hosted CI passed
+that test. `git diff --check` PASS.
+
+No registered User A/B exists. No staging deploy, Worker var change, D1
+mutation, recipe-authority change, production action, T19 rollout or 0040 was
+performed. Next: independent PR review and merge; exact-main CI; explicit
+staging-only Deploy on the merge SHA with both T20 flags true, static recipe
+authority and zero canary. Then verify the new Worker SHA, register User A/B,
+and run the original LIVE T20 certification. Do not infer live success from CI.
+
+---
+
 # Current state — T20 staging account fix, release gate pending (2026-09-27)
 
 **Status: `T20_STAGING_FIX_BRANCH_READY_DEPLOY_BLOCKED_RELEASE_GATE`.** Canonical
