@@ -43,7 +43,7 @@ function boundedCatalog(catalog: RecipeCatalogSnapshot, slots: readonly Normaliz
     recipesCapped: recipes.length < catalog.recipes.length, familiesCapped: families.length < catalog.families.length };
 }
 
-function contextForSlot(context: z.infer<typeof RankingContextSchema>, slot: NormalizedPlannerSlot) {
+export function contextForSlot(context: z.infer<typeof RankingContextSchema>, slot: Pick<NormalizedPlannerSlot, 'hardMaxTimeMinutes' | 'preferredTimeMinutes'>) {
   if (slot.hardMaxTimeMinutes === undefined && slot.preferredTimeMinutes === undefined) return context;
   const copy = structuredClone(context);
   const personal = copy.preferences.find((row) => row.userId === copy.userId);

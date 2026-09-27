@@ -262,13 +262,14 @@ export class MealPlanningApplicationService {
   }
 
   /** @internal T20: the same trusted T04 context the V1 planner builds, for Assisted/Auto candidates. */
-  planningContext(snapshot: Snapshot, referenceInstant: string) {
+  planningContext(snapshot: Snapshot, referenceInstant: string,
+    rankingContext: Snapshot['rankingContext'] = snapshot.rankingContext) {
     return createPlanningContext(() => ({
       snapshotId: crypto.randomUUID(),
       referenceInstant,
       catalog: snapshot.catalog,
       inventory: snapshot.inventory,
-      rankingContext: snapshot.rankingContext,
+      rankingContext,
       evidenceProvider: snapshot.evidenceProvider,
       substitutions: [],
       approvedSubstitutionIds: [],

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MealPlanDtoSchema } from '../../packages/domain/src/meal-planning-api';
+import { ALL_RECIPES } from '../../packages/recipes/src/data';
 import {
   PlanCompositionsDtoSchema,
   SlotCompositionDtoSchema,
@@ -119,5 +120,71 @@ describe('T20 manual builder', () => {
     const reread = SlotCompositionDtoSchema.parse((await h.call(HOUSE, 'GET', `${slotPath(plan.id, slotId)}/composition`)).json);
     expect(reread).toEqual(removed);
     expect(events.filter((event) => event.event === 'composition_manual_update')).toHaveLength(5);
+  }, CASE_TIMEOUT);
+});
+
+describe('T20 slot time boundary', () => {
+  it('persists an unplanned time-capped plan and rejects Manual add, swap and save beyond that slot cap', async () => {
+    h.mode = 'static';
+    const slot = { ...T20_INTENT.slots[0], hardMaxTimeMinutes: 20 };
+    const response = await h.call(HOUSE, 'POST', '/meal-planning/plans',
+      { ...T20_INTENT, slots: [slot] });
+    expect(response.status, JSON.stringify(response.json)).toBe(200);
+    const plan = MealPlanDtoSchema.parse(response.json);
+    const slotId = `${slot.date}:dinner:0`;
+    const path = slotPath(plan.id, slotId);
+    const beforeResponse = await h.call(HOUSE, 'GET', `${path}/composition`);
+    expect(beforeResponse.status, JSON.stringify(beforeResponse.json)).toBe(200);
+    const before = SlotCompositionDtoSchema.parse(beforeResponse.json);
+
+    const longRecipe = await h.call(HOUSE, 'POST', `${path}/components`,
+      { revision: before.planRevision, target: { kind: 'recipe', recipeId: 'vn-bun-03' }, role: 'main' });
+    expect(longRecipe.status).toBe(422);
+    expect(longRecipe.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+    const rice = { kind: 'simple_food' as const, simpleFoodId: 'sf-steamed-rice' };
+    const rejected = await h.call(HOUSE, 'POST', `${path}/components`,
+      { revision: before.planRevision, target: rice, role: 'staple' });
+    expect(rejected.status).toBe(422);
+    expect(rejected.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+    expect((await h.call(HOUSE, 'GET', `${path}/composition`)).json).toEqual(before);
+
+    const cucumber = await h.call(HOUSE, 'POST', `${path}/components`,
+      { revision: before.planRevision, target: { kind: 'simple_food', simpleFoodId: 'sf-sliced-cucumber' },
+        role: 'vegetable' });
+    expect(cucumber.status, JSON.stringify(cucumber.json)).toBe(200);
+    const added = SlotCompositionDtoSchema.parse(cucumber.json);
+    const component = added.composition.components.find((item) => item.simpleFoodId === 'sf-sliced-cucumber');
+    expect(component).toBeDefined();
+
+    const swap = await h.call(HOUSE, 'POST', `${path}/components/${component!.id}/swap`,
+      { revision: added.planRevision, target: rice, role: 'staple' });
+    expect(swap.status).toBe(422);
+    expect(swap.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+    const save = await h.call(HOUSE, 'PUT', `${path}/composition`, {
+      revision: added.planRevision,
+      components: [{ target: rice, role: 'staple', locked: false }],
+    });
+    expect(save.status).toBe(422);
+    expect(save.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+    expect((await h.call(HOUSE, 'GET', `${path}/composition`)).json).toEqual(added);
+
+    const assisted = await h.call(HOUSE, 'POST', `${path}/assist`,
+      { revision: added.planRevision, action: 'complete' });
+    expect(assisted.status, JSON.stringify(assisted.json)).toBe(200);
+    expect(assisted.json.proposal?.components.some((item: { simpleFoodId: string | null }) =>
+      item.simpleFoodId === 'sf-steamed-rice')).toBe(false);
+    const auto = await h.call(HOUSE, 'POST', `${path}/auto`, { revision: added.planRevision });
+    expect(auto.status, JSON.stringify(auto.json)).toBe(200);
+    expect(auto.json.options.length).toBeGreaterThan(0);
+    for (const option of auto.json.options) {
+      for (const component of option.components) {
+        if (!component.recipeId) continue;
+        const recipe = ALL_RECIPES.find((entry) => entry.id === component.recipeId);
+        expect(recipe, component.recipeId).toBeDefined();
+        expect(recipe!.cookTimeMinutes).toBeLessThanOrEqual(20);
+      }
+    }
+    expect(auto.json.options.flatMap((option: { components: Array<{ simpleFoodId: string | null }> }) =>
+      option.components).some((item: { simpleFoodId: string | null }) => item.simpleFoodId === 'sf-steamed-rice')).toBe(false);
   }, CASE_TIMEOUT);
 });

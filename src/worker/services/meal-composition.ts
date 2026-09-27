@@ -72,8 +72,9 @@ import {
 import { legacyFamilyRestrictions, recipeRestrictions, simpleFoodRestrictions } from '../../../packages/recipes/src/composition/restrictions';
 import { composeMeal, type ComposedOption, type ComposerFixed } from '../../../packages/recipes/src/composition/composer';
 import { evaluationFromCandidate, prepareComposerCandidates } from '../../../packages/recipes/src/composition/candidates';
-import { canonicalJson } from '../../../packages/recipes/src/planner-context';
+import { canonicalJson, readPlanningContext } from '../../../packages/recipes/src/planner-context';
 import { resolveRankingPreferences } from '../../../packages/recipes/src/personalization';
+import { contextForSlot } from '../../../packages/recipes/src/weekly-planner';
 import type { RecipeAuthoritySnapshot } from '../../../packages/recipes/src/recipe-authority';
 import type { Recipe } from '../../../packages/recipes/src/types';
 import { MealPlanningError } from './meal-planning-error';
@@ -84,7 +85,10 @@ type Scope = { householdId: string; userId: string };
 type Planner = MealPlanningApplicationService;
 type Loaded = Awaited<ReturnType<MealCompositionService['load']>>;
 
-interface SlotInfo { slotId: string; date: string; instant: string; mealType: MealType; servings: number }
+interface SlotInfo {
+  slotId: string; date: string; instant: string; mealType: MealType; servings: number;
+  hardMaxTimeMinutes?: number; preferredTimeMinutes?: number;
+}
 
 /** Privacy-safe structured events: counts, modes, codes and durations only. */
 function logEvent(event: string, fields: Record<string, string | number | boolean>) {
@@ -155,14 +159,27 @@ export class MealCompositionService {
   }
 
   private slots(stored: ReturnType<Planner['decode']>): SlotInfo[] {
-    const infos: SlotInfo[] = stored.result.meals.map((meal) => ({ slotId: meal.slotId, date: meal.date, instant: meal.instant,
-      mealType: meal.mealType, servings: meal.servings }));
+    const timeBySlot = new Map<string, { hardMaxTimeMinutes?: number; preferredTimeMinutes?: number }>(stored.intent.slots.map((slot) =>
+      [`${slot.date}:${slot.mealType}:${slot.sequence}`, {
+        hardMaxTimeMinutes: slot.hardMaxTimeMinutes, preferredTimeMinutes: slot.preferredTimeMinutes,
+      }] as const));
+    const infos: SlotInfo[] = stored.result.meals.map((meal) => ({
+      slotId: meal.slotId, date: meal.date, instant: meal.instant,
+      mealType: meal.mealType, servings: meal.servings, ...timeBySlot.get(meal.slotId),
+    }));
     for (const slot of stored.shoppingPlan.unplannedSlots) {
       if (!infos.some((info) => info.slotId === slot.id)) {
-        infos.push({ slotId: slot.id, date: slot.date, instant: slot.instant, mealType: slot.mealType, servings: slot.servings });
+        infos.push({ slotId: slot.id, date: slot.date, instant: slot.instant,
+          mealType: slot.mealType, servings: slot.servings, ...timeBySlot.get(slot.id) });
       }
     }
     return infos.sort((a, b) => (a.instant < b.instant ? -1 : a.instant > b.instant ? 1 : a.slotId < b.slotId ? -1 : 1));
+  }
+
+  private scopedContext(loaded: Loaded, slot: SlotInfo) {
+    if (slot.hardMaxTimeMinutes === undefined && slot.preferredTimeMinutes === undefined) return loaded.context;
+    return this.planner.planningContext(loaded.snapshot, loaded.referenceInstant,
+      contextForSlot(loaded.snapshot.rankingContext, slot));
   }
 
   private compositionFor(loaded: Pick<Loaded, 'stored' | 'compositions' | 'row'>, slotId: string): MealComposition {
@@ -311,14 +328,15 @@ export class MealCompositionService {
    */
   private restrictionReasons(loaded: Loaded, slot: SlotInfo, target: ComponentTarget,
     inventory: CompositionProjection['inventoryAtStop']): string[] {
-    const hard = resolveRankingPreferences(loaded.snapshot.rankingContext).hard;
+    const scoped = this.scopedContext(loaded, slot);
+    const hard = resolveRankingPreferences(readPlanningContext(scoped).rankingContext).hard;
     if (target.kind === 'simple_food') {
       const food = getSimpleFood(target.simpleFoodId);
       return food ? simpleFoodRestrictions(food, hard).reasons : ['INVALID_CANDIDATE'];
     }
     const recipe = loaded.evaluation.catalog.recipes.find((entry) => entry.id === target.recipeId);
     if (!recipe) return ['INVALID_CANDIDATE'];
-    return recipeRestrictions({ context: loaded.context, recipe, slot, inventory: inventory ?? [] }).reasons;
+    return recipeRestrictions({ context: scoped, recipe, slot, inventory: inventory ?? [] }).reasons;
   }
 
   private assertComposable(loaded: Loaded, slotId: string, current: MealComposition) {
@@ -387,7 +405,7 @@ export class MealCompositionService {
         if (!inventory) throw new Error('Missing T02 inventory checkpoint for affected component');
         let reasons: string[];
         if (component.kind === 'legacy_family') {
-          const verdict = component.family && legacyFamilyRestrictions({ context: loaded.context,
+          const verdict = component.family && legacyFamilyRestrictions({ context: this.scopedContext(loaded, checkedSlot),
             family: component.family, slot: checkedSlot, inventory });
           if (!verdict) throw new MealPlanningError('COMPOSITION_REVALIDATION_REQUIRED', 409, 'Family variant is no longer available');
           reasons = verdict.reasons;
@@ -466,7 +484,7 @@ export class MealCompositionService {
       role: item.role, traits: item.traits, dominantIngredientId: item.dominantIngredientId })), 'recommended');
     const usedElsewhere = new Set([...all.values()].filter((entry) => entry.slotId !== slot.slotId)
       .flatMap((entry) => entry.components.map((item) => targetKey(item))));
-    const candidates = rolesToFill.length ? prepareComposerCandidates({ context: loaded.context, roleIndex: loaded.roles,
+    const candidates = rolesToFill.length ? prepareComposerCandidates({ context: this.scopedContext(loaded, slot), roleIndex: loaded.roles,
       slot: { date: slot.date, instant: slot.instant, servings: slot.servings, mealType: slot.mealType },
       inventory: projection.inventoryAtStop ?? [], roles: rolesToFill, mode: loaded.stored.intent.mode,
       excludeKeys: new Set(fixed.map((item) => item.key)), usedElsewhere }) : [];

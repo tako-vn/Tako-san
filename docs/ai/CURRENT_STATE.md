@@ -1,3 +1,45 @@
+# Current state — T20 live staging hard time blocker and repair branch (2026-09-27)
+
+**Status: `T20_STAGING_LIVE_HARD_RESTRICTION_BLOCKED_P1`.** Canonical main
+and live staging Worker are
+`9d64178b8bbc8f07672a1e9f0434867f3699f339`. Deploy run
+`36306554840` / artifact `10927776649` succeeded with planner and T20
+Worker/UI flags true, static recipe authority, 71 served recipes, healthy
+D1 readiness, and production skipped. PR #17 merged; exact-main CI run
+`36306274814` succeeded. No later staging or production deploy occurred.
+
+LIVE User A `usr_1790496416217_u02mk` /
+`hh_usr_1790496416217_u02mk` owns isolated plan
+`6aa36637-7a3f-4d4e-a531-c19d233fe6f8`; User B
+`usr_1790496420287_ajiz4` /
+`hh_usr_1790496420287_ajiz4` has no plan from the failed hard-time
+attempts. API flag/picker PASS (71 static recipes); browser E2E composition
+visible with role labels and no fatal page error. Manual add/lock/unlock/
+reorder/swap/save/remove and repeated reload PASS. Stale write returned
+409 `PLAN_REVISION_CONFLICT`; B's read/add/swap/save/apply all returned 404
+and A's state stayed intact. Assisted generated/applied 11 candidates;
+Auto generated/applied 15 candidates and a four-component meal; scores
+were finite and reload matched. Shopping reflected initial components,
+valid swap, removed component, duplicate ingredients and simple-food rice.
+
+LIVE hard-time plan creation for B with slot `hardMaxTimeMinutes=10` and
+`20` returned HTTP 500 `MEAL_PLANNING_UNAVAILABLE` before any plan
+persisted. This P1 blocks hard restriction certification and therefore
+full T20 live certification. Worker tail logs and read-only post-smoke D1
+PRAGMA access are unavailable locally; do not mark those gates PASS.
+A local direct-service reproduction identified the strict T05 projection
+failure on an unplanned slot carrying `hardMaxTimeMinutes`. Source inspection
+also identified a T20 slot-time policy gap; no unsafe LIVE T20 component
+was proven persisted.
+
+Branch `codex/t20-staging-hard-time` from exact main contains the proposed
+repair (ADR-038). Focused T20 HTTP suite 4/4, lint, typecheck, migration
+smoke and staging-style build PASS. Full hosted CI, review, merge and
+redeploy remain pending. Do not certify the current staging release.
+Production, T19 recipe authority and 0040 remain untouched.
+
+---
+
 # Current state — T20 live staging planner prerequisite PR #17 (2026-09-27)
 
 **Status: `T20_STAGING_PLANNER_PR17_REVIEW_PENDING`.** Canonical main is

@@ -1,3 +1,43 @@
+# Handoff — T20 live staging hard-time blocker and repair (2026-09-27)
+
+**Status: `T20_STAGING_LIVE_HARD_RESTRICTION_BLOCKED_P1`.** Main and
+staging Worker are `9d64178b8bbc8f07672a1e9f0434867f3699f339`.
+Deploy `36306554840` / artifact `10927776649` succeeded with T20 and
+planner enabled, static authority (71 served recipes), production skipped.
+LIVE A plan `6aa36637-7a3f-4d4e-a531-c19d233fe6f8`, slot
+`2026-09-28:dinner:0`, revision 11; A user
+`usr_1790496416217_u02mk`, household
+`hh_usr_1790496416217_u02mk`. B user
+`usr_1790496420287_ajiz4`, household
+`hh_usr_1790496420287_ajiz4`; B has no persisted plan from the failed
+hard-time attempts. Sessions are in a local mode-0600 temporary file.
+No credentials, email, OTP, cookie or password are in this handoff.
+
+LIVE PASS: picker 71, browser T20 editor and role labels with no fatal error,
+Manual add/lock/unlock/reorder/swap/save/remove and repeated reload,
+409 stale revision, B ownership denials (all 404), Assisted 11 candidates
+with apply/reload, Auto 15 candidates with four-component apply/reload,
+shopping changes after swap/remove including simple food and duplicate
+ingredient aggregation. LIVE FAIL: plan generation with slot hard maximum
+10 or 20 minutes returned HTTP 500 `MEAL_PLANNING_UNAVAILABLE`, preventing
+the hard-rule fixture. Source inspection is not a live rejection test.
+No unsafe component was proven persisted. Post-smoke D1 PRAGMA and Worker
+tail logs remain unproven because no approved local Cloudflare credentials
+are available.
+
+On `codex/t20-staging-hard-time`, ADR-038 records the repair. Local
+direct-service reproduction found a strict T05 shopping snapshot ZodError
+on an unplanned slot with `hardMaxTimeMinutes`; projection now selects
+only T05 fields. T20 now applies V1's slot time policy to Manual checks,
+downstream family revalidation and Assisted/Auto candidates. Focused T20
+HTTP 4/4, lint, typecheck, migration smoke and staging-style build PASS.
+The branch is not deployed. Next: full gate, PR/CI/review/merge, exact-main
+CI, staging-only T20=true/static/0 Deploy, then repeat the hard-rule LIVE
+matrix and D1/log checks. Do not certify the current Worker. No production,
+T19 or 0040 action.
+
+---
+
 # Handoff — T20 live staging planner prerequisite PR #17 (2026-09-27)
 
 **Status: `T20_STAGING_PLANNER_PR17_REVIEW_PENDING`.** Main and live

@@ -187,7 +187,11 @@ export function projectShoppingMealPlan(plan: WeeklyMealPlan): ShoppingMealPlanS
         sourceLineIndices: shortage.sourceLineIndices,
       })),
     })),
-    unplannedSlots: plan.unplannedSlots,
+    unplannedSlots: plan.unplannedSlots.map((slot) => ({
+      id: slot.id, date: slot.date, mealType: slot.mealType, sequence: slot.sequence,
+      time: slot.time, instant: slot.instant, servings: slot.servings,
+      ...(slot.lock ? { lock: slot.lock } : {}), reasons: slot.reasons,
+    })),
     initialInventorySnapshot: plan.initialInventorySnapshot.map(({ householdId }) => ({ householdId })),
     projectedFinalInventory: plan.projectedFinalInventory,
     diagnostics: plan.diagnostics,
