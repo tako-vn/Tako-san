@@ -1,3 +1,11 @@
+# Current — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
+
+**Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Deploy/D1 mutation/T20/authority: NO.
+Read-only staging certifier + workflow on `61bf805`. Wait for review/merge;
+do not dispatch until exact-main CI.
+
+---
+
 # Current — T20-R1 staging release observability (2026-09-27)
 
 **Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`. Deploy/T20/production: NO.**

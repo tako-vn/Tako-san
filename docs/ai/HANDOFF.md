@@ -1,3 +1,22 @@
+# Handoff — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
+
+**Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Main remains
+`e35df74b7a10ee6de1677bf8e059c7ef82ad55fc`. Application commit `61bf805ca77ceeb92df501fa1965d24856d45bff` adds
+`scripts/staging-d1-runtime-readiness-check.mjs` and
+`.github/workflows/staging-d1-runtime-readiness.yml`. The checker reuses
+`hydrateRuntimeRecipes` + `assessD1Readiness` against the committed catalog
+release manifest, plus pinned staging D1 identity `frigo-db-staging-v3` /
+`7854298a-20f5-46aa-9cbf-917079c2a3dd`, ledger tip `0039_meal_composition_v2.sql`, approved-batch
+provenance, and FK/quick_check. Workflow is `workflow_dispatch` only,
+`environment: staging`, concurrency `frigo-deploy-staging`. No deploy,
+`d1 migrations apply`, authority change, T20 change, or 0040.
+
+Local gates: focused 31/31; `pnpm check` PASS. Do not dispatch the new
+workflow until merge + exact-main CI. Do not claim remote staging D1
+runtime readiness certified from this PR.
+
+---
+
 # Handoff — T20 live staging hard-time blocker and repair (2026-09-27)
 
 **Status: `T20_STAGING_LIVE_HARD_RESTRICTION_BLOCKED_P1`.** Main and
