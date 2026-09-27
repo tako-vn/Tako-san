@@ -1,0 +1,138 @@
+# Manual, staging-only, read-only D1 runtime readiness certification. No deploy, no migration apply.
+name: Staging D1 Runtime Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full current main SHA with successful exact-main CI
+        required: true
+        type: string
+      confirm_staging_readiness:
+        description: Confirm the staging D1 identity and authorize read-only runtime readiness certification
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: frigo-deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_staging_readiness == true
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check exact current main, hosted CI and staging config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINESS_REF: ${{ inputs.ref }}
+        run: node scripts/staging-d1-runtime-readiness-check.mjs gate staging-d1-runtime-readiness-receipt.json
+
+      - name: Require staging Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Staging Cloudflare D1 credentials unavailable in staging Environment"
+            exit 1
+          fi
+
+      - name: Prove Cloudflare account and exact staging D1 identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          pnpm wrangler whoami > /dev/null
+          pnpm wrangler d1 list --json > staging-d1-list.json
+          pnpm wrangler d1 info frigo-db-staging-v3 --json --config wrangler.staging.jsonc > staging-d1-info.json
+          node scripts/staging-d1-runtime-readiness-check.mjs identity staging-d1-runtime-readiness-receipt.json staging-d1-list.json staging-d1-info.json
+
+      - name: Recheck exact current main before remote reads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINESS_REF: ${{ inputs.ref }}
+        run: |
+          git fetch origin main
+          node scripts/staging-d1-runtime-readiness-check.mjs recheck staging-d1-runtime-readiness-receipt.json
+
+      - name: Generate and guard reviewed read-only SQL
+        run: |
+          node scripts/staging-d1-runtime-readiness-check.mjs query ledger > ledger.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs query catalog > catalog.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs query provenance > provenance.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs query runtime-catalog > runtime-catalog.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs query foreign-key-check > foreign-key-check.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs query quick-check > quick-check.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard ledger.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard catalog.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard provenance.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard runtime-catalog.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard foreign-key-check.sql
+          node scripts/staging-d1-runtime-readiness-check.mjs guard quick-check.sql
+
+      - name: Read staging ledger, catalog, runtime, provenance and integrity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query ledger.sql staging-ledger.json
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query catalog.sql staging-catalog.json
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query provenance.sql staging-provenance.json
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query runtime-catalog.sql staging-runtime-catalog.json
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query foreign-key-check.sql staging-fk.json
+          node scripts/staging-d1-runtime-readiness-check.mjs remote-query quick-check.sql staging-quick.json
+
+      - name: Recheck exact current main before certification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINESS_REF: ${{ inputs.ref }}
+        run: |
+          git fetch origin main
+          node scripts/staging-d1-runtime-readiness-check.mjs recheck staging-d1-runtime-readiness-receipt.json
+
+      - name: Certify staging D1 runtime readiness
+        run: >
+          node scripts/staging-d1-runtime-readiness-check.mjs certify
+          staging-d1-runtime-readiness-receipt.json
+          staging-ledger.json
+          staging-runtime-catalog.json
+          staging-provenance.json
+          staging-fk.json
+          staging-quick.json
+          staging-catalog.json
+
+      - name: Save sanitized staging runtime readiness receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-d1-runtime-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-d1-runtime-readiness-receipt.json
+          if-no-files-found: error
+          retention-days: 90
