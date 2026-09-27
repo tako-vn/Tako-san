@@ -1,3 +1,12 @@
+# Current — T20-R1 staging release observability (2026-09-27)
+
+**Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`. Deploy/T20/production: NO.**
+Staging now captures and proves the serving recipe-authority Worker before
+deploy; the post-deploy proof retries only that exact previous Worker and still
+requires the exact release commit to pass (ADR-034).
+
+---
+
 # Current — T20 staging rollout preflight (2026-09-27)
 
 **Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`. T20 enablement: NO.**

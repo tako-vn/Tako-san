@@ -1,3 +1,18 @@
+# Task board — T20-R1 staging release observability (2026-09-27)
+
+- [x] Re-fetch main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`; branch
+  `feat/t20-staging-release-observability`.
+- [x] Confirm root cause: no staging `previousRecipeAuthority`; wait helper
+  cannot classify previous-Worker evidence (run `36285175574`).
+- [x] Staging pre-deploy capture + proof; three-class bounded convergence;
+  strict evidence fetch; production preflight unchanged.
+- [x] Tests A–L, workflow order contract, real-Git CLI, mutation checks.
+- [ ] Independent review + merge (not by an agent).
+- [ ] After merge + exact-main CI: flag-OFF staging Deploy re-prove.
+- [ ] Only then: separate T20=true staging rollout.
+
+---
+
 # Task board — T20 staging rollout preflight (2026-09-27)
 
 - [x] Re-fetch main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`; exact-main CI

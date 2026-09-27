@@ -1,3 +1,29 @@
+# Handoff — T20-R1 staging release observability convergence (2026-09-27)
+
+**Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`.** Do not deploy, do not
+enable T20, do not merge from an agent.
+
+Base: main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`. Branch
+`feat/t20-staging-release-observability`.
+
+Files: `scripts/release-check.mjs` (`verifyPreviousRecipeAuthority`,
+`previousWorkerStillAnswering`, shared `STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS`,
+strict exported `fetchRecipeAuthorityEvidence`, staging-only
+`previous-authority` command), `.github/workflows/deploy.yml` (one staging step
+before deploy), `tests/unit/release-check.test.mjs` (tests A–L, capture proof,
+fetch, real-Git CLI, workflow order, production same-SHA exact-capture cases),
+`docs/ai/DECISIONS.md` (ADR-034).
+
+Behavior: exact captured previous commit + valid previous state → bounded retry;
+target commit + target state → pass; unknown/malformed/wrong evidence → fail
+closed; previous Worker never converging → fail at 90 s.
+
+Next: review/merge → exact-main CI → flag-OFF staging Deploy re-prove (full
+SUCCESS incl. protected authority proof) → only then a separate T20=true staging
+rollout. Production untouched.
+
+---
+
 # Handoff — T20 staging rollout preflight (2026-09-27)
 
 **Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`.** Do not enable T20.

@@ -1,3 +1,30 @@
+# Current state — T20-R1 staging release observability convergence (2026-09-27)
+
+**Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`.** Branch
+`feat/t20-staging-release-observability` from exact main
+`0b2e0a17578bdc744427944b90db5b76bdbfe33c` (unmoved). No deploy, no
+`workflow_dispatch`, no D1/R2/Cloudflare mutation, T20 flags still `false`.
+
+Root cause (confirmed from source and the run `36285175574` receipt, which has no
+`previousRecipeAuthority`): staging never captured the serving Worker's
+protected recipe-authority evidence before deploying, so when the edge briefly
+answered from the previous Worker (`8147dde8…`) after readiness 3/3 + smoke on
+`0b2e0a17…`, the wait helper could not classify it and failed closed.
+
+Change (ADR-034): staging step `release-check.mjs previous-authority` (before
+`command: deploy`) records `previousRecipeAuthority` +
+`previousRecipeAuthorityProof`; `waitForRecipeAuthorityEvidence` retries only
+the exact proven previous Worker, passes only exact target commit + state, and
+fails every other body immediately. Strict evidence fetch (HTTP 200 JSON only).
+Production preflight unchanged; production same-SHA retry now needs the exact
+captured evidence.
+
+Next: independent PR review and merge. Then a flag-OFF staging Deploy re-prove
+(`meal_composition_v2_enabled=false`) must end fully SUCCESS, including the
+protected recipe-authority proof, before any separate T20=true staging rollout.
+
+---
+
 # Current state — T20 staging rollout preflight (2026-09-27)
 
 **Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`.** T20 runtime/code
