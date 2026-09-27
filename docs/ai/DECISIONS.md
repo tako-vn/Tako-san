@@ -1,5 +1,48 @@
 # Architecture Decisions
 
+## ADR-034 — Staging captures the serving recipe-authority Worker before deploy; previous-Worker evidence is retried, never accepted (T20-R1)
+
+**Status:** Proposed 2026-09-27 for review (branch
+`feat/t20-staging-release-observability`). No deploy, T20 enablement or
+production change is authorized by this ADR.
+
+**Context:** Deploy run `36285175574` deployed staging at `0b2e0a17…`; readiness
+identified the new SHA 3/3 and smoke passed, then the protected
+`/api/v1/health/recipe-authority` evidence was still answered by the previous
+Worker (`commit=8147dde8…`). Both endpoints read `env.GIT_COMMIT`, so this was
+edge convergence, not a second commit authority. Staging captured no
+`previousRecipeAuthority`, and `waitForRecipeAuthorityEvidence` retried only
+same-SHA/previous-state evidence, so it correctly failed closed.
+
+**Decision:**
+1. Staging runs `release-check.mjs previous-authority` after the CI recheck and
+   before `command: deploy`. It reads the protected endpoint with
+   `STAGING_RELEASE_VERIFY_TOKEN`; only HTTP 200 with a JSON object is evidence
+   (a rejected token, any other status or malformed JSON fails the job).
+2. `verifyPreviousRecipeAuthority` proves the capture: schema 1, staging
+   environment, canonical commit that is the release SHA or a Git ancestor of it,
+   complete stable fields, a reviewed rollout state, and
+   `verifyRecipeAuthorityEvidence` against the catalog release shipped at that
+   commit (`git show <commit>:…/catalog-release.current.json`). The manifest
+   records `previousRecipeAuthority` and `previousRecipeAuthorityProof`.
+3. Post-deploy evidence has three classes. Class 1 (exact target commit and every
+   approved field) passes. Class 2 (exactly the captured evidence on every stable
+   field; a different commit also needs the matching proof and must re-validate
+   against that commit's release; same-SHA must serve the captured, non-target
+   state) is retried inside the existing 90 s bound and never passes. Class 3
+   (anything else) fails immediately.
+4. Production keeps its `transition`/deployment snapshot/rollback preflight. It
+   records no proof, so previous-commit evidence still fails closed there; its
+   same-SHA retry now also needs the exact captured evidence (stricter only).
+
+**Consequences:** Final success still requires `evidence.commit === manifest.sha`
+and every approved field. An unknown/unrelated ancestor commit, wrong
+environment/release/count/fingerprint/mode/cutover/canary or a fallback is never
+retried. A staging Worker whose current evidence cannot be proven (for example a
+D1 fallback in `d1`/`canary`) now blocks the staging deploy until investigated.
+The readiness helper (`verifyDeployedRelease`) is unchanged; with a captured
+previous state it applies the same same-SHA rule production already uses.
+
 ## ADR-033 — Runtime Ingredient Model V2 is an evidence-gated projection, not a V1 replacement
 
 **Status:** Proposed 2026-09-27 for review. No live cutover, D1 migration, 0040,

@@ -1,3 +1,57 @@
+# Current state — T20-R1 staging release observability convergence (2026-09-27)
+
+**Status: `T20_RELEASE_OBSERVABILITY_FIX_IN_REVIEW`.** Branch
+`feat/t20-staging-release-observability` from exact main
+`0b2e0a17578bdc744427944b90db5b76bdbfe33c` (unmoved). No deploy, no
+`workflow_dispatch`, no D1/R2/Cloudflare mutation, T20 flags still `false`.
+
+Root cause (confirmed from source and the run `36285175574` receipt, which has no
+`previousRecipeAuthority`): staging never captured the serving Worker's
+protected recipe-authority evidence before deploying, so when the edge briefly
+answered from the previous Worker (`8147dde8…`) after readiness 3/3 + smoke on
+`0b2e0a17…`, the wait helper could not classify it and failed closed.
+
+Change (ADR-034): staging step `release-check.mjs previous-authority` (before
+`command: deploy`) records `previousRecipeAuthority` +
+`previousRecipeAuthorityProof`; `waitForRecipeAuthorityEvidence` retries only
+the exact proven previous Worker, passes only exact target commit + state, and
+fails every other body immediately. Strict evidence fetch (HTTP 200 JSON only).
+Production preflight unchanged; production same-SHA retry now needs the exact
+captured evidence.
+
+Next: independent PR review and merge. Then a flag-OFF staging Deploy re-prove
+(`meal_composition_v2_enabled=false`) must end fully SUCCESS, including the
+protected recipe-authority proof, before any separate T20=true staging rollout.
+
+---
+
+# Current state — T20 staging rollout preflight (2026-09-27)
+
+**Status: `T20_STAGING_BLOCKED_RELEASE_OBSERVABILITY`.** T20 runtime/code
+certification on exact main `0b2e0a17578bdc744427944b90db5b76bdbfe33c` is green
+with flags OFF. Staging D1 is `STAGING_0039_CERTIFIED` (run `36287079403`,
+artifact `10919819859`, ledger `0039_meal_composition_v2.sql`, recipes 500).
+Do **not** dispatch Deploy to enable T20.
+
+Exact-main CI `36284857635` SUCCESS. Local: `pnpm typecheck` PASS, `pnpm lint`
+PASS, `pnpm check:migrations` PASS (`migration-smoke=ok`), focused T20 11 files /
+120 tests PASS, full Vitest 208 files / 4,654 tests PASS, `pnpm build` PASS.
+No application code changed.
+
+Blocking P1 (not a T20 domain defect): Deploy run `36285175574` (push of this
+same SHA) deployed the Worker (wait-for-release + `post-deploy-smoke.sh` PASS)
+then failed `scripts/release-check.mjs authority`: protected
+`/api/v1/health/recipe-authority` `commit` was `8147dde8…` not `0b2e0a17…`.
+A T20 flag-on staging Deploy uses that same step after `wrangler deploy`, so
+flags could turn on while the job is red. Do not weaken the check. No
+production/T20 enablement/0039 re-apply.
+
+Next: fix or independently re-prove the recipe-authority commit identity on
+staging for `0b2e0a17…`, then operator-dispatch Deploy (`environment=staging`,
+`meal_composition_v2_enabled=true`, recipe catalog left `static`/`0`).
+
+---
+
 # Current state — Staging D1 0033→0038 historical catch-up PR
 
 **Remediation (2026-09-27): `STAGING_D1_0033_0038_CATCHUP_PR_REMEDIATED_READY_FOR_REVIEW`.**

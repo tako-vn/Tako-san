@@ -180,6 +180,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release-check.mjs recheck
 
+      # Captured before deploy so the post-deploy proof can recognise the exact previous Worker
+      # still answering during convergence. That evidence is only ever retried, never accepted.
+      - name: Capture and validate current staging recipe authority before deployment
+        if: env.STAGING_UNCONFIGURED != 'true'
+        env:
+          APP_SMOKE_URL: ${{ vars.STAGING_URL }}
+          RELEASE_VERIFY_TOKEN: ${{ secrets.STAGING_RELEASE_VERIFY_TOKEN }}
+        run: node scripts/release-check.mjs previous-authority release-manifest.json
+
       - name: Deploy to Cloudflare staging
         if: env.STAGING_UNCONFIGURED != 'true'
         uses: cloudflare/wrangler-action@v3

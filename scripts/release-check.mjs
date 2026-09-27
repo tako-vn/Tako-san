@@ -342,6 +342,31 @@ export function verifyDeployedWorker(manifest, deploymentEvidence, versionEviden
   return { ...deployment, binding };
 }
 
+/**
+ * Recipe authority evidence fields that identify one Worker version's served state. `checkedAt`
+ * and `counters` vary per request and are excluded.
+ */
+export const STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS = Object.freeze([
+  'schemaVersion',
+  'environment',
+  'commit',
+  'configuredMode',
+  'cutoverEnabled',
+  'canaryPercent',
+  'globalSource',
+  'releaseId',
+  'expectedRecipeCount',
+  'selectedSource',
+  'actualSource',
+  'servedRecipeCount',
+  'servedFingerprint',
+  'expectedRuntimeFingerprint',
+  'fingerprintMatchesRelease',
+  'd1Readiness',
+  'd1ReadinessCode',
+  'fallbackReason',
+]);
+
 export function verifyRecipeCatalogRollback(
   manifest,
   deploymentEvidence,
@@ -375,27 +400,7 @@ export function verifyRecipeCatalogRollback(
     if (authorityEvidence?.unavailable !== true)
       throw new Error('Rollback did not restore the previous unavailable authority endpoint');
   } else {
-    const stableEvidenceFields = [
-      'schemaVersion',
-      'environment',
-      'commit',
-      'configuredMode',
-      'cutoverEnabled',
-      'canaryPercent',
-      'globalSource',
-      'releaseId',
-      'expectedRecipeCount',
-      'selectedSource',
-      'actualSource',
-      'servedRecipeCount',
-      'servedFingerprint',
-      'expectedRuntimeFingerprint',
-      'fingerprintMatchesRelease',
-      'd1Readiness',
-      'd1ReadinessCode',
-      'fallbackReason',
-    ];
-    for (const key of stableEvidenceFields) {
+    for (const key of STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS) {
       if (!Object.hasOwn(previous ?? {}, key))
         throw new Error(`Previous rollback authority evidence is incomplete at ${key}`);
       if (authorityEvidence?.[key] !== previous?.[key])
@@ -417,6 +422,17 @@ function git(cwd, ...args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
+}
+
+function gitIsAncestor(cwd) {
+  return (ancestor, descendant) => {
+    try {
+      git(cwd, 'merge-base', '--is-ancestor', ancestor, descendant);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 }
 
 function requireAncestor(cwd, ancestor, descendant, message) {
@@ -664,9 +680,139 @@ function isPreviousAuthorityState(manifest, commit, observed) {
 }
 
 /**
- * Polls the protected authority evidence until it proves the approved state. Only evidence that is
- * exactly the preflight-captured previous state for the same commit (old version still answering)
- * is retried, within a bounded deadline; every other mismatch fails immediately.
+ * Pre-deploy proof of the Worker currently answering the protected recipe-authority endpoint
+ * (staging `previous-authority`). The evidence must be complete, carry a canonical commit that is
+ * the release SHA or a Git ancestor of it, and validate against the reviewed catalog release
+ * shipped at that same commit. Only this proof lets the post-deploy wait retry evidence from a
+ * different commit; it never makes such evidence acceptable.
+ */
+export function verifyPreviousRecipeAuthority(manifest, evidence, options = {}) {
+  if (!SHA.test(manifest?.sha || ''))
+    throw new Error('Target release SHA must be a canonical full Git SHA');
+  if (typeof evidence !== 'object' || evidence === null || Array.isArray(evidence))
+    throw new Error('Previous recipe authority evidence is not an object');
+  if (evidence.unavailable === true)
+    throw new Error('Previous recipe authority evidence is unavailable');
+  if (evidence.schemaVersion !== 1)
+    throw new Error('Previous recipe authority evidence schema is not supported');
+  if (evidence.environment !== manifest.environment)
+    throw new Error('Previous recipe authority evidence is for the wrong environment');
+  if (typeof evidence.commit !== 'string' || !SHA.test(evidence.commit))
+    throw new Error('Previous recipe authority commit is not a canonical full Git SHA');
+  for (const key of STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS) {
+    if (!Object.hasOwn(evidence, key))
+      throw new Error(`Previous recipe authority evidence is incomplete at ${key}`);
+  }
+  const state = validateRecipeCatalogRollout({
+    mode: evidence.configuredMode,
+    canaryPercent: evidence.canaryPercent,
+  });
+  if (evidence.cutoverEnabled !== state.cutoverEnabled)
+    throw new Error('Previous recipe authority evidence has a contradictory cutover state');
+  const cwd = options.cwd ?? process.cwd();
+  const relation = evidence.commit === manifest.sha ? 'same' : 'ancestor';
+  if (relation === 'ancestor' && !(options.isAncestor ?? gitIsAncestor(cwd))(evidence.commit, manifest.sha))
+    throw new Error('Previous Worker commit is not an ancestor of the release');
+  const readRelease = options.readRelease ?? ((sha) => readCatalogReleaseAt(cwd, sha));
+  const release = readRelease(evidence.commit);
+  const proof = {
+    commit: evidence.commit,
+    relation,
+    configuredMode: state.mode,
+    canaryPercent: state.canaryPercent,
+    cutoverEnabled: state.cutoverEnabled,
+    release: {
+      releaseId: release?.releaseId,
+      expectedRecipeCount: release?.expectedRecipeCount,
+      expectedRuntimeFingerprint: release?.expectedRuntimeFingerprint,
+      legacyBaselineCount: release?.legacyBaselineCount,
+      legacyBaselineFingerprint: release?.legacyBaselineFingerprint,
+    },
+  };
+  verifyRecipeAuthorityEvidence(previousAuthorityManifest(manifest, proof), evidence, proof.release);
+  return { ...proof, checkedAt: new Date().toISOString() };
+}
+
+function readCatalogReleaseAt(cwd, sha) {
+  let text;
+  try {
+    text = git(cwd, 'show', `${sha}:${CATALOG_RELEASE_MANIFEST_PATH}`);
+  } catch {
+    throw new Error('Previous Worker commit has no reviewed catalog release manifest');
+  }
+  return JSON.parse(text);
+}
+
+function previousAuthorityManifest(manifest, proof) {
+  return {
+    sha: proof.commit,
+    environment: manifest.environment,
+    recipeCatalogMode: proof.configuredMode,
+    recipeCatalogCanaryPercent: proof.canaryPercent,
+    recipeCatalogCutoverEnabled: proof.cutoverEnabled,
+  };
+}
+
+/**
+ * Convergence class 2: evidence that is exactly the pre-deploy capture, still answered by the
+ * previous Worker version. Returns what to log while retrying, or null to fail closed. Evidence
+ * from another commit additionally needs the preflight ancestry/content proof for that commit, and
+ * must still validate against that commit's release. Same-SHA evidence (var-only promotion) must
+ * serve the captured state, which differs from the target state.
+ */
+function previousWorkerStillAnswering(manifest, evidence) {
+  const previous = manifest.previousRecipeAuthority;
+  if (typeof previous !== 'object' || previous === null || previous.unavailable === true) return null;
+  if (typeof evidence !== 'object' || evidence === null) return null;
+  if (typeof previous.commit !== 'string' || !SHA.test(previous.commit)) return null;
+  if (evidence.commit !== previous.commit) return null;
+  for (const key of STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS) {
+    if (!Object.hasOwn(previous, key) || evidence[key] !== previous[key]) return null;
+  }
+  const observed = {
+    mode: evidence.configuredMode,
+    canaryPercent: evidence.canaryPercent,
+    cutoverEnabled: evidence.cutoverEnabled,
+  };
+  try {
+    const valid = validateRecipeCatalogRollout(observed);
+    if (valid.cutoverEnabled !== observed.cutoverEnabled) return null;
+  } catch {
+    return null;
+  }
+  const sameCommit = previous.commit === manifest.sha;
+  if (sameCommit && sameAuthorityState(observed, targetAuthorityState(manifest))) return null;
+  const proof = manifest.previousRecipeAuthorityProof;
+  if (proof === undefined || proof === null) {
+    if (!sameCommit) return null;
+  } else {
+    if (proof.commit !== previous.commit || proof.relation !== (sameCommit ? 'same' : 'ancestor'))
+      return null;
+    try {
+      verifyRecipeAuthorityEvidence(previousAuthorityManifest(manifest, proof), evidence, proof.release);
+    } catch {
+      return null;
+    }
+  }
+  return {
+    state: describeAuthorityState(observed),
+    from: sameCommit ? '' : ` from previous Worker ${previous.commit.slice(0, 8)}`,
+  };
+}
+
+function targetAuthorityState(manifest) {
+  return {
+    mode: manifest.recipeCatalogMode,
+    canaryPercent: manifest.recipeCatalogCanaryPercent,
+    cutoverEnabled: manifest.recipeCatalogCutoverEnabled,
+  };
+}
+
+/**
+ * Polls the protected authority evidence until it proves the approved state (class 1: exact
+ * target commit and every approved field). Evidence that is exactly the preflight-captured previous
+ * Worker (class 2, see `previousWorkerStillAnswering`) is retried within a bounded deadline and is
+ * never accepted; every other mismatch (class 3) fails immediately.
  */
 export async function waitForRecipeAuthorityEvidence(manifest, release, {
   fetchEvidence,
@@ -677,34 +823,22 @@ export async function waitForRecipeAuthorityEvidence(manifest, release, {
   log = console.log,
 }) {
   const startedAt = now();
+  const target = describeAuthorityState(targetAuthorityState(manifest));
+  const targetSha = String(manifest?.sha ?? '').slice(0, 8);
   for (let attempt = 1; ; attempt += 1) {
     const evidence = await fetchEvidence();
     try {
       return verifyRecipeAuthorityEvidence(manifest, evidence, release);
     } catch (error) {
-      const observed = {
-        mode: evidence?.configuredMode,
-        canaryPercent: evidence?.canaryPercent,
-        cutoverEnabled: evidence?.cutoverEnabled,
-      };
-      const target = {
-        mode: manifest.recipeCatalogMode,
-        canaryPercent: manifest.recipeCatalogCanaryPercent,
-        cutoverEnabled: manifest.recipeCatalogCutoverEnabled,
-      };
-      const stale =
-        manifest.previousRecipeAuthority &&
-        evidence?.commit === manifest.sha &&
-        !sameAuthorityState(observed, target) &&
-        isPreviousAuthorityState(manifest, evidence.commit, observed);
+      const stale = previousWorkerStillAnswering(manifest, evidence);
       if (!stale) throw error;
       if (now() - startedAt + intervalMs > deadlineMs) {
         throw new Error(
-          `Recipe authority still served ${describeAuthorityState(observed)} instead of ${describeAuthorityState(target)} after ${deadlineMs} ms (${attempt} attempts)`,
+          `Recipe authority still served ${stale.state}${stale.from} instead of ${target} after ${deadlineMs} ms (${attempt} attempts)`,
         );
       }
       log(
-        `attempt ${attempt}: recipe authority still ${describeAuthorityState(observed)} (pre-deploy state), expected ${describeAuthorityState(target)}; propagation pending, retrying`,
+        `attempt ${attempt}: recipe authority still ${stale.state}${stale.from} (pre-deploy state), expected ${target} at ${targetSha}; propagation pending, retrying`,
       );
       await sleep(intervalMs);
     }
@@ -803,17 +937,31 @@ export function verifyRecipeAuthorityEvidence(manifest, evidence, release) {
 export const CATALOG_RELEASE_MANIFEST_PATH =
   'packages/recipes/src/import/catalog-release.current.json';
 
-async function fetchRecipeAuthorityEvidence(origin, token) {
+/**
+ * Reads the protected evidence. Only HTTP 200 with a JSON object is evidence: a rejected
+ * RELEASE_VERIFY_TOKEN, any other status, or a malformed body fails closed.
+ */
+export async function fetchRecipeAuthorityEvidence(origin, token, { fetchImpl = fetch } = {}) {
   if (!token || token.length < 32)
     throw new Error('RELEASE_VERIFY_TOKEN is required to read recipe authority evidence');
-  const response = await fetch(new URL('/api/v1/health/recipe-authority', origin), {
+  const response = await fetchImpl(new URL('/api/v1/health/recipe-authority', origin), {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(30_000),
     redirect: 'error',
   });
-  if (!response.ok)
+  let body;
+  try {
+    body = JSON.parse(await response.text());
+  } catch {
+    body = undefined;
+  }
+  if (response.status === 401 && body?.code === 'RELEASE_VERIFY_UNAUTHORIZED')
+    throw new Error('Recipe authority endpoint rejected RELEASE_VERIFY_TOKEN; token mismatch');
+  if (response.status !== 200)
     throw new Error(`Recipe authority evidence lookup failed (HTTP ${response.status})`);
-  return response.json();
+  if (typeof body !== 'object' || body === null || Array.isArray(body))
+    throw new Error('Recipe authority evidence is not a JSON object');
+  return body;
 }
 
 async function main() {
@@ -944,6 +1092,24 @@ async function main() {
         version,
         mutation,
       );
+    } else if (command === 'previous-authority') {
+      // Staging, before `command: deploy`: capture the live protected evidence (or an offline file)
+      // and prove it before the post-deploy wait may use it to classify convergence.
+      if (manifest.environment !== 'staging')
+        throw new Error('previous-authority is the staging pre-deploy capture; production uses transition');
+      const current = evidenceFile
+        ? JSON.parse(readFileSync(evidenceFile, 'utf8'))
+        : await fetchRecipeAuthorityEvidence(
+            process.env.APP_SMOKE_URL,
+            process.env.RELEASE_VERIFY_TOKEN,
+          );
+      manifest.previousRecipeAuthorityProof = verifyPreviousRecipeAuthority(manifest, current, {
+        cwd: process.cwd(),
+      });
+      manifest.previousRecipeAuthority = current;
+      console.log(
+        `Previous recipe authority verified: commit=${current.commit} relation=${manifest.previousRecipeAuthorityProof.relation} mode=${current.configuredMode} release=${current.releaseId} served=${current.servedRecipeCount}`,
+      );
     } else if (command === 'authority') {
       // Evidence file (offline) or live protected endpoint (APP_SMOKE_URL + RELEASE_VERIFY_TOKEN).
       const release = JSON.parse(readFileSync(CATALOG_RELEASE_MANIFEST_PATH, 'utf8'));
@@ -965,7 +1131,7 @@ async function main() {
       );
     } else {
       throw new Error(
-        'Usage: release-check.mjs <gate|recheck|schema|deployed|transition|deployment-snapshot|rollback-target|deployed-binding|rollback|authority> [manifest.json] [evidence...]',
+        'Usage: release-check.mjs <gate|recheck|schema|deployed|transition|previous-authority|deployment-snapshot|rollback-target|deployed-binding|rollback|authority> [manifest.json] [evidence...]',
       );
     }
     writeManifest(file, manifest);

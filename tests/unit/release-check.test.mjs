@@ -5,7 +5,9 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   RELEASE_PROPAGATION_PENDING,
+  STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS,
   classifyLegacyRecipeAuthorityEndpoint,
+  fetchRecipeAuthorityEvidence,
   migrationManifest,
   requireSuccessfulCi,
   validateRecipeCatalogManifestPolicy,
@@ -15,6 +17,7 @@ import {
   validateReleaseSource,
   verifyDeployedRelease,
   verifyMigrationLedger,
+  verifyPreviousRecipeAuthority,
   verifyRecipeAuthorityEvidence,
   verifyRecipeCatalogRollback,
   verifyDeployedWorker,
@@ -737,13 +740,17 @@ describe('T19 production transition and rollback safety', () => {
       ['a D1 fallback on the approved state', evidence('d1', 0, { fallbackReason: 'd1_unavailable' })],
       ['an unexpected intermediate state', evidence('canary', 5)],
       ['the previous state on another commit', evidence('canary', 25, { commit: 'b'.repeat(40) })],
+      // T20-R1: same-SHA retry needs the exact captured evidence, not just mode/percent/cutover.
+      ['the pre-deploy state with a D1 fallback', evidence('canary', 25, { fallbackReason: 'd1_unavailable' })],
+      ['the pre-deploy state with a different fingerprint', evidence('canary', 25, { servedFingerprint: 'f'.repeat(64) })],
+      ['the pre-deploy state with a different release ID', evidence('canary', 25, { releaseId: 'rel-other' })],
     ])('fails immediately on %s', async (_label, first) => {
       const h = run([first, evidence('d1')]);
       await expect(h.promise).rejects.toThrow();
       expect(h.calls.count).toBe(1);
     });
 
-    it('never retries without preflight evidence (staging keeps a single proof attempt)', async () => {
+    it('never retries without preflight evidence (a single proof attempt)', async () => {
       const h = run([evidence('canary', 25), evidence('d1')], { manifest: target('d1') });
       await expect(h.promise).rejects.toThrow();
       expect(h.calls.count).toBe(1);
@@ -810,6 +817,434 @@ describe('T19 production transition and rollback safety', () => {
       ['wrong D1 binding', [manifest, workerVersion('version-1', [{ type: 'd1', name: 'DB', id: 'other' }, { type: 'plain_text', name: 'GIT_COMMIT', text: legacySha }]), legacyBody, options()], 'D1 binding'],
     ])('fails closed for %s', (_name, args, message) => {
       expect(() => classifyLegacyRecipeAuthorityEndpoint(...args)).toThrow(message);
+    });
+  });
+});
+
+// T20-R1: Deploy run 36285175574 deployed staging, proved readiness 3/3 on the new SHA and passed
+// smoke, then the protected evidence was still answered by the previous Worker commit. Staging now
+// captures that Worker before deploying; its exact evidence is retried, never accepted.
+describe('T20-R1 staging recipe authority convergence (Deploy run 36285175574)', () => {
+  const targetSha = goodSha;
+  const previousSha = 'd'.repeat(40);
+  const release = {
+    releaseId: 'rel-test',
+    legacyBaselineCount: 71,
+    expectedRecipeCount: 500,
+    legacyBaselineFingerprint: 'a'.repeat(64),
+    expectedRuntimeFingerprint: 'b'.repeat(64),
+  };
+  const stagingEvidence = (mode = 'static', overrides = {}) => {
+    const d1Probe = mode !== 'static';
+    return {
+      schemaVersion: 1,
+      environment: 'staging',
+      commit: previousSha,
+      checkedAt: '2026-09-27T01:20:30.000Z',
+      configuredMode: mode,
+      cutoverEnabled: mode === 'canary' || mode === 'd1',
+      canaryPercent: mode === 'canary' ? 5 : 0,
+      globalSource: mode === 'd1' ? 'd1' : mode === 'canary' ? 'mixed' : 'static',
+      releaseId: 'rel-test',
+      expectedRecipeCount: 500,
+      selectedSource: d1Probe ? 'd1' : 'static',
+      actualSource: d1Probe ? 'd1' : 'static',
+      servedRecipeCount: d1Probe ? 500 : 71,
+      servedFingerprint: d1Probe ? 'b'.repeat(64) : 'a'.repeat(64),
+      expectedRuntimeFingerprint: 'b'.repeat(64),
+      fingerprintMatchesRelease: d1Probe,
+      d1Readiness: d1Probe ? 'ready' : 'not_evaluated',
+      d1ReadinessCode: null,
+      fallbackReason: null,
+      counters: {},
+      ...overrides,
+    };
+  };
+  const targetEvidence = (mode = 'static', overrides = {}) =>
+    stagingEvidence(mode, { commit: targetSha, checkedAt: '2026-09-27T01:20:37.000Z', ...overrides });
+  // The previous Worker keeps answering with fresh per-request fields.
+  const stillPrevious = (overrides = {}) =>
+    stagingEvidence('static', { checkedAt: '2026-09-27T01:20:40.000Z', counters: { d1: 3 }, ...overrides });
+  const stagingTarget = (mode = 'static') => {
+    const manifest = {
+      sha: targetSha,
+      environment: 'staging',
+      recipeCatalogMode: mode,
+      recipeCatalogCanaryPercent: mode === 'canary' ? 5 : 0,
+      recipeCatalogCutoverEnabled: mode === 'canary' || mode === 'd1',
+    };
+    validateRecipeCatalogManifestPolicy(manifest);
+    return manifest;
+  };
+  const trusted = {
+    isAncestor: (ancestor, descendant) => ancestor === previousSha && descendant === targetSha,
+    readRelease: (sha) => {
+      if (sha !== previousSha && sha !== targetSha) throw new Error('no reviewed release');
+      return release;
+    },
+  };
+  const withPreflight = (manifest, previous, options = trusted) => ({
+    ...manifest,
+    previousRecipeAuthority: previous,
+    previousRecipeAuthorityProof: verifyPreviousRecipeAuthority(manifest, previous, options),
+  });
+  const historical = () => withPreflight(stagingTarget('static'), stagingEvidence('static'));
+  const without = (object, key) => {
+    const copy = { ...object };
+    delete copy[key];
+    return copy;
+  };
+  const run = (manifest, responses) => {
+    let clock = 0;
+    const logs = [];
+    const queue = [...responses];
+    const calls = { count: 0 };
+    const promise = waitForRecipeAuthorityEvidence(manifest, release, {
+      fetchEvidence: async () => {
+        calls.count += 1;
+        const next = queue.shift();
+        if (next === undefined) throw new Error('harness exhausted');
+        return typeof next === 'function' ? next() : next;
+      },
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+      log: (line) => logs.push(line),
+    });
+    return { promise, logs, calls, clock: () => clock };
+  };
+
+  describe('pre-deploy capture proof', () => {
+    it('proves the exact previous Worker by Git ancestry and against its own commit release', () => {
+      const proof = verifyPreviousRecipeAuthority(stagingTarget(), stagingEvidence(), trusted);
+      expect(proof).toMatchObject({
+        commit: previousSha,
+        relation: 'ancestor',
+        configuredMode: 'static',
+        canaryPercent: 0,
+        cutoverEnabled: false,
+        release: { releaseId: 'rel-test', expectedRecipeCount: 500, legacyBaselineCount: 71 },
+      });
+    });
+
+    it('a same-commit capture needs no ancestry lookup', () => {
+      const proof = verifyPreviousRecipeAuthority(stagingTarget(), targetEvidence(), {
+        isAncestor: () => {
+          throw new Error('ancestry must not be consulted for the release SHA itself');
+        },
+        readRelease: () => release,
+      });
+      expect(proof).toMatchObject({ commit: targetSha, relation: 'same' });
+    });
+
+    it('validates against the release shipped at the previous commit, not the target release', () => {
+      const options = { ...trusted, readRelease: () => ({ ...release, releaseId: 'rel-previous' }) };
+      expect(
+        verifyPreviousRecipeAuthority(stagingTarget(), stagingEvidence('static', { releaseId: 'rel-previous' }), options)
+          .release.releaseId,
+      ).toBe('rel-previous');
+      expect(() => verifyPreviousRecipeAuthority(stagingTarget(), stagingEvidence(), options)).toThrow('releaseId');
+    });
+
+    it.each([
+      ['a commit that is not an ancestor', stagingEvidence('static', { commit: 'e'.repeat(40) }), 'not an ancestor'],
+      ['the wrong environment', stagingEvidence('static', { environment: 'production' }), 'wrong environment'],
+      ['a short commit', stagingEvidence('static', { commit: '8147dde' }), 'canonical full Git SHA'],
+      ['an uppercase commit', stagingEvidence('static', { commit: 'D'.repeat(40) }), 'canonical full Git SHA'],
+      ['a null commit', stagingEvidence('static', { commit: null }), 'canonical full Git SHA'],
+      ['an unsupported schema', stagingEvidence('static', { schemaVersion: 2 }), 'schema is not supported'],
+      ['an unavailable placeholder', { unavailable: true, httpStatus: 404 }, 'unavailable'],
+      ['a JSON array', [], 'not an object'],
+      ['a contradictory cutover', stagingEvidence('static', { cutoverEnabled: true }), 'contradictory cutover'],
+      ['an unreviewed canary percent', stagingEvidence('canary', { canaryPercent: 10 }), 'Canary release percent'],
+      ['the wrong served fingerprint', stagingEvidence('static', { servedFingerprint: 'f'.repeat(64) }), 'servedFingerprint'],
+      ['the wrong served recipe count', stagingEvidence('static', { servedRecipeCount: 70 }), 'servedRecipeCount'],
+      ['the wrong expected recipe count', stagingEvidence('static', { expectedRecipeCount: 499 }), 'expectedRecipeCount'],
+      ['the wrong release ID', stagingEvidence('static', { releaseId: 'rel-other' }), 'releaseId'],
+      ['a D1 fallback', stagingEvidence('d1', { fallbackReason: 'd1_unavailable' }), 'fallbackReason'],
+      ['incomplete evidence', without(stagingEvidence(), 'd1ReadinessCode'), 'incomplete at d1ReadinessCode'],
+    ])('rejects %s', (_label, evidence, message) => {
+      expect(() => verifyPreviousRecipeAuthority(stagingTarget(), evidence, trusted)).toThrow(message);
+    });
+
+    it('rejects an ancestor commit that ships no reviewed catalog release', () => {
+      const options = {
+        isAncestor: () => true,
+        readRelease: () => {
+          throw new Error('Previous Worker commit has no reviewed catalog release manifest');
+        },
+      };
+      expect(() => verifyPreviousRecipeAuthority(stagingTarget(), stagingEvidence(), options)).toThrow(
+        'no reviewed catalog release manifest',
+      );
+    });
+
+    it('keeps one shared stable-field list for convergence and rollback proofs', () => {
+      expect(STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS).toContain('commit');
+      expect(STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS).toContain('servedFingerprint');
+      expect(STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS).not.toContain('checkedAt');
+      expect(STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS).not.toContain('counters');
+      expect(Object.isFrozen(STABLE_RECIPE_AUTHORITY_EVIDENCE_FIELDS)).toBe(true);
+    });
+  });
+
+  describe('post-deploy convergence classes', () => {
+    it('A: target commit with the target authority passes on the first attempt', async () => {
+      const h = run(historical(), [targetEvidence()]);
+      await expect(h.promise).resolves.toMatchObject({ configuredMode: 'static', actualSource: 'static' });
+      expect(h.calls.count).toBe(1);
+      expect(h.logs).toEqual([]);
+    });
+
+    it('B: the exact previous Worker is retried once, then the target commit passes', async () => {
+      const h = run(historical(), [stillPrevious(), targetEvidence()]);
+      await expect(h.promise).resolves.toMatchObject({ configuredMode: 'static' });
+      expect(h.calls.count).toBe(2);
+      expect(h.logs).toEqual([
+        'attempt 1: recipe authority still static from previous Worker dddddddd (pre-deploy state), expected static at aaaaaaaa; propagation pending, retrying',
+      ]);
+    });
+
+    it('C: repeated previous-Worker answers are retried within the deadline, then the target passes', async () => {
+      const h = run(historical(), [stillPrevious(), stillPrevious(), stillPrevious(), targetEvidence()]);
+      await expect(h.promise).resolves.toMatchObject({ configuredMode: 'static' });
+      expect(h.calls.count).toBe(4);
+      expect(h.logs).toHaveLength(3);
+      expect(h.clock()).toBe(9_000);
+    });
+
+    it('D: a previous Worker that never converges fails after the bounded deadline, never passes', async () => {
+      const h = run(historical(), Array.from({ length: 40 }, () => stillPrevious()));
+      await expect(h.promise).rejects.toThrow(
+        'Recipe authority still served static from previous Worker dddddddd instead of static after 90000 ms',
+      );
+      expect(h.clock()).toBeLessThanOrEqual(90_000);
+      expect(h.calls.count).toBeLessThan(40);
+    });
+
+    it.each([
+      ['E: an arbitrary ancestor-looking commit that was not captured', stillPrevious({ commit: 'e'.repeat(40) })],
+      ['F: the previous commit with the wrong fingerprint', stillPrevious({ servedFingerprint: 'f'.repeat(64) })],
+      ['G: the previous commit with the wrong served recipe count', stillPrevious({ servedRecipeCount: 70 })],
+      ['G: the previous commit with the wrong expected recipe count', stillPrevious({ expectedRecipeCount: 499 })],
+      ['H: the previous commit in the wrong environment', stillPrevious({ environment: 'production' })],
+      ['I: a short commit', stillPrevious({ commit: '8147dde' })],
+      ['I: an uppercase commit', stillPrevious({ commit: 'D'.repeat(40) })],
+      ['I: a missing commit', stillPrevious({ commit: null })],
+      ['the previous commit with a different release ID', stillPrevious({ releaseId: 'rel-other' })],
+      ['the previous commit with a different authority mode', stillPrevious({ configuredMode: 'shadow' })],
+      ['the previous commit with an unexpected fallback', stillPrevious({ fallbackReason: 'd1_unavailable' })],
+      ['the previous commit with a different cutover', stillPrevious({ cutoverEnabled: true })],
+      ['the target commit with the wrong fingerprint', targetEvidence('static', { servedFingerprint: 'f'.repeat(64) })],
+      ['the target commit in the wrong environment', targetEvidence('static', { environment: 'production' })],
+      ['a non-object body', null],
+    ])('%s fails immediately', async (_label, first) => {
+      const h = run(historical(), [first, targetEvidence()]);
+      await expect(h.promise).rejects.toThrow();
+      expect(h.calls.count).toBe(1);
+    });
+
+    it('J: a rejected RELEASE_VERIFY_TOKEN fails immediately without retrying', async () => {
+      const rejected = () =>
+        fetchRecipeAuthorityEvidence('https://staging.example.test', 't'.repeat(32), {
+          fetchImpl: async () =>
+            new Response(JSON.stringify({ error: 'Unauthorized', code: 'RELEASE_VERIFY_UNAUTHORIZED' }), {
+              status: 401,
+            }),
+        });
+      const h = run(historical(), [rejected, targetEvidence()]);
+      await expect(h.promise).rejects.toThrow('rejected RELEASE_VERIFY_TOKEN');
+      expect(h.calls.count).toBe(1);
+    });
+
+    it('K: same-SHA promotion retries the exact captured state, then the target state passes', async () => {
+      const manifest = withPreflight(stagingTarget('shadow'), targetEvidence('static'));
+      expect(manifest.previousRecipeAuthorityProof.relation).toBe('same');
+      const h = run(manifest, [
+        targetEvidence('static', { checkedAt: '2026-09-27T01:21:00.000Z' }),
+        targetEvidence('shadow'),
+      ]);
+      await expect(h.promise).resolves.toMatchObject({ configuredMode: 'shadow', actualSource: 'd1' });
+      expect(h.calls.count).toBe(2);
+      expect(h.logs[0]).toContain('recipe authority still static (pre-deploy state), expected shadow');
+    });
+
+    it.each([
+      ['an unexpected intermediate state', targetEvidence('canary')],
+      ['the captured state with a different fingerprint', targetEvidence('static', { servedFingerprint: 'f'.repeat(64) })],
+      ['the captured state with a different release ID', targetEvidence('static', { releaseId: 'rel-other' })],
+    ])('L: target SHA with %s fails immediately', async (_label, first) => {
+      const manifest = withPreflight(stagingTarget('shadow'), targetEvidence('static'));
+      const h = run(manifest, [first, targetEvidence('shadow')]);
+      await expect(h.promise).rejects.toThrow();
+      expect(h.calls.count).toBe(1);
+    });
+
+    it('previous-commit evidence without the preflight proof is never retried (production transition unchanged)', async () => {
+      const manifest = { ...stagingTarget('static'), previousRecipeAuthority: stagingEvidence('static') };
+      const h = run(manifest, [stillPrevious(), targetEvidence()]);
+      await expect(h.promise).rejects.toThrow('commit');
+      expect(h.calls.count).toBe(1);
+    });
+
+    it('a proof for another commit, or with a mismatched relation, does not authorise retries', async () => {
+      const base = historical();
+      for (const proof of [
+        { ...base.previousRecipeAuthorityProof, commit: 'e'.repeat(40) },
+        { ...base.previousRecipeAuthorityProof, relation: 'same' },
+        { ...base.previousRecipeAuthorityProof, release: { ...release, legacyBaselineFingerprint: 'f'.repeat(64) } },
+      ]) {
+        const h = run({ ...base, previousRecipeAuthorityProof: proof }, [stillPrevious(), targetEvidence()]);
+        await expect(h.promise).rejects.toThrow();
+        expect(h.calls.count).toBe(1);
+      }
+    });
+
+    it('an unavailable previous capture never authorises retries', async () => {
+      const manifest = {
+        ...stagingTarget('static'),
+        previousRecipeAuthority: { unavailable: true, httpStatus: 404 },
+      };
+      const h = run(manifest, [stillPrevious(), targetEvidence()]);
+      await expect(h.promise).rejects.toThrow();
+      expect(h.calls.count).toBe(1);
+    });
+  });
+
+  describe('protected evidence fetch', () => {
+    const origin = 'https://staging.example.test';
+    const token = 't'.repeat(32);
+    const respond = (status, body) => async () =>
+      new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+
+    it('returns the JSON body of an HTTP 200 using the bearer token and no redirects', async () => {
+      let request;
+      const body = await fetchRecipeAuthorityEvidence(origin, token, {
+        fetchImpl: async (url, init) => {
+          request = { url: String(url), init };
+          return new Response(JSON.stringify(stagingEvidence()), { status: 200 });
+        },
+      });
+      expect(body).toMatchObject({ commit: previousSha, environment: 'staging' });
+      expect(request.url).toBe(`${origin}/api/v1/health/recipe-authority`);
+      expect(request.init.headers.Authorization).toBe(`Bearer ${token}`);
+      expect(request.init.redirect).toBe('error');
+    });
+
+    it.each([
+      ['a rejected token', 401, { error: 'Unauthorized', code: 'RELEASE_VERIFY_UNAUTHORIZED' }, 'token mismatch'],
+      ['an uncoded 401', 401, { error: 'Unauthorized' }, 'HTTP 401'],
+      ['HTTP 403', 403, { error: 'Forbidden' }, 'HTTP 403'],
+      ['HTTP 404', 404, { error: 'Not found' }, 'HTTP 404'],
+      ['HTTP 503', 503, { error: 'Unavailable' }, 'HTTP 503'],
+      ['a non-200 success', 202, {}, 'HTTP 202'],
+      ['malformed JSON', 200, '{not json', 'not a JSON object'],
+      ['a JSON array', 200, [], 'not a JSON object'],
+      ['JSON null', 200, 'null', 'not a JSON object'],
+    ])('fails closed on %s', async (_label, status, body, message) => {
+      await expect(
+        fetchRecipeAuthorityEvidence(origin, token, { fetchImpl: respond(status, body) }),
+      ).rejects.toThrow(message);
+    });
+
+    it('refuses to call the endpoint without a provisioned token', async () => {
+      let called = false;
+      await expect(
+        fetchRecipeAuthorityEvidence(origin, 'short', {
+          fetchImpl: async () => {
+            called = true;
+            return new Response('{}', { status: 200 });
+          },
+        }),
+      ).rejects.toThrow('RELEASE_VERIFY_TOKEN is required');
+      expect(called).toBe(false);
+    });
+  });
+
+  describe('previous-authority CLI against real Git history', () => {
+    const script = new URL('../../scripts/release-check.mjs', import.meta.url).pathname;
+    let cwd, bareSha, ancestorSha, releaseSha, siblingSha;
+    const git = (...args) =>
+      execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const cli = (manifest, evidence) => {
+      writeFileSync(path.join(cwd, 'release-manifest.json'), `${JSON.stringify(manifest)}\n`);
+      writeFileSync(path.join(cwd, 'previous-authority.json'), `${JSON.stringify(evidence)}\n`);
+      try {
+        execFileSync(process.execPath, [script, 'previous-authority', 'release-manifest.json', 'previous-authority.json'], {
+          cwd,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        return { ok: true, manifest: JSON.parse(readFileSync(path.join(cwd, 'release-manifest.json'), 'utf8')) };
+      } catch (error) {
+        return {
+          ok: false,
+          stderr: String(error.stderr),
+          manifest: JSON.parse(readFileSync(path.join(cwd, 'release-manifest.json'), 'utf8')),
+        };
+      }
+    };
+
+    beforeAll(() => {
+      cwd = mkdtempSync(path.join(tmpdir(), 'frigo-previous-authority-'));
+      git('init', '-b', 'main');
+      git('config', 'user.email', 'release-test@example.invalid');
+      git('config', 'user.name', 'Release fixture');
+      git('config', 'commit.gpgsign', 'false');
+      git('commit', '--allow-empty', '-m', 'Before the catalog release manifest');
+      bareSha = git('rev-parse', 'HEAD');
+      mkdirSync(path.join(cwd, 'packages/recipes/src/import'), { recursive: true });
+      writeFileSync(
+        path.join(cwd, 'packages/recipes/src/import/catalog-release.current.json'),
+        `${JSON.stringify({ schemaVersion: 1, ...release })}\n`,
+      );
+      git('add', '.');
+      git('commit', '-m', 'Previous staging Worker');
+      ancestorSha = git('rev-parse', 'HEAD');
+      git('commit', '--allow-empty', '-m', 'Release');
+      releaseSha = git('rev-parse', 'HEAD');
+      git('checkout', '-b', 'side', ancestorSha);
+      git('commit', '--allow-empty', '-m', 'Unmerged Worker');
+      siblingSha = git('rev-parse', 'HEAD');
+      git('checkout', 'main');
+    });
+    afterAll(() => rmSync(cwd, { recursive: true, force: true }));
+
+    const manifestFor = (environment = 'staging') => ({
+      sha: releaseSha,
+      environment,
+      recipeCatalogMode: 'static',
+      recipeCatalogCanaryPercent: 0,
+      recipeCatalogCutoverEnabled: false,
+    });
+
+    it('records the proven previous Worker evidence and its ancestry proof', () => {
+      const result = cli(manifestFor(), stagingEvidence('static', { commit: ancestorSha }));
+      expect(result.ok).toBe(true);
+      expect(result.manifest.previousRecipeAuthority.commit).toBe(ancestorSha);
+      expect(result.manifest.previousRecipeAuthorityProof).toMatchObject({
+        commit: ancestorSha,
+        relation: 'ancestor',
+        release: { releaseId: 'rel-test' },
+      });
+    });
+
+    it.each([
+      ['a sibling commit that is not an ancestor', () => siblingSha, 'not an ancestor'],
+      ['an ancestor without a reviewed catalog release', () => bareSha, 'no reviewed catalog release manifest'],
+    ])('fails closed on %s and records nothing', (_label, commit, message) => {
+      const result = cli(manifestFor(), stagingEvidence('static', { commit: commit() }));
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain(message);
+      expect(result.manifest.previousRecipeAuthority).toBeUndefined();
+      expect(result.manifest.previousRecipeAuthorityProof).toBeUndefined();
+    });
+
+    it('is staging-only; production keeps its transition preflight', () => {
+      const result = cli(manifestFor('production'), stagingEvidence('static', { commit: ancestorSha, environment: 'production' }));
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('production uses transition');
     });
   });
 });
@@ -1322,6 +1757,51 @@ describe('release workflow guardrails', () => {
     expect(staging).not.toContain('if [ -n "$RELEASE_VERIFY_TOKEN" ]');
     // The bounded helper is the single deployment proof; no other deploy step redeploys after it.
     expect(deploy.match(/wait-for-deployed-release\.mjs/g)).toHaveLength(2);
+  });
+  it('staging captures and proves current protected recipe authority before its single deploy (T20-R1)', () => {
+    const staging = deploy.slice(deploy.indexOf('\n  staging:'), deploy.indexOf('\n  production:'));
+    const production = deploy.slice(deploy.indexOf('\n  production:'));
+    const name = 'Capture and validate current staging recipe authority before deployment';
+    const start = staging.indexOf(`- name: ${name}`);
+    expect(start).toBeGreaterThan(-1);
+    const capture = staging.slice(start, staging.indexOf('\n      - ', start + 1));
+    expect(capture).toContain("if: env.STAGING_UNCONFIGURED != 'true'");
+    expect(capture).toContain('APP_SMOKE_URL: ${{ vars.STAGING_URL }}');
+    expect(capture).toContain('RELEASE_VERIFY_TOKEN: ${{ secrets.STAGING_RELEASE_VERIFY_TOKEN }}');
+    expect(capture).toContain('run: node scripts/release-check.mjs previous-authority release-manifest.json');
+    // The token stays in env and failures are never softened.
+    expect(capture).not.toMatch(/curl|\|\| true|continue-on-error/);
+    const order = [
+      'Require staging proof configuration before deployment',
+      'run: pnpm build',
+      'composition-flags.mjs verify',
+      'release-check.mjs recheck',
+      'release-check.mjs previous-authority release-manifest.json',
+      'command: deploy',
+      'wait-for-deployed-release.mjs release-manifest.json',
+      'post-deploy-smoke.sh',
+      'release-check.mjs authority release-manifest.json',
+      'name: release-staging-',
+    ];
+    const positions = order.map((needle) => staging.indexOf(needle));
+    expect(positions.every((position) => position >= 0), JSON.stringify(positions)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(staging.match(/command: deploy/g)).toHaveLength(1);
+    expect(staging.match(/release-check\.mjs previous-authority/g)).toHaveLength(1);
+    expect(staging).toContain('command: deploy --config wrangler.staging.jsonc');
+    expect(staging).not.toMatch(/vars\.PRODUCTION_URL|secrets\.RELEASE_VERIFY_TOKEN\b|environment: production/);
+    // The receipt survives a failed capture or proof.
+    expect(staging.slice(staging.indexOf('previous-authority'))).toMatch(/if: always\(\)[\s\S]*upload-artifact/);
+    // T20 server/UI flags still come from the one release output.
+    expect(staging).toContain(
+      '--var MEAL_COMPOSITION_V2_ENABLED:${{ needs.release.outputs.meal_composition_v2_enabled }}',
+    );
+    expect(staging).toContain(
+      'VITE_MEAL_COMPOSITION_V2_ENABLED: ${{ needs.release.outputs.meal_composition_v2_enabled }}',
+    );
+    // Production keeps its own preflight transition and never runs the staging capture.
+    expect(production).not.toContain('release-check.mjs previous-authority');
+    expect(production).toContain('release-check.mjs transition release-manifest.json previous-authority.json');
   });
   it('carries no write permission or shell-interpolated dispatch input', () => {
     expect(deploy).not.toMatch(/(?:contents|actions|id-token|deployments): write/);

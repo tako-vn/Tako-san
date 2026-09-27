@@ -1,3 +1,34 @@
+# Task board — T20-R1 staging release observability (2026-09-27)
+
+- [x] Re-fetch main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`; branch
+  `feat/t20-staging-release-observability`.
+- [x] Confirm root cause: no staging `previousRecipeAuthority`; wait helper
+  cannot classify previous-Worker evidence (run `36285175574`).
+- [x] Staging pre-deploy capture + proof; three-class bounded convergence;
+  strict evidence fetch; production preflight unchanged.
+- [x] Tests A–L, workflow order contract, real-Git CLI, mutation checks.
+- [ ] Independent review + merge (not by an agent).
+- [ ] After merge + exact-main CI: flag-OFF staging Deploy re-prove.
+- [ ] Only then: separate T20=true staging rollout.
+
+---
+
+# Task board — T20 staging rollout preflight (2026-09-27)
+
+- [x] Re-fetch main `0b2e0a17578bdc744427944b90db5b76bdbfe33c`; exact-main CI
+  `36284857635` SUCCESS.
+- [x] Confirm 0039 authority run `36287079403` / artifact `10919819859` /
+  `STAGING_0039_CERTIFIED` (recipes 500, T20 schema PASS, drift none).
+- [x] Confirm Worker+UI T20 flags OFF and paired in Deploy.
+- [x] T20 runtime/code audit + focused 120 tests + full Vitest 208/4654,
+  lint, typecheck, migration smoke, build PASS.
+- [x] Known Deploy observability on this SHA still present (`36285175574`).
+- [ ] Do **not** operator-dispatch T20 staging enablement until recipe-authority
+  commit identity matches `0b2e0a17…`.
+- [ ] Production T20: not authorized.
+
+---
+
 # Task board — Staging D1 0033→0038 historical catch-up
 
 ## Catch-up PR (2026-09-26)
