@@ -33,10 +33,12 @@ also identified a T20 slot-time policy gap; no unsafe LIVE T20 component
 was proven persisted.
 
 Branch `codex/t20-staging-hard-time` from exact main contains the proposed
-repair (ADR-038). Focused T20 HTTP suite 4/4, lint, typecheck, migration
-smoke and staging-style build PASS. Full hosted CI, review, merge and
-redeploy remain pending. Do not certify the current staging release.
-Production, T19 recipe authority and 0040 remain untouched.
+repair (ADR-038); PR #18 is open on head
+`9f040f6921a8a6871c1233627edf5ddda3fda552`. Focused T20 HTTP 4/4,
+lint, typecheck, migration smoke, staging-style build and canonical-clone
+full `pnpm check` PASS. Hosted exact-head CI, review, merge and redeploy
+remain pending. Do not certify the current staging release. Production,
+T19 recipe authority and 0040 remain untouched.
 
 ---
 

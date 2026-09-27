@@ -31,10 +31,12 @@ on an unplanned slot with `hardMaxTimeMinutes`; projection now selects
 only T05 fields. T20 now applies V1's slot time policy to Manual checks,
 downstream family revalidation and Assisted/Auto candidates. Focused T20
 HTTP 4/4, lint, typecheck, migration smoke and staging-style build PASS.
-The branch is not deployed. Next: full gate, PR/CI/review/merge, exact-main
-CI, staging-only T20=true/static/0 Deploy, then repeat the hard-rule LIVE
-matrix and D1/log checks. Do not certify the current Worker. No production,
-T19 or 0040 action.
+Canonical-clone full `pnpm check` PASS. PR #18 is open on
+`9f040f6921a8a6871c1233627edf5ddda3fda552`; hosted CI on the final
+documentation head remains required. The branch is not deployed. Next:
+PR CI/review/merge, exact-main CI, staging-only T20=true/static/0 Deploy,
+then repeat the hard-rule LIVE matrix and D1/log checks. Do not certify
+the current Worker. No production, T19 or 0040 action.
 
 ---
 
