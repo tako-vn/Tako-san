@@ -1,3 +1,17 @@
+# Task board — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
+
+**Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Remote D1 mutation: NO.
+
+- [x] Branch from exact main `e35df74b`.
+- [x] Read-only certifier reusing `assessD1Readiness`.
+- [x] Staging-only `workflow_dispatch` workflow (no deploy / migrations apply).
+- [x] Tests A–O / focused 31/31; `pnpm check` PASS.
+- [ ] Independent review + merge (not by an agent).
+- [ ] After merge + exact-main CI: operator dispatch Staging D1 Runtime Readiness.
+- [ ] Only if receipt status is `STAGING_D1_RUNTIME_READINESS_CERTIFIED` may T19 advance to shadow.
+
+---
+
 # Task board — T20 live hard-time repair (2026-09-27)
 
 - [x] PR #17 merged at `9d64178`; exact-main CI `36306274814` SUCCESS and staging Deploy `36306554840` SUCCESS with T20/planner true, static/0; production SKIPPED.

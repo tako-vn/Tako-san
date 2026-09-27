@@ -1,3 +1,18 @@
+# Current state — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
+
+**Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.**
+Implementation `61bf805ca77ceeb92df501fa1965d24856d45bff` on `feat/t19-staging-d1-runtime-readiness-certifier` from exact main
+`e35df74b7a10ee6de1677bf8e059c7ef82ad55fc`. This task added a staging-only, read-only certification
+workflow and checker. It does **not** claim `STAGING_D1_RUNTIME_READINESS_CERTIFIED`
+because the workflow has not been dispatched.
+
+Proven locally: focused 31/31 PASS; `pnpm check` PASS (typecheck, lint, Vitest,
+migration-smoke, build). No D1 mutation, staging/production deploy, recipe-authority
+mode change, T20 flag change, or 0040. Next: independent review/merge; after
+exact-main CI the operator may dispatch **Staging D1 Runtime Readiness**.
+
+---
+
 # Current state — T20 live staging hard time blocker and repair branch (2026-09-27)
 
 **Status: `T20_STAGING_LIVE_HARD_RESTRICTION_BLOCKED_P1`.** Canonical main
