@@ -11,6 +11,9 @@
   Existing 0039 workflow unchanged.
 - [x] Local replay 0033–0038 certified (59/71/71/101/500/500).
 - [x] Implementation commit `718abef` pushed.
+- [x] Review remediation: full pre-state checkpoint certification before
+  every mutation, apply-gate, required repository id, precise bookmark
+  contract (`f14fcb4`, `50e973c`; Vitest 208 / 4,654 PASS).
 - [ ] Independent PR review + merge.
 - [ ] After merge, operator-authorized RUN A–E (0034…0038), one per workflow run.
 - [ ] Only after `STAGING_0038_CERTIFIED` and recipes=500: existing 0039 workflow.

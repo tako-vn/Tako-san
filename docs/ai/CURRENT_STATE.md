@@ -1,5 +1,19 @@
 # Current state — Staging D1 0033→0038 historical catch-up PR
 
+**Remediation (2026-09-27): `STAGING_D1_0033_0038_CATCHUP_PR_REMEDIATED_READY_FOR_REVIEW`.**
+PR #14 review P1 fixed in `f14fcb4` / tests `50e973c`: before every mutation
+the pre-tip (or the target in certify-only mode) must pass `certifyCheckpoint`
+— exact ordered IDs, slugs and provenance, runtime_order 0..n-1, runtime and
+ingredient-order coverage, child counts, media seed + exact index/trigger/MIME/
+storage-key schema (0035+), approved batch provenance/marker (0036+),
+onboarding schema (0038), FK/quick_check. `plan` refuses an uncertified
+pre-state, and the apply step starts with `apply-gate` (certified pre-state,
+rechecked ledger/plan, bookmark captured after recheck). P2s:
+`GITHUB_REPOSITORY_ID` is required (no fallback); `assertCurrentRunBookmark`
+proves run/source/ordering only, not wall-clock freshness. Local gates:
+typecheck, lint, migration smoke PASS; Vitest 208 files / 4,654 tests PASS
+(+10 hostile pre-state tests). Staging/production mutation: NO.
+
 **2026-09-26: `STAGING_D1_0033_0038_CATCHUP_PR_READY` (implementation). Staging mutation=NO.**
 Exact current `main` is `8147dde` (PR #13). Exact-main hosted CI run
 `36274587084` SUCCESS; Deploy run `36274945067` SUCCESS. No catch-up branch

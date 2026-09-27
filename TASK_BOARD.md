@@ -8,6 +8,8 @@ Implementation `718abef`.
 - [done] One migration per run; prefix isolation excludes 0039.
 - [done] Local 0033–0038 replay certified.
 - [done] Existing 0039 staging migrate workflow left authoritative for 0038→0039.
+- [done] Review remediation: full pre-state checkpoint certification blocks
+  mutation on 0034–0037 checkpoint drift; apply-gate; repository id required.
 - [open] PR review/merge. No remote catch-up dispatch until then.
 
 Next authorized step after merge: dispatch target=0034 only, inspect receipt,
