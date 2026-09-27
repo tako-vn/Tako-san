@@ -1,3 +1,54 @@
+# Handoff — Staging D1 0033→0038 historical catch-up PR
+
+**Remediation (2026-09-27): `STAGING_D1_0033_0038_CATCHUP_PR_REMEDIATED_READY_FOR_REVIEW`.**
+PR #14 review P1 fixed in `f14fcb4` / tests `50e973c`: before every mutation
+the pre-tip (or the target in certify-only mode) must pass `certifyCheckpoint`
+— exact ordered IDs, slugs and provenance, runtime_order 0..n-1, runtime and
+ingredient-order coverage, child counts, media seed + exact index/trigger/MIME/
+storage-key schema (0035+), approved batch provenance/marker (0036+),
+onboarding schema (0038), FK/quick_check. `plan` refuses an uncertified
+pre-state, and the apply step starts with `apply-gate` (certified pre-state,
+rechecked ledger/plan, bookmark captured after recheck). P2s:
+`GITHUB_REPOSITORY_ID` is required (no fallback); `assertCurrentRunBookmark`
+proves run/source/ordering only, not wall-clock freshness. Local gates:
+typecheck, lint, migration smoke PASS; Vitest 208 files / 4,654 tests PASS
+(+10 hostile pre-state tests). Staging/production mutation: NO.
+
+**Current: `STAGING_D1_0033_0038_CATCHUP_PR_READY`.** Do not dispatch the new
+workflow until this PR is reviewed and merged. Do not apply 0039 from catch-up.
+
+Canonical `main`: `8147dde`. Exact-main CI `36274587084` SUCCESS. Deploy
+`36274945067` SUCCESS. Implementation `718abef` on
+`feat/staging-d1-catchup-0033-0038`.
+
+What landed:
+- `.github/workflows/staging-d1-catchup.yml` — `workflow_dispatch` only, staging
+  Environment, `confirm_staging_catchup` default false, contents/actions read,
+  concurrency `frigo-deploy-staging` (shared with the 0039 workflow).
+- `scripts/staging-d1-catchup-check.mjs` — one-step target gate, prefix builder
+  (0001…target, never 0039), ephemeral D1-only Wrangler config, exact catalog
+  certification from local replay, fresh Time Travel bookmark, production D1
+  hard reject.
+- Shared `classifyPreLedger` wording is now environment-neutral; behavior
+  unchanged.
+- Existing 0039 workflow / `PRE_TIP` / `TIP` / Wrangler DB IDs unchanged.
+
+Local gates: typecheck, lint, Vitest 208/4,644, migration smoke, build PASS.
+Local replay certified 59 → 71 → 71 → 101 → 500 → 500. Staging mutation was
+not performed. Production D1/R2/deploy untouched. T20 remains false.
+
+After merge, execute separately: target 0034, inspect receipt, then 0035, 0036,
+0037, 0038. Only then use **Staging D1 Migration** for 0038→0039.
+
+## Resume point
+
+1. Review/merge the catch-up PR. Do not auto-merge.
+2. Re-prove staging Cloudflare secrets after the repo transfer.
+3. Dispatch catch-up from `main` with exact current main SHA, one target per run.
+4. Do not start Content Refresh V2, 0040, or T20 enablement from this path.
+
+---
+
 # Handoff — Runtime Ingredient Model V2 staging blocker and offline checkpoint
 
 Canonical `main` after PR #11: `8687ff9f3e8f6b6cbf466ee61968bb5f3469498c`.

@@ -760,7 +760,7 @@ export function classifyPreLedger(manifest, statements) {
     return { mode: 'certify', count: names.length, tip: names.at(-1), names, chain: [] };
   }
   throw new Error(
-    'Production migration ledger is neither at expected_pre_tip nor exactly at the candidate migration; stop and reconcile',
+    'Migration ledger is neither at the expected pre-tip nor exactly at the candidate migration; stop and reconcile',
   );
 }
 

@@ -1,0 +1,727 @@
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, cpSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { parseWranglerJsonc } from '../../scripts/d1-migration-check.mjs';
+import { PRE_TIP as STAGING_0039_PRE_TIP, TIP as STAGING_0039_TIP } from '../../scripts/staging-d1-migration-check.mjs';
+import {
+  ARTIFACT_ROOT,
+  CATCHUP_STEPS,
+  FORBIDDEN_MIGRATION,
+  GLOBAL_RECIPE_IDS,
+  HISTORICAL_REPORTED_BOOKMARK,
+  STAGING_D1,
+  assertCurrentRunBookmark,
+  assertRepositoryIdentity,
+  buildMigrationPrefix,
+  captureBookmark,
+  catchupWranglerConfig,
+  certify0033Baseline,
+  certifyOnboarding,
+  certifyCheckpoint,
+  certifyPostState,
+  certifyPreState,
+  checkpointStatus,
+  collectCheckpointEvidence,
+  d1Result,
+  expectedCheckpointEvidence,
+  expectedSnapshot,
+  findCollisions,
+  incomingCatalog,
+  localReplayAndCertify,
+  loadHistoricalRelease,
+  onboardingQuery,
+  resolveCatchupStep,
+  run,
+  sha256File,
+  stagingConfig,
+  validateCatchupCandidate,
+  verifyBatchMarker,
+  verifyCatchupPlan,
+  verifyPrefixIntegrity,
+  verifyStagingD1Identity,
+  writeCatchupWranglerConfig,
+} from '../../scripts/staging-d1-catchup-check.mjs';
+
+const { load } = createRequire(createRequire(import.meta.url).resolve('eslint/package.json'))('js-yaml');
+const catchupWorkflow = readFileSync('.github/workflows/staging-d1-catchup.yml', 'utf8');
+const migrateWorkflow = readFileSync('.github/workflows/staging-d1-migrate.yml', 'utf8');
+function originMainSha() {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', 'refs/remotes/origin/main^{commit}'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/main', head]);
+    return head;
+  }
+}
+
+beforeAll(() => {
+  originMainSha();
+});
+
+const dirs = [];
+const temporary = () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'staging-catchup-'));
+  dirs.push(dir);
+  return dir;
+};
+const write = (dir, name, data) => {
+  const file = path.join(dir, name);
+  writeFileSync(file, typeof data === 'string' ? data : JSON.stringify(data));
+  return file;
+};
+const result = (rows) => [{ success: true, results: rows }];
+const ledger = (names) => result(names.map((name) => ({ name })));
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe('staging historical catch-up prefix isolation', () => {
+  it('copies 0001 through the requested target with matching SHA-256 and never includes 0039', () => {
+    const dest = path.join(temporary(), 'migrations');
+    const manifest = buildMigrationPrefix({ target: '0034', destDir: dest });
+    expect(manifest.included[0].filename).toBe('0001_initial_schema.sql');
+    expect(manifest.included.at(-1).filename).toBe('0034_global_recipe_catalog_parity.sql');
+    expect(manifest.included.map((entry) => entry.filename)).not.toEqual(
+      expect.arrayContaining(['0035_recipe_media_layer.sql', FORBIDDEN_MIGRATION]),
+    );
+    for (const entry of manifest.included) {
+      expect(entry.sourceSha).toBe(entry.copySha);
+      expect(entry.copySha).toBe(sha256File(path.join(dest, entry.filename)));
+    }
+    expect(readdirSync(dest).sort()).toEqual(manifest.included.map((entry) => entry.filename));
+    expect(verifyPrefixIntegrity(manifest, { destDir: dest })).toBe('PASS');
+  });
+
+  it('builds an 0038 prefix through auth onboarding and still excludes 0039', () => {
+    const dest = path.join(temporary(), 'migrations');
+    const manifest = buildMigrationPrefix({ target: '0038', destDir: dest });
+    expect(manifest.included.at(-1).filename).toBe('0038_auth_onboarding_completion.sql');
+    expect(manifest.included.some((entry) => entry.filename === FORBIDDEN_MIGRATION)).toBe(false);
+    expect(readdirSync(dest)).not.toContain(FORBIDDEN_MIGRATION);
+  });
+
+  it('rejects missing, duplicate, modified, future and 0039-leaking prefixes', () => {
+    const source = path.join(temporary(), 'migrations');
+    cpSync('migrations', source, { recursive: true });
+    expect(() => buildMigrationPrefix({ target: '0039', destDir: path.join(temporary(), 'out') }))
+      .toThrow(/0039 belongs to the existing/);
+    const dest = path.join(temporary(), 'out');
+    const manifest = buildMigrationPrefix({ target: '0034', sourceDir: source, destDir: dest });
+    writeFileSync(path.join(dest, FORBIDDEN_MIGRATION), '-- leaked\n');
+    expect(() => verifyPrefixIntegrity(manifest, { sourceDir: source, destDir: dest }))
+      .toThrow(/0039 leakage/);
+    rmSync(path.join(dest, FORBIDDEN_MIGRATION));
+    writeFileSync(path.join(dest, '0034_global_recipe_catalog_parity.sql'), '-- mutated\n');
+    expect(() => verifyPrefixIntegrity(manifest, { sourceDir: source, destDir: dest }))
+      .toThrow(/modified copy/);
+    rmSync(path.join(dest, '0001_initial_schema.sql'));
+    expect(() => verifyPrefixIntegrity(manifest, { sourceDir: source, destDir: dest }))
+      .toThrow(/Prefix directory does not match|ENOENT/);
+    writeFileSync(path.join(source, '0034_duplicate.sql'), 'SELECT 1;\n');
+    expect(() => buildMigrationPrefix({ target: '0034', sourceDir: source, destDir: path.join(temporary(), 'dup') }))
+      .toThrow(/duplicate|malformed/);
+    rmSync(path.join(source, '0034_global_recipe_catalog_parity.sql'));
+    expect(() => buildMigrationPrefix({ target: '0034', sourceDir: source, destDir: path.join(temporary(), 'missing') }))
+      .toThrow(/missing migration|malformed/);
+  });
+});
+
+describe('ephemeral staging D1-only catch-up config', () => {
+  it('preserves staging D1 identity, points migrations_dir at the prefix, and copies no production resources', () => {
+    const dir = temporary();
+    const migrationsDir = path.join(dir, 'migrations');
+    const configPath = path.join(dir, 'wrangler.catchup.jsonc');
+    mkdirSync(migrationsDir);
+    const written = writeCatchupWranglerConfig({ destFile: configPath, migrationsDir });
+    const parsed = parseWranglerJsonc(readFileSync(configPath, 'utf8'), configPath);
+    expect(parsed.name).toBe('frigo-staging');
+    expect(parsed.vars.ENVIRONMENT).toBe('staging');
+    expect(parsed.vars.MEAL_COMPOSITION_V2_ENABLED).toBe('false');
+    expect(parsed.d1_databases).toEqual([{
+      binding: 'DB',
+      database_name: STAGING_D1.name,
+      database_id: STAGING_D1.id,
+      migrations_dir: migrationsDir.replaceAll('\\', '/'),
+    }]);
+    expect(parsed.r2_buckets).toBeUndefined();
+    expect(parsed.kv_namespaces).toBeUndefined();
+    expect(parsed.queues).toBeUndefined();
+    expect(parsed.routes).toBeUndefined();
+    expect(JSON.stringify(parsed)).not.toContain('f975ec39-b2c8-4a2a-80e1-0366054599d3');
+    expect(written.config).toEqual(catchupWranglerConfig({ migrationsDir }));
+    expect(() => catchupWranglerConfig({
+      migrationsDir, database: { name: 'frigo-db', id: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' },
+    })).toThrow(/Production D1/);
+    expect(() => catchupWranglerConfig({
+      migrationsDir, database: { name: STAGING_D1.name, id: 'changed' },
+    })).toThrow(/identity changed/);
+  });
+
+  it('is readable by Wrangler locally and lists only the prefix through the target', () => {
+    const dir = temporary();
+    const migrationsDir = path.join(dir, 'migrations');
+    const configPath = path.join(dir, 'wrangler.catchup.jsonc');
+    buildMigrationPrefix({ target: '0034', destDir: migrationsDir });
+    writeCatchupWranglerConfig({ destFile: configPath, migrationsDir: 'migrations' });
+    const output = execFileSync(
+      'pnpm',
+      ['wrangler', 'd1', 'migrations', 'list', STAGING_D1.name, '--local', '--persist-to', path.join(dir, 'state'), '--config', configPath],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    expect(output).toMatch(/0034_global_recipe_catalog_parity\.sql/);
+    expect(output).not.toMatch(/0035_recipe_media_layer\.sql/);
+    expect(output).not.toMatch(/0039_meal_composition_v2\.sql/);
+  });
+
+  it('pins the committed staging config and rejects the production D1 ID', () => {
+    const database = stagingConfig();
+    expect(database).toMatchObject({ name: STAGING_D1.name, id: STAGING_D1.id, productionRejected: true });
+    const raw = readFileSync('wrangler.staging.jsonc', 'utf8');
+    expect(() => stagingConfig(raw.replace(STAGING_D1.id, 'f975ec39-b2c8-4a2a-80e1-0366054599d3'))).toThrow(/Staging Wrangler config/);
+  });
+});
+
+describe('one-step transition model', () => {
+  it('allows only 0033→0034 … 0037→0038 and rejects skips and 0039', () => {
+    expect(resolveCatchupStep('0034')).toMatchObject({
+      preTip: '0033_scan_evidence_completeness.sql',
+      file: '0034_global_recipe_catalog_parity.sql',
+    });
+    expect(() => resolveCatchupStep('0039')).toThrow(/existing staging-d1-migrate/);
+    expect(() => resolveCatchupStep('0033')).toThrow(/Unsupported/);
+    expect(CATCHUP_STEPS['0035'].preTip).toBe('0034_global_recipe_catalog_parity.sql');
+    expect(CATCHUP_STEPS['0038'].preTip).toBe('0037_recipe_catalog_scale.sql');
+  });
+
+  it('rejects a 0033→0035 or 0034→0036 request at the ledger gate', async () => {
+    const dir = temporary();
+    const names = [
+      '0032_scan_evidence_retention.sql',
+      '0033_scan_evidence_completeness.sql',
+      '0034_global_recipe_catalog_parity.sql',
+      '0035_recipe_media_layer.sql',
+    ];
+    const file = write(dir, 'receipt.json', {
+      cloudflare: { accountAuthenticated: true },
+      schema: { migrations: names.slice(0, 3).map((name) => ({ name })) },
+      chain: ['0035_recipe_media_layer.sql'],
+      step: CATCHUP_STEPS['0035'],
+    });
+    await expect(run('pre-ledger', file, [write(dir, 'ledger.json', ledger(names.slice(0, 2)))]))
+      .rejects.toThrow(/neither at the expected pre-tip|not 0034|exactly one/);
+  });
+});
+
+describe('staging identity and repository owner', () => {
+  it('accepts the pinned staging D1 and rejects production or changed IDs', () => {
+    const list = [
+      { name: 'frigo-db', uuid: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' },
+      { name: STAGING_D1.name, uuid: STAGING_D1.id },
+    ];
+    expect(verifyStagingD1Identity({ list, info: { name: STAGING_D1.name, uuid: STAGING_D1.id } }))
+      .toMatchObject({ productionRejected: true, databaseId: STAGING_D1.id });
+    expect(() => verifyStagingD1Identity({
+      list, info: null, expected: { name: 'frigo-db', id: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' },
+    })).toThrow(/Production D1/);
+    expect(() => verifyStagingD1Identity({
+      list: [{ name: STAGING_D1.name, uuid: 'changed' }], info: null,
+    })).toThrow(/mismatch in d1 list/);
+    expect(() => verifyStagingD1Identity({ list: null, info: null }))
+      .toThrow(/STAGING_CLOUDFLARE_CREDENTIAL_REVALIDATION_REQUIRED/);
+  });
+
+  it('rejects stale repository owners and the wrong GitHub repository id', () => {
+    expect(assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: '1385308553' }))
+      .toEqual({ fullName: 'takovn1/Tako-san', id: '1385308553' });
+    // '' / null bypass the env default, so this also holds on Actions runners that set the id.
+    for (const missing of ['', null, '   ']) {
+      expect(() => assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: missing }))
+        .toThrow(/repository id is required/);
+    }
+    expect(() => assertRepositoryIdentity({ repository: 'tako-vn2/Tako-san', repositoryId: '1385308553' }))
+      .toThrow(/Stale repository owner/);
+    expect(() => assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: '1' }))
+      .toThrow(/repository id/);
+  });
+});
+
+describe('fresh Time Travel bookmark', () => {
+  it('records the historical bookmark only as metadata and rejects reused or other-run bookmarks', () => {
+    const current = captureBookmark({ bookmark: 'current-run-bookmark-1' });
+    expect(current.source).toBe('time-travel-info');
+    expect(current.historicalReportedBookmark).toBe(HISTORICAL_REPORTED_BOOKMARK);
+    expect(assertCurrentRunBookmark(current)).toBe('PASS');
+    expect(() => assertCurrentRunBookmark({
+      bookmark: HISTORICAL_REPORTED_BOOKMARK, source: 'historical', capturedAt: new Date().toISOString(),
+    })).toThrow(/captured by this run/);
+    expect(() => assertCurrentRunBookmark({
+      bookmark: HISTORICAL_REPORTED_BOOKMARK, reused: true, source: 'time-travel-info', capturedAt: new Date().toISOString(),
+    })).toThrow(/Stale or reused/);
+    const previous = process.env.GITHUB_RUN_ID;
+    try {
+      process.env.GITHUB_RUN_ID = '1001';
+      expect(() => assertCurrentRunBookmark({ ...current, runId: '999' })).toThrow(/current workflow run/);
+      expect(assertCurrentRunBookmark({ ...current, runId: '1001' })).toBe('PASS');
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_RUN_ID;
+      else process.env.GITHUB_RUN_ID = previous;
+    }
+  });
+});
+
+describe('0033 baseline and historical certification', () => {
+  it('certifies the exact local 0033 recipe set and rejects count/ID/slug drift', () => {
+    const baseline = expectedSnapshot('0033_scan_evidence_completeness.sql');
+    expect(certify0033Baseline(baseline)).toMatchObject({
+      certification: 'STAGING_0033_BASELINE_CERTIFIED', recipeCount: 59,
+    });
+    expect(() => certify0033Baseline({ ...baseline, recipeCount: 58, ids: baseline.ids.slice(1) }))
+      .toThrow(/STAGING_0033_BASELINE_DRIFT/);
+    const wrongId = [...baseline.ids];
+    wrongId[0] = 'not-a-real-recipe';
+    expect(() => certify0033Baseline({
+      ...baseline,
+      ids: wrongId,
+      idSetHash: 'deadbeef',
+      integrity: baseline.integrity,
+    })).toThrow(/STAGING_0033_BASELINE_DRIFT/);
+    expect(() => certify0033Baseline({
+      ...baseline,
+      ids: [...baseline.ids, 'extra-recipe'],
+      recipeCount: 60,
+      integrity: { ...baseline.integrity, recipes: 60 },
+    })).toThrow(/STAGING_0033_BASELINE_DRIFT/);
+    expect(() => certify0033Baseline({
+      ...baseline,
+      integrity: { ...baseline.integrity, duplicate_slugs: 1 },
+    })).toThrow(/duplicate slug/);
+  });
+
+  it('certifies 0034–0038 locally against the historical T14F catalog, one step at a time', () => {
+    const replay = localReplayAndCertify();
+    expect(replay).toEqual([
+      { tip: '0033', recipes: 59, preState: 'STAGING_0033_BASELINE_CERTIFIED', certified: 'STAGING_0033_BASELINE_CERTIFIED' },
+      { tip: '0034', recipes: 71, preState: 'STAGING_0033_BASELINE_CERTIFIED', certified: 'STAGING_0034_CERTIFIED' },
+      { tip: '0035', recipes: 71, preState: 'STAGING_0034_PRESTATE_CERTIFIED', certified: 'STAGING_0035_CERTIFIED' },
+      { tip: '0036', recipes: 101, preState: 'STAGING_0035_PRESTATE_CERTIFIED', certified: 'STAGING_0036_CERTIFIED' },
+      { tip: '0037', recipes: 500, preState: 'STAGING_0036_PRESTATE_CERTIFIED', certified: 'STAGING_0037_CERTIFIED' },
+      { tip: '0038', recipes: 500, preState: 'STAGING_0037_PRESTATE_CERTIFIED', certified: 'STAGING_0038_CERTIFIED' },
+    ]);
+    const release = loadHistoricalRelease();
+    const after34 = expectedSnapshot('0034_global_recipe_catalog_parity.sql');
+    expect(after34.orderedIds).toEqual(release.orderedRecipeIds.slice(0, 71));
+    expect(GLOBAL_RECIPE_IDS.every((id) => after34.ids.includes(id))).toBe(true);
+    expect(verifyBatchMarker(CATCHUP_STEPS['0036'])).toBe('PASS');
+    expect(verifyBatchMarker(CATCHUP_STEPS['0037'])).toBe('PASS');
+    const after38 = expectedSnapshot('0038_auth_onboarding_completion.sql');
+    expect(after38.orderedIds).toEqual(release.orderedRecipeIds);
+    expect(after38.integrity.media_ready).toBe(0);
+    expect(after38.integrity.media_pending).toBe(500);
+  });
+
+  it('rejects pilot and scale ID/slug collisions before apply', () => {
+    const pre36 = expectedSnapshot('0035_recipe_media_layer.sql');
+    const incoming36 = incomingCatalog(CATCHUP_STEPS['0036']);
+    expect(incoming36.ids).toHaveLength(30);
+    expect(findCollisions(pre36, incoming36)).toBe('PASS');
+    expect(() => findCollisions(
+      { ids: [...pre36.ids, incoming36.ids[0]], slugs: pre36.slugs },
+      { ...incoming36, label: 'pilot' },
+    )).toThrow(/Catalog collision/);
+    const pre37 = expectedSnapshot('0036_recipe_catalog_pilot.sql');
+    const incoming37 = incomingCatalog(CATCHUP_STEPS['0037']);
+    expect(incoming37.ids).toHaveLength(399);
+    expect(findCollisions(pre37, incoming37)).toBe('PASS');
+    expect(() => findCollisions(
+      { ids: pre37.ids, slugs: [...pre37.slugs, incoming37.slugs[0]] },
+      { ...incoming37, label: 'scale' },
+    )).toThrow(/Catalog collision/);
+  });
+});
+
+describe('catch-up plan and main-moved / ledger-changed gates', () => {
+  it('accepts exactly one pending historical migration and rejects 0039 leakage', () => {
+    const plan = 'Migrations to be applied:\n│ 0034_global_recipe_catalog_parity.sql │\n';
+    expect(verifyCatchupPlan(plan, { file: '0034_global_recipe_catalog_parity.sql', mode: 'apply' }))
+      .toEqual({ planned: ['0034_global_recipe_catalog_parity.sql'] });
+    expect(() => verifyCatchupPlan(
+      `${plan}│ 0035_recipe_media_layer.sql │\n`,
+      { file: '0034_global_recipe_catalog_parity.sql', mode: 'apply' },
+    )).toThrow(/exactly/);
+    expect(() => verifyCatchupPlan(
+      'Migrations to be applied:\n│ 0039_meal_composition_v2.sql │\n',
+      { file: '0038_auth_onboarding_completion.sql', mode: 'apply' },
+    )).toThrow(/0039 leakage/);
+    expect(verifyCatchupPlan('✅ No migrations to apply!', {
+      file: '0034_global_recipe_catalog_parity.sql', mode: 'certify',
+    })).toEqual({ planned: [] });
+  });
+
+  it('fails closed when main moved or the ledger changed between preflight and apply', async () => {
+    const dir = temporary();
+    const names = ['0033_scan_evidence_completeness.sql', '0034_global_recipe_catalog_parity.sql'];
+    const file = write(dir, 'receipt.json', {
+      sha: '0'.repeat(40),
+      repository: { fullName: 'takovn1/Tako-san', id: '1385308553' },
+      step: CATCHUP_STEPS['0034'],
+      chain: ['0034_global_recipe_catalog_parity.sql'],
+      schema: { migrations: names.map((name) => ({ name })) },
+      plan: { planned: ['0034_global_recipe_catalog_parity.sql'] },
+      prefix: { included: [{ filename: '0034_global_recipe_catalog_parity.sql', sourceSha: 'a', copySha: 'a' }], sha256: 'x' },
+      preLedger: { mode: 'apply', tip: '0033_scan_evidence_completeness.sql', chain: ['0034_global_recipe_catalog_parity.sql'] },
+    });
+    await expect(run('recheck', file)).rejects.toThrow(/main moved/);
+  });
+});
+
+describe('candidate SHA and hosted CI gates', () => {
+  it('requires the catch-up ref to equal current origin/main', () => {
+    const mainSha = originMainSha();
+    expect(validateCatchupCandidate({ ref: mainSha, target: '0034' })).toMatchObject({
+      sha: mainSha, mainSha, chain: ['0034_global_recipe_catalog_parity.sql'],
+    });
+    expect(() => validateCatchupCandidate({ ref: 'main', target: '0034' })).toThrow(/full immutable SHA/);
+    expect(() => validateCatchupCandidate({ ref: mainSha, target: '0039' })).toThrow(/0039/);
+  });
+});
+
+describe('GitHub Actions catch-up workflow', () => {
+  it('is manual, staging-only, one migration per run, and never applies 0039', () => {
+    const workflow = load(catchupWorkflow);
+    expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
+    expect(workflow.on.workflow_dispatch.inputs.target.options).toEqual(['0034', '0035', '0036', '0037', '0038']);
+    expect(workflow.on.workflow_dispatch.inputs.confirm_staging_catchup.default).toBe(false);
+    expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' });
+    expect(workflow.concurrency).toEqual({ group: 'frigo-deploy-staging', 'cancel-in-progress': false });
+    expect(workflow.jobs.certify.environment).toBe('staging');
+    expect(workflow.jobs.certify.if).toContain("github.ref == 'refs/heads/main'");
+    expect(workflow.jobs.certify.if).toContain('inputs.confirm_staging_catchup == true');
+    expect(catchupWorkflow).not.toContain('environment: production');
+    expect(catchupWorkflow).not.toContain('wrangler.jsonc --');
+    expect(catchupWorkflow).not.toContain('time-travel restore');
+    expect(catchupWorkflow).not.toContain(FORBIDDEN_MIGRATION);
+    const apply = workflow.jobs.certify.steps.find((step) => step.name?.startsWith('Apply only the certified'));
+    expect(apply.run).toContain('--config "$config"');
+    expect(apply.run).toContain('migrations apply');
+    expect(apply.run).not.toContain('wrangler.staging.jsonc');
+    const identity = workflow.jobs.certify.steps.find((step) => step.name?.startsWith('Prove Cloudflare'));
+    expect(identity.run).toContain('--config wrangler.staging.jsonc');
+    expect(identity.run).toContain('frigo-db-staging-v3');
+    const preflight = workflow.jobs.certify.steps
+      .slice(0, workflow.jobs.certify.steps.indexOf(apply))
+      .map((step) => step.run || '')
+      .join('\n');
+    expect(preflight).not.toMatch(/wrangler d1 migrations apply/);
+  });
+
+  it('does not weaken the existing 0039 staging migration workflow', () => {
+    expect(STAGING_0039_PRE_TIP).toBe('0038_auth_onboarding_completion.sql');
+    expect(STAGING_0039_TIP).toBe(FORBIDDEN_MIGRATION);
+    const workflow = load(migrateWorkflow);
+    expect(workflow.concurrency).toEqual({ group: 'frigo-deploy-staging', 'cancel-in-progress': false });
+    expect(migrateWorkflow).toMatch(/certified 0039 chain|applying\/certifying 0039/);
+    expect(workflow.jobs.certify.steps.some((step) => /Apply only the certified 0039/.test(step.name))).toBe(true);
+  });
+});
+
+
+describe('recheck CI and ledger races', () => {
+  const successfulRun = (sha) => ({
+    id: 36274587084,
+    run_attempt: 1,
+    html_url: 'https://github.com/takovn1/Tako-san/actions/runs/36274587084',
+    head_sha: sha,
+    head_branch: 'main',
+    event: 'push',
+    path: '.github/workflows/ci.yml',
+    status: 'completed',
+    conclusion: 'success',
+    updated_at: '2026-09-26T00:00:00Z',
+    repository: { full_name: 'takovn1/Tako-san' },
+    head_repository: { full_name: 'takovn1/Tako-san' },
+  });
+
+  it('rejects unsuccessful exact-main CI and a ledger that changed after preflight', async () => {
+    const mainSha = originMainSha();
+    const dir = temporary();
+    const dest = path.join(dir, 'migrations');
+    const prefix = buildMigrationPrefix({ target: '0034', destDir: dest });
+    const names = prefix.included.map((entry) => entry.filename);
+    const file = write(dir, 'receipt.json', {
+      sha: mainSha,
+      repository: { fullName: 'takovn1/Tako-san', id: '1385308553' },
+      ci: { id: 1 },
+      step: CATCHUP_STEPS['0034'],
+      chain: ['0034_global_recipe_catalog_parity.sql'],
+      schema: { migrations: names.map((name) => ({ name })) },
+      plan: { planned: ['0034_global_recipe_catalog_parity.sql'] },
+      prefix: { ...prefix, destDir: dest },
+      preLedger: {
+        mode: 'apply',
+        tip: '0033_scan_evidence_completeness.sql',
+        count: names.length - 1,
+        names: names.slice(0, -1),
+        chain: ['0034_global_recipe_catalog_parity.sql'],
+      },
+    });
+    const previousToken = process.env.GH_TOKEN;
+    const previousRepo = process.env.GITHUB_REPOSITORY;
+    const previousFetch = globalThis.fetch;
+    process.env.GH_TOKEN = 'test-token';
+    process.env.GITHUB_REPOSITORY = 'takovn1/Tako-san';
+    try {
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({ workflow_runs: [{ ...successfulRun(mainSha), conclusion: 'failure' }] }),
+      });
+      await expect(run('recheck', file)).rejects.toThrow(/successful/);
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({ workflow_runs: [successfulRun(mainSha)] }),
+      });
+      await expect(run('recheck', file, [write(dir, 'changed-ledger.json', ledger(names.slice(0, -2)))]))
+        .rejects.toThrow(/ledger changed|neither at the expected pre-tip/);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousToken === undefined) delete process.env.GH_TOKEN;
+      else process.env.GH_TOKEN = previousToken;
+      if (previousRepo === undefined) delete process.env.GITHUB_REPOSITORY;
+      else process.env.GITHUB_REPOSITORY = previousRepo;
+    }
+  });
+});
+
+describe('hostile pre-state checkpoint drift (stops before mutation)', () => {
+  const TIPS = {
+    '0034': '0034_global_recipe_catalog_parity.sql',
+    '0035': '0035_recipe_media_layer.sql',
+    '0036': '0036_recipe_catalog_pilot.sql',
+    '0037': '0037_recipe_catalog_scale.sql',
+  };
+  const dbs = {};
+
+  beforeAll(() => {
+    const names = readdirSync('migrations').filter((name) => name.endsWith('.sql')).sort();
+    for (const [key, tip] of Object.entries(TIPS)) {
+      const db = new DatabaseSync(':memory:');
+      db.exec('PRAGMA foreign_keys = ON');
+      for (const name of names.slice(0, names.indexOf(tip) + 1)) {
+        db.exec(readFileSync(path.join('migrations', name), 'utf8'));
+      }
+      dbs[key] = db;
+    }
+  }, 120_000);
+
+  afterAll(() => {
+    for (const db of Object.values(dbs)) db.close();
+  });
+
+  // Mutations run inside a savepoint so every case starts from the exact reviewed checkpoint.
+  const drifted = (key, sql) => {
+    const db = dbs[key];
+    db.exec('SAVEPOINT hostile');
+    try {
+      if (sql) db.exec(sql);
+      return collectCheckpointEvidence(db, TIPS[key]);
+    } finally {
+      db.exec('ROLLBACK TO hostile');
+      db.exec('RELEASE hostile');
+    }
+  };
+  const nextStep = { '0034': '0035', '0035': '0036', '0036': '0037', '0037': '0038' };
+  const preState = (key, evidence, options) => certifyPreState(CATCHUP_STEPS[nextStep[key]], evidence, options);
+  const idAt = (key, order) => dbs[key].prepare('SELECT recipe_id FROM recipe_runtime_fields WHERE runtime_order = ?').get(order).recipe_id;
+
+  it('K: exact 0034–0037 checkpoints pass the full pre-state contract', () => {
+    for (const key of Object.keys(TIPS)) {
+      expect(preState(key, drifted(key)).status).toBe(checkpointStatus(TIPS[key], 'pre'));
+    }
+    expect(checkpointStatus(TIPS['0035'], 'pre')).toBe('STAGING_0035_PRESTATE_CERTIFIED');
+  });
+
+  it('A/B: 0034 with exact count and IDs but a runtime_order gap or missing runtime field', () => {
+    expect(() => preState('0034', drifted('0034', 'UPDATE recipe_runtime_fields SET runtime_order = 71 WHERE runtime_order = 70')))
+      .toThrow(/STAGING_0034_PRESTATE_DRIFT.*runtime_order/);
+    expect(() => preState('0034', drifted('0034', "DELETE FROM recipe_runtime_fields WHERE recipe_id = 'gl-05'")))
+      .toThrow(/STAGING_0034_PRESTATE_DRIFT.*recipe_runtime_fields/);
+  });
+
+  it('C/D: 0035 with exact IDs but 70 pending media rows or a missing media index', () => {
+    expect(() => preState('0035', drifted('0035', "UPDATE recipe_media SET status = 'rejected' WHERE recipe_id = 'gl-01'")))
+      .toThrow(/STAGING_0035_PRESTATE_DRIFT.*(media_pending|recipe_media seed)/);
+    expect(() => preState('0035', drifted('0035', 'DROP INDEX idx_recipe_media_content_hash')))
+      .toThrow(/STAGING_0035_PRESTATE_DRIFT.*idx_recipe_media_content_hash|STAGING_0035_PRESTATE_DRIFT.*schema objects differ/);
+    const withoutMedia = { ...drifted('0035') };
+    delete withoutMedia.mediaSchema;
+    expect(() => preState('0035', withoutMedia)).toThrow(/recipe_media evidence missing/);
+  });
+
+  it('E/F: 0036 with exact IDs but runtime_order max=101, or tampered pilot batch provenance/marker', () => {
+    expect(() => preState('0036', drifted('0036', 'UPDATE recipe_runtime_fields SET runtime_order = 101 WHERE runtime_order = 100')))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*runtime_order/);
+    const pilotId = idAt('0036', 71);
+    expect(() => preState('0036', drifted('0036', `UPDATE recipes SET source_reference = 'T14F tampered batch' WHERE id = '${pilotId}'`)))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*(provenance)/);
+    const release = loadHistoricalRelease();
+    const tamperedRelease = {
+      ...release,
+      approvedImportBatches: release.approvedImportBatches.map((batch) => (
+        batch.batchId === CATCHUP_STEPS['0036'].batchId ? { ...batch, batchHash: 'f'.repeat(64) } : batch)),
+    };
+    expect(() => preState('0036', drifted('0036'), { release: tamperedRelease }))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*t14f-pilot-30-v1/);
+    const cwd = temporary();
+    mkdirSync(path.join(cwd, 'migrations'));
+    const pilotSql = readFileSync('migrations/0036_recipe_catalog_pilot.sql', 'utf8');
+    writeFileSync(path.join(cwd, 'migrations/0036_recipe_catalog_pilot.sql'),
+      pilotSql.replace(CATCHUP_STEPS['0036'].batchHash, 'e'.repeat(64)));
+    expect(() => preState('0036', drifted('0036'), { cwd, release }))
+      .toThrow(/STAGING_0036_PRESTATE_DRIFT.*migration marker/);
+  });
+
+  it('G/H/I: 0037 with 500 exact IDs but 499 runtime fields, a ready media row, or a moved ordered ID', () => {
+    const scaleId = idAt('0037', 300);
+    expect(() => preState('0037', drifted('0037', `DELETE FROM recipe_runtime_fields WHERE recipe_id = '${scaleId}'`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*recipe_runtime_fields/);
+    expect(() => preState('0037', drifted('0037', `UPDATE recipe_media SET status = 'ready',
+        storage_key = 'recipes/' || recipe_id || '/hero/v1.webp', mime_type = 'image/webp', width = 1, height = 1,
+        content_length = 1, content_hash = '${'a'.repeat(64)}' WHERE recipe_id = 'gl-01'`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*(media_ready|recipe_media seed)/);
+    expect(() => preState('0037', drifted('0037', `
+        UPDATE recipe_runtime_fields SET runtime_order = 100000 WHERE runtime_order = 200;
+        UPDATE recipe_runtime_fields SET runtime_order = 200 WHERE runtime_order = 201;
+        UPDATE recipe_runtime_fields SET runtime_order = 201 WHERE runtime_order = 100000;`)))
+      .toThrow(/STAGING_0037_PRESTATE_DRIFT.*(ordered recipe IDs|historical release order)/);
+  });
+
+  it('checker refuses to make 0036 eligible when ledger=0035 and IDs are exact but the media seed drifted', async () => {
+    const dir = temporary();
+    const evidence = drifted('0035', "UPDATE recipe_media SET status = 'superseded' WHERE recipe_id = 'vn-kho-01'");
+    const receipt = write(dir, 'receipt.json', {
+      step: CATCHUP_STEPS['0036'],
+      preLedger: { mode: 'apply', tip: TIPS['0035'] },
+      expected: { incoming: incomingCatalog(CATCHUP_STEPS['0036']) },
+      prefix: { included: [], sha256: 'x' },
+    });
+    const files = ['aggregates', 'identities', 'mediaSummary', 'mediaSlots', 'mediaSchema']
+      .map((key) => write(dir, `${key}.json`, evidence[key]));
+    await expect(run('pre-catalog', receipt, files)).rejects.toThrow(/STAGING_0035_PRESTATE_DRIFT/);
+    expect(JSON.parse(readFileSync(receipt, 'utf8')).preState).toBeUndefined();
+    await expect(run('plan', receipt, [write(dir, 'plan.txt', 'Migrations to be applied:\n│ 0036_recipe_catalog_pilot.sql │\n')]))
+      .rejects.toThrow(/missing (preHealth|preState)/);
+    await expect(run('apply-gate', receipt)).rejects.toThrow(/missing/);
+  });
+
+  it('J: certify-only mode certifies the already-applied target exactly and rejects checkpoint drift', async () => {
+    const dir = temporary();
+    const receiptFor = (name) => write(dir, `${name}.json`, {
+      step: CATCHUP_STEPS['0036'],
+      preLedger: { mode: 'certify', tip: TIPS['0036'] },
+      expected: { incoming: incomingCatalog(CATCHUP_STEPS['0036']) },
+      timeTravel: captureBookmark({ bookmark: 'certify-only-bookmark' }),
+    });
+    const filesFor = (evidence, name) => ['aggregates', 'identities', 'mediaSummary', 'mediaSlots', 'mediaSchema']
+      .map((key) => write(dir, `${name}-${key}.json`, evidence[key]));
+    const bad = receiptFor('bad');
+    await expect(run('pre-catalog', bad, filesFor(
+      drifted('0036', 'UPDATE recipe_runtime_fields SET runtime_order = 101 WHERE runtime_order = 100'), 'bad')))
+      .rejects.toThrow(/STAGING_0036_PRESTATE_DRIFT/);
+    const good = receiptFor('good');
+    const exact = drifted('0036');
+    await run('pre-catalog', good, filesFor(exact, 'good'));
+    expect(JSON.parse(readFileSync(good, 'utf8')).preState).toMatchObject({
+      tip: TIPS['0036'], mode: 'certify', media: 'PASS', health: 'PENDING',
+      batches: [{ batchId: CATCHUP_STEPS['0036'].batchId, batchHash: CATCHUP_STEPS['0036'].batchHash }],
+    });
+    await run('pre-health', good, [
+      write(dir, 'fk.json', exact.health.foreignKeys), write(dir, 'quick.json', exact.health.quickCheck),
+    ]);
+    expect(JSON.parse(readFileSync(good, 'utf8')).preState.status).toBe('STAGING_0036_PRESTATE_CERTIFIED');
+  });
+
+  it('requires onboarding evidence for an 0038 checkpoint and media evidence from 0035 on', () => {
+    const evidence38 = { ...expectedCheckpointEvidence('0038_auth_onboarding_completion.sql') };
+    delete evidence38.onboarding;
+    expect(() => certifyCheckpoint('0038_auth_onboarding_completion.sql', evidence38))
+      .toThrow(/STAGING_0038_PRESTATE_DRIFT.*onboarding evidence missing/);
+    const clean38 = expectedCheckpointEvidence('0038_auth_onboarding_completion.sql');
+    const onboarded = { ...clean38, onboarding: d1Result([{ ...clean38.onboarding[0].results[0], onboarded: 1 }]) };
+    expect(certifyCheckpoint('0038_auth_onboarding_completion.sql', onboarded).onboarding).toBe('PASS');
+    expect(() => certifyPostState(CATCHUP_STEPS['0038'], onboarded, {
+      pre: expectedSnapshot('0037_recipe_catalog_scale.sql'), mode: 'apply',
+    })).toThrow(/STAGING_0038_POSTSTATE_DRIFT.*onboarded/);
+  });
+});
+
+describe('apply gate immediately before mutation', () => {
+  const certifiedReceipt = (overrides = {}) => ({
+    step: CATCHUP_STEPS['0035'],
+    preLedger: { mode: 'apply', tip: CATCHUP_STEPS['0035'].preTip },
+    preState: { tip: CATCHUP_STEPS['0035'].preTip, health: 'PASS', status: 'STAGING_0034_PRESTATE_CERTIFIED' },
+    plan: { planned: [CATCHUP_STEPS['0035'].file] },
+    recheck: { ledger: 'PASS', plan: 'PASS', checkedAt: '2026-09-27T00:00:00.000Z' },
+    timeTravel: { ...captureBookmark({ bookmark: 'final-bookmark' }), capturedAt: '2026-09-27T00:00:01.000Z' },
+    ...overrides,
+  });
+
+  it('passes only with a certified pre-state, rechecked ledger/plan and a bookmark captured after recheck', async () => {
+    const dir = temporary();
+    await expect(run('apply-gate', write(dir, 'ok.json', certifiedReceipt()))).resolves.toMatchObject({
+      applyGate: { mode: 'apply' },
+    });
+    await expect(run('apply-gate', write(dir, 'pending.json', certifiedReceipt({
+      preState: { tip: CATCHUP_STEPS['0035'].preTip, health: 'PENDING', status: 'CATALOG_CERTIFIED_HEALTH_PENDING' },
+    })))).rejects.toThrow(/not fully certified/);
+    await expect(run('apply-gate', write(dir, 'stale.json', certifiedReceipt({
+      timeTravel: { ...captureBookmark({ bookmark: 'early' }), capturedAt: '2026-09-26T23:59:59.000Z' },
+    })))).rejects.toThrow(/after the final recheck/);
+    await expect(run('apply-gate', write(dir, 'no-plan-recheck.json', certifiedReceipt({
+      recheck: { ledger: 'PASS', plan: 'SKIPPED', checkedAt: '2026-09-27T00:00:00.000Z' },
+    })))).rejects.toThrow(/rechecked/);
+  });
+
+  it('is wired into the apply step before any wrangler migrations apply', () => {
+    const workflow = load(catchupWorkflow);
+    const steps = workflow.jobs.certify.steps;
+    const apply = steps.find((step) => step.name?.startsWith('Apply only the certified'));
+    const lines = apply.run.split('\n').map((line) => line.trim()).filter(Boolean);
+    expect(lines[0]).toBe('node scripts/staging-d1-catchup-check.mjs apply-gate staging-catchup-receipt.json');
+    expect(steps[steps.indexOf(apply) - 1].name).toMatch(/fresh Time Travel bookmark immediately before mutation/);
+    const pre = steps.find((step) => step.name?.startsWith('Certify the full historical pre-state'));
+    expect(pre.run).toContain('query media-schema');
+    expect(pre.run).toContain('query onboarding');
+    expect(steps.indexOf(pre)).toBeLessThan(steps.indexOf(apply));
+  });
+});
+
+describe('fail-closed run() commands', () => {
+  it('refuses gate when the dispatch is not main', async () => {
+    const previous = process.env.GITHUB_REF;
+    try {
+      process.env.GITHUB_REF = 'refs/heads/feat/staging-d1-catchup-0033-0038';
+      await expect(run('gate', write(temporary(), 'receipt.json', {}))).rejects.toThrow(/main/);
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_REF;
+      else process.env.GITHUB_REF = previous;
+    }
+  });
+
+  it('refuses identity when the receipt database is production', async () => {
+    const dir = temporary();
+    const file = write(dir, 'receipt.json', {
+      database: { name: 'frigo-db', id: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' },
+    });
+    const list = write(dir, 'list.json', [{ name: 'frigo-db', uuid: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' }]);
+    const info = write(dir, 'info.json', { name: 'frigo-db', uuid: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' });
+    await expect(run('identity', file, [list, info])).rejects.toThrow(/Production D1/);
+  });
+});

@@ -1,3 +1,25 @@
+# Task board — Staging D1 0033→0038 historical catch-up
+
+## Catch-up PR (2026-09-26)
+
+- [x] Re-fetch `takovn1/Tako-san` (id `1385308553`); confirm `main` `8147dde`,
+  exact-main CI `36274587084` SUCCESS, no existing catch-up branch/PR.
+- [x] Owner-transfer audit of active `.github/`, `scripts/`, Wrangler configs:
+  operational paths already use `GITHUB_REPOSITORY`; catch-up rejects stale
+  `tako-vn2` / wrong repository id.
+- [x] Prefix-isolated one-step catch-up checker + workflow. 0039 not applied.
+  Existing 0039 workflow unchanged.
+- [x] Local replay 0033–0038 certified (59/71/71/101/500/500).
+- [x] Implementation commit `718abef` pushed.
+- [x] Review remediation: full pre-state checkpoint certification before
+  every mutation, apply-gate, required repository id, precise bookmark
+  contract (`f14fcb4`, `50e973c`; Vitest 208 / 4,654 PASS).
+- [ ] Independent PR review + merge.
+- [ ] After merge, operator-authorized RUN A–E (0034…0038), one per workflow run.
+- [ ] Only after `STAGING_0038_CERTIFIED` and recipes=500: existing 0039 workflow.
+
+---
+
 # Task board — Recipe Content Refresh V2 / T20 release gate
 
 ## PR #11 remediation — current gate (2026-09-27)

@@ -1,0 +1,218 @@
+# Manual, staging-only historical D1 catch-up. Never applies 0039 or production D1.
+name: Staging D1 Historical Catch-up
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full current main SHA with successful exact-main CI
+        required: true
+        type: string
+      target:
+        description: Single historical migration to apply and certify
+        required: true
+        type: choice
+        options:
+          - '0034'
+          - '0035'
+          - '0036'
+          - '0037'
+          - '0038'
+      confirm_staging_catchup:
+        description: Confirm staging-only historical catch-up of exactly one migration
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: frigo-deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_staging_catchup == true
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Gate exact current main, one-step target, hosted CI and staging config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIGRATION_REF: ${{ inputs.ref }}
+          CATCHUP_TARGET: ${{ inputs.target }}
+        run: node scripts/staging-d1-catchup-check.mjs gate staging-catchup-receipt.json
+
+      - name: Build isolated migration prefix and ephemeral staging D1 config
+        run: node scripts/staging-d1-catchup-check.mjs prefix staging-catchup-receipt.json
+
+      - name: Require staging Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::STAGING_CLOUDFLARE_CREDENTIAL_REVALIDATION_REQUIRED"
+            exit 1
+          fi
+
+      - name: Prove Cloudflare account and exact staging D1 identity (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm wrangler whoami > /dev/null
+          pnpm wrangler d1 list --json > staging-d1-list.json
+          pnpm wrangler d1 info frigo-db-staging-v3 --json --config wrangler.staging.jsonc > staging-d1-info.json
+          node scripts/staging-d1-catchup-check.mjs identity staging-catchup-receipt.json staging-d1-list.json staging-d1-info.json
+
+      - name: Read and classify exact staging migration ledger
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "SELECT name FROM d1_migrations ORDER BY name" --json > staging-pre-ledger.json
+          node scripts/staging-d1-catchup-check.mjs pre-ledger staging-catchup-receipt.json staging-pre-ledger.json
+
+      - name: Certify the full historical pre-state checkpoint and collision gates
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          d1() { pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "$1" --json; }
+          tip="$(node -p 'const r=require("./staging-catchup-receipt.json"); r.preLedger.mode==="apply"?r.step.preTip:r.step.file')"
+          d1 "$(node scripts/staging-d1-catchup-check.mjs query baseline "$tip")" > staging-pre-counts.json
+          d1 "$(node scripts/staging-d1-catchup-check.mjs query identities "$tip")" > staging-pre-ids.json
+          extra=()
+          case "$tip" in
+            0033_*|0034_*) ;;
+            *)
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-summary)" > staging-pre-media-summary.json
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-slots)" > staging-pre-media-slots.json
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-schema)" > staging-pre-media-schema.json
+              extra+=(staging-pre-media-summary.json staging-pre-media-slots.json staging-pre-media-schema.json)
+              ;;
+          esac
+          case "$tip" in
+            0038_*)
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query onboarding)" > staging-pre-onboarding.json
+              extra+=(staging-pre-onboarding.json)
+              ;;
+          esac
+          node scripts/staging-d1-catchup-check.mjs pre-catalog staging-catchup-receipt.json staging-pre-counts.json staging-pre-ids.json "${extra[@]}"
+
+      - name: Capture Time Travel bookmark and pre-migration health
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm wrangler d1 time-travel info frigo-db-staging-v3 --json --config wrangler.staging.jsonc > staging-bookmark.json
+          node scripts/staging-d1-catchup-check.mjs bookmark staging-catchup-receipt.json staging-bookmark.json
+          d1() { pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "$1" --json; }
+          d1 "PRAGMA foreign_key_check" > staging-pre-fk.json
+          d1 "PRAGMA quick_check" > staging-pre-quick.json
+          node scripts/staging-d1-catchup-check.mjs pre-health staging-catchup-receipt.json staging-pre-fk.json staging-pre-quick.json
+
+      - name: Verify exact one-step Wrangler plan against the isolated prefix
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          config="$(node -p 'require("./staging-catchup-receipt.json").prefix.configPath')"
+          pnpm wrangler d1 migrations list frigo-db-staging-v3 --remote --config "$config" > staging-plan.txt
+          node scripts/staging-d1-catchup-check.mjs plan staging-catchup-receipt.json staging-plan.txt
+
+      - name: Recheck current main, CI, ledger and plan immediately before applying
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          git fetch origin main
+          config="$(node -p 'require("./staging-catchup-receipt.json").prefix.configPath')"
+          pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "SELECT name FROM d1_migrations ORDER BY name" --json > staging-pre-ledger.json
+          pnpm wrangler d1 migrations list frigo-db-staging-v3 --remote --config "$config" > staging-plan.txt
+          node scripts/staging-d1-catchup-check.mjs recheck staging-catchup-receipt.json staging-pre-ledger.json staging-plan.txt
+
+      - name: Capture a fresh Time Travel bookmark immediately before mutation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm wrangler d1 time-travel info frigo-db-staging-v3 --json --config wrangler.staging.jsonc > staging-bookmark.json
+          node scripts/staging-d1-catchup-check.mjs bookmark-final staging-catchup-receipt.json staging-bookmark.json
+
+      - name: Apply only the certified one-step historical migration via the prefix config
+        if: success()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/staging-d1-catchup-check.mjs apply-gate staging-catchup-receipt.json
+          mode="$(node -p 'require("./staging-catchup-receipt.json").preLedger.mode')"
+          config="$(node -p 'require("./staging-catchup-receipt.json").prefix.configPath')"
+          if [ "$mode" = apply ]; then
+            pnpm wrangler d1 migrations apply frigo-db-staging-v3 --remote --config "$config"
+          elif [ "$mode" = certify ]; then
+            echo "Target already present; certification only."
+          else
+            exit 1
+          fi
+
+      - name: Certify ledger, catalog, health and target-specific schema
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          d1() { pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "$1" --json; }
+          tip="$(node -p 'require("./staging-catchup-receipt.json").step.file')"
+          prefix="$(node -p 'require("./staging-catchup-receipt.json").prefix.destDir')"
+          target="$(node -p 'require("./staging-catchup-receipt.json").step.target')"
+          d1 "SELECT name FROM d1_migrations ORDER BY name" > staging-post-ledger.json
+          d1 "PRAGMA foreign_key_check" > staging-post-fk.json
+          d1 "PRAGMA quick_check" > staging-post-quick.json
+          d1 "$(node scripts/staging-d1-catchup-check.mjs query baseline "$tip")" > staging-post-counts.json
+          d1 "$(node scripts/staging-d1-catchup-check.mjs query identities "$tip")" > staging-post-ids.json
+          extra=()
+          if [ "$target" != "0034" ]; then
+            d1 "$(node scripts/staging-d1-catchup-check.mjs query media-summary)" > staging-media-summary.json
+            d1 "$(node scripts/staging-d1-catchup-check.mjs query media-slots)" > staging-media-slots.json
+            d1 "$(node scripts/staging-d1-catchup-check.mjs query media-schema)" > staging-media-schema.json
+            extra+=(staging-media-summary.json staging-media-slots.json staging-media-schema.json)
+          fi
+          if [ "$target" = "0038" ]; then
+            d1 "$(node scripts/staging-d1-catchup-check.mjs query onboarding)" > staging-onboarding.json
+            d1 "$(node scripts/staging-d1-catchup-check.mjs query schema-gate "$prefix")" > staging-schema-gate.json
+            extra+=(staging-onboarding.json staging-schema-gate.json)
+          fi
+          node scripts/staging-d1-catchup-check.mjs post staging-catchup-receipt.json \
+            staging-post-ledger.json staging-post-fk.json staging-post-quick.json \
+            staging-post-counts.json staging-post-ids.json "${extra[@]}"
+
+      - name: Save sanitized staging catch-up receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-d1-catchup-${{ inputs.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-catchup-receipt.json
+          if-no-files-found: ignore
+          retention-days: 90
