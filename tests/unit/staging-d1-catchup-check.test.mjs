@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, cpSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { parseWranglerJsonc } from '../../scripts/d1-migration-check.mjs';
 import { PRE_TIP as STAGING_0039_PRE_TIP, TIP as STAGING_0039_TIP } from '../../scripts/staging-d1-migration-check.mjs';
@@ -13,14 +14,20 @@ import {
   GLOBAL_RECIPE_IDS,
   HISTORICAL_REPORTED_BOOKMARK,
   STAGING_D1,
-  assertFreshBookmark,
+  assertCurrentRunBookmark,
   assertRepositoryIdentity,
   buildMigrationPrefix,
   captureBookmark,
   catchupWranglerConfig,
   certify0033Baseline,
   certifyOnboarding,
+  certifyCheckpoint,
   certifyPostState,
+  certifyPreState,
+  checkpointStatus,
+  collectCheckpointEvidence,
+  d1Result,
+  expectedCheckpointEvidence,
   expectedSnapshot,
   findCollisions,
   incomingCatalog,
@@ -235,6 +242,11 @@ describe('staging identity and repository owner', () => {
   it('rejects stale repository owners and the wrong GitHub repository id', () => {
     expect(assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: '1385308553' }))
       .toEqual({ fullName: 'takovn1/Tako-san', id: '1385308553' });
+    // '' / null bypass the env default, so this also holds on Actions runners that set the id.
+    for (const missing of ['', null, '   ']) {
+      expect(() => assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: missing }))
+        .toThrow(/repository id is required/);
+    }
     expect(() => assertRepositoryIdentity({ repository: 'tako-vn2/Tako-san', repositoryId: '1385308553' }))
       .toThrow(/Stale repository owner/);
     expect(() => assertRepositoryIdentity({ repository: 'takovn1/Tako-san', repositoryId: '1' }))
@@ -243,17 +255,26 @@ describe('staging identity and repository owner', () => {
 });
 
 describe('fresh Time Travel bookmark', () => {
-  it('records the historical bookmark only as metadata and rejects reused bookmarks', () => {
-    const fresh = captureBookmark({ bookmark: 'fresh-bookmark-1' });
-    expect(fresh.source).toBe('time-travel-info');
-    expect(fresh.historicalReportedBookmark).toBe(HISTORICAL_REPORTED_BOOKMARK);
-    expect(assertFreshBookmark(fresh)).toBe('PASS');
-    expect(() => assertFreshBookmark({
+  it('records the historical bookmark only as metadata and rejects reused or other-run bookmarks', () => {
+    const current = captureBookmark({ bookmark: 'current-run-bookmark-1' });
+    expect(current.source).toBe('time-travel-info');
+    expect(current.historicalReportedBookmark).toBe(HISTORICAL_REPORTED_BOOKMARK);
+    expect(assertCurrentRunBookmark(current)).toBe('PASS');
+    expect(() => assertCurrentRunBookmark({
       bookmark: HISTORICAL_REPORTED_BOOKMARK, source: 'historical', capturedAt: new Date().toISOString(),
-    })).toThrow(/fresh Time Travel bookmark|Stale or reused/);
-    expect(() => assertFreshBookmark({
+    })).toThrow(/captured by this run/);
+    expect(() => assertCurrentRunBookmark({
       bookmark: HISTORICAL_REPORTED_BOOKMARK, reused: true, source: 'time-travel-info', capturedAt: new Date().toISOString(),
     })).toThrow(/Stale or reused/);
+    const previous = process.env.GITHUB_RUN_ID;
+    try {
+      process.env.GITHUB_RUN_ID = '1001';
+      expect(() => assertCurrentRunBookmark({ ...current, runId: '999' })).toThrow(/current workflow run/);
+      expect(assertCurrentRunBookmark({ ...current, runId: '1001' })).toBe('PASS');
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_RUN_ID;
+      else process.env.GITHUB_RUN_ID = previous;
+    }
   });
 });
 
@@ -288,12 +309,12 @@ describe('0033 baseline and historical certification', () => {
   it('certifies 0034–0038 locally against the historical T14F catalog, one step at a time', () => {
     const replay = localReplayAndCertify();
     expect(replay).toEqual([
-      { tip: '0033', recipes: 59, certified: 'STAGING_0033_BASELINE_CERTIFIED' },
-      { tip: '0034', recipes: 71, certified: 'STAGING_0034_CERTIFIED' },
-      { tip: '0035', recipes: 71, certified: 'STAGING_0035_CERTIFIED' },
-      { tip: '0036', recipes: 101, certified: 'STAGING_0036_CERTIFIED' },
-      { tip: '0037', recipes: 500, certified: 'STAGING_0037_CERTIFIED' },
-      { tip: '0038', recipes: 500, certified: 'STAGING_0038_CERTIFIED' },
+      { tip: '0033', recipes: 59, preState: 'STAGING_0033_BASELINE_CERTIFIED', certified: 'STAGING_0033_BASELINE_CERTIFIED' },
+      { tip: '0034', recipes: 71, preState: 'STAGING_0033_BASELINE_CERTIFIED', certified: 'STAGING_0034_CERTIFIED' },
+      { tip: '0035', recipes: 71, preState: 'STAGING_0034_PRESTATE_CERTIFIED', certified: 'STAGING_0035_CERTIFIED' },
+      { tip: '0036', recipes: 101, preState: 'STAGING_0035_PRESTATE_CERTIFIED', certified: 'STAGING_0036_CERTIFIED' },
+      { tip: '0037', recipes: 500, preState: 'STAGING_0036_PRESTATE_CERTIFIED', certified: 'STAGING_0037_CERTIFIED' },
+      { tip: '0038', recipes: 500, preState: 'STAGING_0037_PRESTATE_CERTIFIED', certified: 'STAGING_0038_CERTIFIED' },
     ]);
     const release = loadHistoricalRelease();
     const after34 = expectedSnapshot('0034_global_recipe_catalog_parity.sql');

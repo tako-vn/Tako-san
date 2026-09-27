@@ -93,7 +93,7 @@ jobs:
           pnpm wrangler d1 execute frigo-db-staging-v3 --remote --yes --config wrangler.staging.jsonc --command "SELECT name FROM d1_migrations ORDER BY name" --json > staging-pre-ledger.json
           node scripts/staging-d1-catchup-check.mjs pre-ledger staging-catchup-receipt.json staging-pre-ledger.json
 
-      - name: Certify exact pre-state catalog and collision gates
+      - name: Certify the full historical pre-state checkpoint and collision gates
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -102,7 +102,23 @@ jobs:
           tip="$(node -p 'const r=require("./staging-catchup-receipt.json"); r.preLedger.mode==="apply"?r.step.preTip:r.step.file')"
           d1 "$(node scripts/staging-d1-catchup-check.mjs query baseline "$tip")" > staging-pre-counts.json
           d1 "$(node scripts/staging-d1-catchup-check.mjs query identities "$tip")" > staging-pre-ids.json
-          node scripts/staging-d1-catchup-check.mjs pre-catalog staging-catchup-receipt.json staging-pre-counts.json staging-pre-ids.json
+          extra=()
+          case "$tip" in
+            0033_*|0034_*) ;;
+            *)
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-summary)" > staging-pre-media-summary.json
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-slots)" > staging-pre-media-slots.json
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query media-schema)" > staging-pre-media-schema.json
+              extra+=(staging-pre-media-summary.json staging-pre-media-slots.json staging-pre-media-schema.json)
+              ;;
+          esac
+          case "$tip" in
+            0038_*)
+              d1 "$(node scripts/staging-d1-catchup-check.mjs query onboarding)" > staging-pre-onboarding.json
+              extra+=(staging-pre-onboarding.json)
+              ;;
+          esac
+          node scripts/staging-d1-catchup-check.mjs pre-catalog staging-catchup-receipt.json staging-pre-counts.json staging-pre-ids.json "${extra[@]}"
 
       - name: Capture Time Travel bookmark and pre-migration health
         env:
@@ -151,6 +167,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          node scripts/staging-d1-catchup-check.mjs apply-gate staging-catchup-receipt.json
           mode="$(node -p 'require("./staging-catchup-receipt.json").preLedger.mode')"
           config="$(node -p 'require("./staging-catchup-receipt.json").prefix.configPath')"
           if [ "$mode" = apply ]; then

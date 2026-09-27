@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
@@ -42,20 +43,12 @@ const CATALOG_TABLES = Object.freeze([
   'recipe_runtime_ingredient_order',
   'recipe_media',
 ]);
+// Non-catalog aggregates read by aggregateQuery(); a catch-up migration must never change them.
 const DELTA_TABLES = Object.freeze([
   'ingredients',
   'nutrition_profiles',
   'recipe_nutrition',
   'profiles',
-  'users',
-  'households',
-  'inventory_items',
-  'inventory_lots',
-  'inventory_events',
-  'inventory_commands',
-  'meal_plans',
-  'cooked_meals',
-  'scans',
 ]);
 
 export const CATCHUP_STEPS = Object.freeze({
@@ -184,10 +177,13 @@ export function assertRepositoryIdentity({
   if (STALE_OWNER.test(owner) || owner === 'tako-vn2') {
     throw new Error('Stale repository owner value is not authorized for staging catch-up');
   }
-  if (repositoryId != null && repositoryId !== '' && String(repositoryId) !== CANONICAL_REPOSITORY_ID) {
+  if (repositoryId == null || String(repositoryId).trim() === '') {
+    throw new Error('GitHub repository id is required');
+  }
+  if (String(repositoryId) !== CANONICAL_REPOSITORY_ID) {
     throw new Error('GitHub repository id does not match the canonical Tako-san repository');
   }
-  return { fullName: repository, id: String(repositoryId || CANONICAL_REPOSITORY_ID) };
+  return { fullName: repository, id: String(repositoryId) };
 }
 
 export function stagingConfig(text = readFileSync(STAGING_CONFIG, 'utf8')) {
@@ -437,9 +433,9 @@ export function aggregateQuery(fileName) {
 
 export function identityQuery(fileName) {
   if (tableExistsAt(fileName, 'recipe_runtime_fields')) {
-    return 'SELECT r.id, r.slug, f.runtime_order FROM recipe_runtime_fields f JOIN recipes r ON r.id = f.recipe_id ORDER BY f.runtime_order, r.id';
+    return 'SELECT r.id, r.slug, f.runtime_order, r.source_type, r.source_reference, r.verification_state, r.version FROM recipe_runtime_fields f JOIN recipes r ON r.id = f.recipe_id ORDER BY f.runtime_order, r.id';
   }
-  return 'SELECT id, slug FROM recipes ORDER BY id';
+  return 'SELECT id, slug, source_type, source_reference, verification_state, version FROM recipes ORDER BY id';
 }
 
 export function mediaSummaryQuery() {
@@ -462,67 +458,79 @@ export function runtimeSchemaQuery() {
   return "SELECT name, type, sql FROM sqlite_master WHERE name IN ('recipe_runtime_fields', 'recipe_runtime_ingredient_order') ORDER BY name";
 }
 
-function sqliteCount(db, table) {
-  try {
-    return db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
-  } catch {
-    return null;
-  }
+export const CHECKPOINT_TIPS = Object.freeze([
+  '0033_scan_evidence_completeness.sql',
+  ...Object.values(CATCHUP_STEPS).map((step) => step.file),
+]);
+const BASELINE_TIP = CHECKPOINT_TIPS[0];
+const MEDIA_TIP = '0035_recipe_media_layer.sql';
+const ONBOARDING_TIP = '0038_auth_onboarding_completion.sql';
+
+export function d1Result(results) {
+  return [{ success: true, results }];
 }
 
-function snapshotFromDb(db, fileName) {
-  const identities = db.prepare(identityQuery(fileName)).all();
-  const ids = identities.map((row) => row.id);
-  const slugs = identities.map((row) => row.slug);
-  const counts = {};
-  for (const table of [...CATALOG_TABLES, ...DELTA_TABLES]) counts[table] = sqliteCount(db, table);
-  const integrity = db.prepare(aggregateQuery(fileName)).get();
-  const ordered = tableExistsAt(fileName, 'recipe_runtime_fields') ? ids : [...ids].sort();
-  return {
-    fileName,
-    recipeCount: ids.length,
-    ids,
-    slugs,
-    orderedIds: ordered,
-    idSetHash: sha256Json([...ids].sort()),
-    orderedHash: sha256Json(ordered),
-    counts,
-    integrity,
+/** Runs the same bounded read-only queries the workflow sends to remote D1, against a local DB. */
+export function collectCheckpointEvidence(db, fileName) {
+  const all = (sql) => db.prepare(sql).all().map((row) => ({ ...row }));
+  const evidence = {
+    aggregates: d1Result(all(aggregateQuery(fileName))),
+    identities: d1Result(all(identityQuery(fileName))),
+    health: {
+      foreignKeys: d1Result(all('PRAGMA foreign_key_check')),
+      quickCheck: d1Result(all('PRAGMA quick_check')),
+    },
   };
+  if (fileName >= MEDIA_TIP) {
+    evidence.mediaSummary = d1Result(all(mediaSummaryQuery()));
+    evidence.mediaSlots = d1Result(all(mediaSlotsQuery()));
+    evidence.mediaSchema = d1Result(all(mediaSchemaQuery()));
+  }
+  if (fileName >= ONBOARDING_TIP) evidence.onboarding = d1Result(all(onboardingQuery()));
+  return evidence;
 }
 
 const expectedCache = new Map();
 
-export function replayThrough(fileName, { sourceDir = path.resolve('migrations') } = {}) {
+function replayCheckpoints(sourceDir) {
   const all = listMigrations(sourceDir);
-  const index = all.indexOf(fileName);
-  if (index === -1) throw new Error(`missing migration ${fileName}`);
+  const last = CHECKPOINT_TIPS.at(-1);
+  if (!all.includes(last)) throw new Error(`missing migration ${last}`);
+  const wanted = new Set(CHECKPOINT_TIPS);
+  const evidence = new Map();
   const db = new DatabaseSync(':memory:');
   try {
     db.exec('PRAGMA foreign_keys = ON');
-    for (const name of all.slice(0, index + 1)) {
+    for (const name of all.slice(0, all.indexOf(last) + 1)) {
       db.exec(readFileSync(path.join(sourceDir, name), 'utf8'));
+      if (wanted.has(name)) evidence.set(name, collectCheckpointEvidence(db, name));
     }
-    return snapshotFromDb(db, fileName);
   } finally {
     db.close();
   }
+  return evidence;
+}
+
+/** Reviewed evidence for a historical checkpoint, derived by replaying the repository migrations. */
+export function expectedCheckpointEvidence(fileName, { sourceDir = path.resolve('migrations') } = {}) {
+  if (!CHECKPOINT_TIPS.includes(fileName)) throw new Error(`No historical catch-up checkpoint for ${fileName}`);
+  if (!expectedCache.has(sourceDir)) expectedCache.set(sourceDir, replayCheckpoints(sourceDir));
+  return expectedCache.get(sourceDir).get(fileName);
 }
 
 export function expectedSnapshot(fileName, options = {}) {
-  const cacheKey = `${options.sourceDir || ''}::${fileName}`;
-  if (!expectedCache.has(cacheKey)) expectedCache.set(cacheKey, replayThrough(fileName, options));
-  return expectedCache.get(cacheKey);
+  const evidence = expectedCheckpointEvidence(fileName, options);
+  return snapshotFromRemote({ aggregates: evidence.aggregates, identities: evidence.identities, fileName });
 }
 
 export function loadHistoricalRelease(cwd = process.cwd()) {
   return JSON.parse(readFileSync(path.join(cwd, CATALOG_RELEASE_MANIFEST), 'utf8'));
 }
 
-export function incomingCatalog(step) {
+export function incomingCatalog(step, options = {}) {
   if (!step.catalogGrowth) return { ids: [], slugs: [] };
-  const pre = expectedSnapshot(step.preTip);
-  const post = expectedSnapshot(step.file);
+  const pre = expectedSnapshot(step.preTip, options);
+  const post = expectedSnapshot(step.file, options);
   const preIds = new Set(pre.ids);
   const preSlugs = new Set(pre.slugs);
   return {
@@ -562,13 +570,15 @@ export function certify0033Baseline(actual, expected = expectedSnapshot('0033_sc
   return { certification: 'STAGING_0033_BASELINE_CERTIFIED', recipeCount: 59, recipeIdSetHash: actual.idSetHash };
 }
 
-function assertCatalogShape(actual, expected, label) {
+function catalogShapeProblems(actual, expected) {
   const problems = [];
   if (actual.recipeCount !== expected.recipeCount) {
     problems.push(`recipes ${actual.recipeCount} != ${expected.recipeCount}`);
   }
+  if (actual.ids.length !== actual.recipeCount) problems.push('identity row count');
   if (actual.idSetHash !== expected.idSetHash) problems.push('recipe ID set');
   if (actual.orderedHash !== expected.orderedHash) problems.push('ordered recipe IDs');
+  if (actual.identityHash !== expected.identityHash) problems.push('recipe identity/provenance');
   for (const table of CATALOG_TABLES) {
     if (expected.counts[table] == null && actual.counts[table] == null) continue;
     if (actual.counts[table] !== expected.counts[table]) {
@@ -588,10 +598,171 @@ function assertCatalogShape(actual, expected, label) {
     ) {
       problems.push('runtime_order gaps');
     }
+    if (
+      !Array.isArray(actual.runtimeOrders) ||
+      actual.runtimeOrders.length !== expected.recipeCount ||
+      actual.runtimeOrders.some((order, index) => order !== index)
+    ) {
+      problems.push('runtime_order sequence');
+    }
     if (integrity.recipes_without_runtime_fields) problems.push('recipe_runtime_fields coverage');
     if (integrity.ingredients_without_order) problems.push('recipe_runtime_ingredient_order coverage');
   }
-  if (problems.length) throw new Error(`${label}: ${problems.join('; ')}`);
+  if (expected.integrity?.media_pending != null) {
+    for (const key of ['media_pending', 'media_hero']) {
+      if (integrity[key] !== expected.integrity[key]) problems.push(`${key} ${integrity[key]} != ${expected.integrity[key]}`);
+    }
+    if (integrity.media_ready !== 0) problems.push(`media_ready=${integrity.media_ready}`);
+  }
+  return problems;
+}
+
+const normalizeSql = (sql) => (typeof sql === 'string' ? sql.replace(/\s+/g, ' ').trim() : '');
+const MEDIA_OBJECT_CONTRACT = Object.freeze({
+  idx_recipe_media_current_ready: /CREATE UNIQUE INDEX idx_recipe_media_current_ready ON recipe_media ?\(recipe_id, role\) WHERE status = 'ready'/i,
+  idx_recipe_media_recipe_role_status: /CREATE INDEX idx_recipe_media_recipe_role_status ON recipe_media ?\(recipe_id, role, status\)$/i,
+  idx_recipe_media_content_hash: /CREATE INDEX idx_recipe_media_content_hash ON recipe_media ?\(content_hash\) WHERE content_hash IS NOT NULL/i,
+  trg_recipe_media_ready_immutable_update: /BEFORE UPDATE OF recipe_id, role, version, storage_key, mime_type, width, height, content_length, content_hash ON recipe_media WHEN OLD\.status = 'ready' BEGIN SELECT RAISE\(ABORT, 'recipe_media ready versions are immutable'\); END/i,
+});
+const MEDIA_TABLE_FRAGMENTS = Object.freeze([
+  "mime_type TEXT CHECK (mime_type IS NULL OR mime_type IN ('image/webp', 'image/avif', 'image/jpeg', 'image/png'))",
+  "instr(storage_key, '..') = 0",
+  "storage_key = 'recipes/' || recipe_id || '/' || role || '/v' || version || CASE mime_type",
+  "WHEN 'image/webp' THEN '.webp' WHEN 'image/avif' THEN '.avif' WHEN 'image/jpeg' THEN '.jpg' WHEN 'image/png' THEN '.png'",
+  'UNIQUE (recipe_id, role, version)',
+]);
+
+/** 0035 media seed plus exact index/trigger/MIME/storage-key contract, compared with local replay. */
+export function verifyMediaCheckpoint({ summary, slots, schema, recipes, expectedSchema }) {
+  const seed = verifyRecipeMediaSeed({ summary, slots, schema, recipes });
+  const objects = rows(schema, 'recipe_media schema');
+  const named = (list) => list.map((object) => object.name).filter((name) => !name.startsWith('sqlite_autoindex_')).sort();
+  const expectedNames = named(rows(expectedSchema, 'expected recipe_media schema'));
+  if (JSON.stringify(named(objects)) !== JSON.stringify(expectedNames)) {
+    throw new Error(`recipe_media schema objects differ: [${named(objects).join(', ')}]`);
+  }
+  for (const [name, pattern] of Object.entries(MEDIA_OBJECT_CONTRACT)) {
+    if (!pattern.test(normalizeSql(objects.find((object) => object.name === name)?.sql))) {
+      throw new Error(`recipe_media schema object ${name} does not match the reviewed 0035 SQL`);
+    }
+  }
+  const table = normalizeSql(objects.find((object) => object.type === 'table' && object.name === 'recipe_media')?.sql);
+  for (const fragment of MEDIA_TABLE_FRAGMENTS) {
+    if (!table.includes(fragment)) throw new Error(`recipe_media table is missing contract fragment: ${fragment}`);
+  }
+  return { ...seed, schemaContract: 'exact' };
+}
+
+function batchProvenanceProblems(fileName, actual, { cwd, release }) {
+  const problems = [];
+  for (const step of Object.values(CATCHUP_STEPS)) {
+    if (!step.batchId || step.file > fileName) continue;
+    try {
+      verifyBatchMarker(step, { cwd, release });
+    } catch (error) {
+      problems.push(error.message);
+      continue;
+    }
+    const batch = release.approvedImportBatches.find((entry) => entry.batchId === step.batchId);
+    const expectedIds = release.orderedRecipeIds.slice(batch.releaseBaseCount, batch.releaseBaseCount + batch.recipeCount);
+    const tagged = actual.provenance.filter((row) => row.source_reference === batch.sourceReference);
+    if (
+      tagged.length !== step.batchRecipes ||
+      JSON.stringify(tagged.map((row) => row.id)) !== JSON.stringify(expectedIds) ||
+      tagged.some((row) => row.source_type !== 'ai_generated' || row.verification_state !== 'reviewed' || row.version !== 1)
+    ) {
+      problems.push(`approved batch ${step.batchId} provenance`);
+    }
+  }
+  return problems;
+}
+
+export function checkpointStatus(fileName, phase = 'pre') {
+  if (fileName === BASELINE_TIP) return 'STAGING_0033_BASELINE_CERTIFIED';
+  return `STAGING_${fileName.slice(0, 4)}_${phase === 'post' ? 'POSTSTATE' : 'PRESTATE'}_CERTIFIED`;
+}
+
+/**
+ * Certifies a live historical checkpoint to its full reviewed contract: exact catalog identity,
+ * order, provenance, child/runtime counts, media seed/schema, batch provenance and onboarding
+ * schema. FK/quick_check are included when `evidence.health` is supplied.
+ */
+export function certifyCheckpoint(fileName, evidence, {
+  phase = 'pre',
+  requireNoneOnboarded = false,
+  preProfiles = null,
+  cwd = process.cwd(),
+  release = loadHistoricalRelease(cwd),
+  sourceDir,
+} = {}) {
+  const expectedEvidence = expectedCheckpointEvidence(fileName, { sourceDir });
+  const expected = expectedSnapshot(fileName, { sourceDir });
+  const actual = snapshotFromRemote({ aggregates: evidence?.aggregates, identities: evidence?.identities, fileName });
+  const label = fileName === BASELINE_TIP
+    ? 'STAGING_0033_BASELINE_DRIFT'
+    : `STAGING_${fileName.slice(0, 4)}_${phase === 'post' ? 'POSTSTATE' : 'PRESTATE'}_DRIFT`;
+  const result = { tip: fileName, snapshot: actual, catalog: 'PASS', media: 'NOT_APPLICABLE', batches: [], onboarding: 'NOT_APPLICABLE' };
+  if (fileName === BASELINE_TIP) {
+    result.baseline = certify0033Baseline(actual, expected);
+  } else {
+    const problems = catalogShapeProblems(actual, expected);
+    const releaseIds = release.orderedRecipeIds;
+    if (!Array.isArray(releaseIds) || new Set(releaseIds).size !== release.expectedRecipeCount ||
+        JSON.stringify(actual.orderedIds) !== JSON.stringify(releaseIds.slice(0, expected.recipeCount))) {
+      problems.push('historical release order');
+    }
+    const missingGlobal = GLOBAL_RECIPE_IDS.filter((id) => !actual.ids.includes(id));
+    if (missingGlobal.length) problems.push(`missing global recipe IDs ${missingGlobal.join(', ')}`);
+    problems.push(...batchProvenanceProblems(fileName, actual, { cwd, release }));
+    result.batches = Object.values(CATCHUP_STEPS)
+      .filter((step) => step.batchId && step.file <= fileName)
+      .map((step) => ({ batchId: step.batchId, batchHash: step.batchHash }));
+    if (fileName >= MEDIA_TIP) {
+      if (!evidence.mediaSummary || !evidence.mediaSlots || !evidence.mediaSchema) {
+        problems.push('recipe_media evidence missing');
+      } else {
+        try {
+          result.media = verifyMediaCheckpoint({
+            summary: evidence.mediaSummary,
+            slots: evidence.mediaSlots,
+            schema: evidence.mediaSchema,
+            recipes: expected.recipeCount,
+            expectedSchema: expectedEvidence.mediaSchema,
+          });
+        } catch (error) {
+          problems.push(error.message);
+        }
+      }
+    }
+    if (fileName >= ONBOARDING_TIP) {
+      if (!evidence.onboarding) {
+        problems.push('onboarding evidence missing');
+      } else {
+        try {
+          result.onboarding = certifyOnboarding(rows(evidence.onboarding, 'onboarding')[0], preProfiles, { requireNoneOnboarded });
+        } catch (error) {
+          problems.push(error.message);
+        }
+      }
+    }
+    if (problems.length) throw new Error(`${label}: ${problems.join('; ')}`);
+  }
+  result.health = 'PENDING';
+  if (evidence.health) {
+    try {
+      verifyHealth(evidence.health);
+    } catch (error) {
+      throw new Error(`${label}: ${error.message}`);
+    }
+    result.health = 'PASS';
+  }
+  result.status = result.health === 'PASS' ? checkpointStatus(fileName, phase) : 'CATALOG_CERTIFIED_HEALTH_PENDING';
+  return result;
+}
+
+/** The pre-tip must satisfy the same contract as a completed post-state before any mutation. */
+export function certifyPreState(step, evidence, options = {}) {
+  return certifyCheckpoint(step.preTip, evidence, { ...options, phase: 'pre' });
 }
 
 export function assertDeltaContract(pre, post, step) {
@@ -600,12 +771,12 @@ export function assertDeltaContract(pre, post, step) {
     if (pre.counts[table] == null && post.counts[table] == null) continue;
     if (pre.counts[table] !== post.counts[table]) drift.push(table);
   }
-  if (!step.catalogGrowth && !step.media) {
+  if (!step.catalogGrowth) {
     for (const table of CATALOG_TABLES) {
+      if (step.media && table === 'recipe_media') continue;
       if (pre.counts[table] !== post.counts[table]) drift.push(table);
     }
   }
-  if (step.onboarding && pre.recipeCount !== post.recipeCount) drift.push('recipes');
   if (drift.length) throw new Error(`Aggregate delta outside ${step.file} contract: ${drift.join(', ')}`);
   return 'PASS';
 }
@@ -621,21 +792,22 @@ export function findCollisions(existing, incoming) {
   return 'PASS';
 }
 
-export function certifyPostState(step, actual, expected = expectedSnapshot(step.file), pre) {
-  if (actual.recipeCount !== step.postRecipes) {
-    throw new Error(`${step.file} recipe count ${actual.recipeCount} != ${step.postRecipes}`);
+export function certifyPostState(step, evidence, { pre, mode = 'apply', ...options } = {}) {
+  const checkpoint = certifyCheckpoint(step.file, evidence, {
+    ...options,
+    phase: 'post',
+    requireNoneOnboarded: mode === 'apply',
+    preProfiles: mode === 'apply' ? pre?.counts?.profiles ?? null : null,
+  });
+  if (checkpoint.snapshot.recipeCount !== step.postRecipes) {
+    throw new Error(`${step.file} recipe count ${checkpoint.snapshot.recipeCount} != ${step.postRecipes}`);
   }
-  assertCatalogShape(actual, expected, step.certification);
-  if (step.file >= '0034_global_recipe_catalog_parity.sql') {
-    const missingGlobal = GLOBAL_RECIPE_IDS.filter((id) => !actual.ids.includes(id));
-    if (missingGlobal.length) throw new Error(`Missing global recipe IDs: ${missingGlobal.join(', ')}`);
-  }
-  if (pre) assertDeltaContract(pre, actual, step);
-  return step.certification;
+  if (pre) assertDeltaContract(pre, checkpoint.snapshot, step);
+  return { certification: step.certification, checkpoint };
 }
 
-export function certifyOnboarding(row, preProfiles) {
-  if (row.column_present !== 1) throw new Error('profiles.onboarding_completed_at is missing');
+export function certifyOnboarding(row, preProfiles, { requireNoneOnboarded = true } = {}) {
+  if (row?.column_present !== 1) throw new Error('profiles.onboarding_completed_at is missing');
   if (typeof row.index_sql !== 'string' || !/idx_profiles_onboarding_completed/.test(row.index_sql)) {
     throw new Error('idx_profiles_onboarding_completed is missing');
   }
@@ -645,7 +817,8 @@ export function certifyOnboarding(row, preProfiles) {
   if (preProfiles != null && row.profiles !== preProfiles) {
     throw new Error('Existing profile row count was rewritten');
   }
-  if (row.onboarded !== 0) throw new Error('Existing profiles were unexpectedly marked onboarded');
+  // Only provable right after this run applied 0038; a certify-only run cannot know prior writes.
+  if (requireNoneOnboarded && row.onboarded !== 0) throw new Error('Existing profiles were unexpectedly marked onboarded');
   return 'PASS';
 }
 
@@ -656,40 +829,65 @@ export function captureBookmark(info, { historicalReportedBookmark = HISTORICAL_
     bookmark,
     capturedAt: new Date().toISOString(),
     source: 'time-travel-info',
+    runId: process.env.GITHUB_RUN_ID ?? null,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
     historicalReportedBookmark,
   };
 }
 
-export function assertFreshBookmark(timeTravel) {
+/**
+ * Verifies the active bookmark came from `d1 time-travel info` in this workflow run (same run id
+ * when Actions provides one), carries capturedAt, and is not a reused/historical value. The
+ * workflow captures it as the step immediately before apply; this does not independently prove
+ * wall-clock freshness.
+ */
+export function assertCurrentRunBookmark(timeTravel) {
   if (!timeTravel || timeTravel.source !== 'time-travel-info' || !timeTravel.capturedAt || !timeTravel.bookmark) {
-    throw new Error('Catch-up requires a fresh Time Travel bookmark captured immediately before mutation');
+    throw new Error('Catch-up requires a Time Travel bookmark captured by this run immediately before mutation');
   }
-  if (timeTravel.reused === true || timeTravel.source === 'historical') {
-    throw new Error('Stale or reused Time Travel bookmark is not authorized');
+  if (timeTravel.reused === true) throw new Error('Stale or reused Time Travel bookmark is not authorized');
+  if (process.env.GITHUB_RUN_ID && timeTravel.runId !== process.env.GITHUB_RUN_ID) {
+    throw new Error('Time Travel bookmark was not captured by the current workflow run');
   }
   return 'PASS';
 }
 
 export function snapshotFromRemote({ aggregates, identities, fileName }) {
   const integrity = Array.isArray(aggregates) ? rows(aggregates, 'aggregates')[0] : aggregates;
+  if (!integrity || typeof integrity !== 'object') throw new Error('Catalog aggregate result is missing');
   const identityRows = Array.isArray(identities) && identities[0]?.success === true
-    ? identities[0].results
+    ? rows(identities, 'identities')
     : identities;
+  if (!Array.isArray(identityRows)) throw new Error('Catalog identity result is missing');
   const ids = identityRows.map((row) => row.id);
   const slugs = identityRows.map((row) => row.slug);
   const counts = {};
   for (const table of [...CATALOG_TABLES, ...DELTA_TABLES]) {
     counts[table] = Object.hasOwn(integrity, table) ? integrity[table] : null;
   }
-  const ordered = tableExistsAt(fileName, 'recipe_runtime_fields') ? ids : [...ids].sort();
+  const runtime = tableExistsAt(fileName, 'recipe_runtime_fields');
+  const ordered = runtime ? ids : [...ids].sort();
+  const provenance = identityRows.map((row) => ({
+    id: row.id,
+    source_type: row.source_type ?? null,
+    source_reference: row.source_reference ?? null,
+    verification_state: row.verification_state ?? null,
+    version: row.version ?? null,
+  }));
   return {
     fileName,
     recipeCount: integrity.recipes,
     ids,
     slugs,
     orderedIds: ordered,
+    runtimeOrders: runtime ? identityRows.map((row) => row.runtime_order) : null,
+    provenance,
     idSetHash: sha256Json([...ids].sort()),
     orderedHash: sha256Json(ordered),
+    identityHash: sha256Json(identityRows.map((row) => [
+      row.id, row.slug, row.runtime_order ?? null, row.source_type ?? null,
+      row.source_reference ?? null, row.verification_state ?? null, row.version ?? null,
+    ])),
     counts,
     integrity,
   };
@@ -868,36 +1066,34 @@ export async function run(command, file, args = []) {
       throw new Error('Catch-up may apply exactly one historical migration');
     }
   } else if (command === 'pre-catalog') {
-    requireReceipt(receipt, ['preLedger', 'expected']);
+    requireReceipt(receipt, ['preLedger', 'step', 'expected']);
     const fileName = receipt.preLedger.mode === 'apply' ? receipt.step.preTip : receipt.step.file;
-    const actual = snapshotFromRemote({
-      aggregates: readJson(args[0]),
-      identities: readJson(args[1]),
-      fileName,
-    });
-    if (receipt.preLedger.mode === 'apply' && receipt.step.target === '0034') {
-      receipt.preBaseline = certify0033Baseline(actual, {
-        recipeCount: receipt.expected.pre.recipeCount,
-        idSetHash: receipt.expected.pre.recipeIdSetHash,
-        ids: expectedSnapshot(receipt.step.preTip).ids,
-        integrity: actual.integrity,
+    const optional = (file) => (file ? readJson(file) : undefined);
+    const evidence = { aggregates: readJson(args[0]), identities: readJson(args[1]) };
+    if (fileName >= MEDIA_TIP) {
+      Object.assign(evidence, {
+        mediaSummary: optional(args[2]), mediaSlots: optional(args[3]), mediaSchema: optional(args[4]),
       });
-    } else {
-      const expected = receipt.preLedger.mode === 'apply' ? receipt.expected.pre : receipt.expected.post;
-      if (actual.recipeCount !== expected.recipeCount || actual.idSetHash !== expected.recipeIdSetHash) {
-        throw new Error(`STAGING_${receipt.step.target}_PRESTATE_DRIFT`);
-      }
-      receipt.preBaseline = {
-        recipeCount: actual.recipeCount,
-        recipeIdSetHash: actual.idSetHash,
-        orderedHash: actual.orderedHash,
-        counts: actual.counts,
-      };
     }
+    if (fileName >= ONBOARDING_TIP) evidence.onboarding = optional(args[5]);
+    const checkpoint = certifyCheckpoint(fileName, evidence, { phase: 'pre' });
+    const actual = checkpoint.snapshot;
+    if (checkpoint.baseline) receipt.preBaseline = checkpoint.baseline;
+    receipt.preState = {
+      tip: fileName,
+      mode: receipt.preLedger.mode,
+      catalog: checkpoint.catalog,
+      media: checkpoint.media === 'NOT_APPLICABLE' ? 'NOT_APPLICABLE' : 'PASS',
+      batches: checkpoint.batches,
+      onboarding: checkpoint.onboarding,
+      health: 'PENDING',
+      status: checkpoint.status,
+    };
     receipt.preSnapshot = {
       recipeCount: actual.recipeCount,
       recipeIdSetHash: actual.idSetHash,
       orderedHash: actual.orderedHash,
+      identityHash: actual.identityHash,
       counts: actual.counts,
       integrity: actual.integrity,
       ids: actual.ids,
@@ -908,16 +1104,21 @@ export async function run(command, file, args = []) {
       receipt.collisionGate = 'PASS';
     }
   } else if (command === 'bookmark') {
-    requireReceipt(receipt, ['preSnapshot']);
+    requireReceipt(receipt, ['preState', 'preSnapshot']);
     receipt.timeTravel = captureBookmark(readJson(args[0]), {
       historicalReportedBookmark: receipt.historicalReportedBookmark,
     });
-    assertFreshBookmark(receipt.timeTravel);
+    assertCurrentRunBookmark(receipt.timeTravel);
   } else if (command === 'pre-health') {
-    requireReceipt(receipt, ['timeTravel']);
+    requireReceipt(receipt, ['timeTravel', 'preState']);
     receipt.preHealth = verifyHealth({ foreignKeys: readJson(args[0]), quickCheck: readJson(args[1]) });
+    receipt.preState.health = 'PASS';
+    receipt.preState.status = checkpointStatus(receipt.preState.tip, 'pre');
   } else if (command === 'plan') {
-    requireReceipt(receipt, ['preHealth', 'prefix']);
+    requireReceipt(receipt, ['preHealth', 'prefix', 'preState']);
+    if (receipt.preState.health !== 'PASS' || receipt.preState.status !== checkpointStatus(receipt.preState.tip, 'pre')) {
+      throw new Error('Pre-state checkpoint is not fully certified; mutation is not eligible');
+    }
     verifyPrefixIntegrity(receipt.prefix, { destDir: receipt.prefix.destDir });
     receipt.plan = verifyCatchupPlan(readFileSync(args[0], 'utf8'), {
       file: receipt.step.file,
@@ -947,62 +1148,73 @@ export async function run(command, file, args = []) {
         throw new Error('Migration plan changed between preflight and apply');
       }
     }
-    receipt.recheck = { mainSha: currentMain, prefix: 'PASS', ledger: args[0] ? 'PASS' : 'SKIPPED' };
+    receipt.recheck = {
+      mainSha: currentMain,
+      prefix: 'PASS',
+      ledger: args[0] ? 'PASS' : 'SKIPPED',
+      plan: args[1] ? 'PASS' : 'SKIPPED',
+      checkedAt: new Date().toISOString(),
+    };
   } else if (command === 'bookmark-final') {
     requireReceipt(receipt, ['recheck']);
     receipt.timeTravelPreflight = receipt.timeTravel;
     receipt.timeTravel = captureBookmark(readJson(args[0]), {
       historicalReportedBookmark: receipt.historicalReportedBookmark,
     });
-    assertFreshBookmark(receipt.timeTravel);
+    assertCurrentRunBookmark(receipt.timeTravel);
+  } else if (command === 'apply-gate') {
+    requireReceipt(receipt, ['preState', 'plan', 'recheck', 'timeTravel']);
+    if (receipt.preState.status !== checkpointStatus(receipt.preState.tip, 'pre')) {
+      throw new Error('Pre-state checkpoint is not fully certified; mutation is not eligible');
+    }
+    if (receipt.recheck.ledger !== 'PASS' || receipt.recheck.plan !== 'PASS') {
+      throw new Error('Ledger and plan must be rechecked immediately before apply');
+    }
+    assertCurrentRunBookmark(receipt.timeTravel);
+    if (!(Date.parse(receipt.timeTravel.capturedAt) >= Date.parse(receipt.recheck.checkedAt))) {
+      throw new Error('Active Time Travel bookmark must be captured after the final recheck');
+    }
+    receipt.applyGate = { mode: receipt.preLedger.mode, checkedAt: new Date().toISOString() };
   } else if (command === 'post') {
-    requireReceipt(receipt, ['plan', 'timeTravel']);
-    assertFreshBookmark(receipt.timeTravel);
+    requireReceipt(receipt, ['plan', 'timeTravel', 'preState', 'preSnapshot']);
+    assertCurrentRunBookmark(receipt.timeTravel);
     receipt.postLedger = verifyPostLedger(
       { schema: receipt.schema, migration: receipt.step.file },
       readJson(args[0]),
     );
-    receipt.postHealth = verifyHealth({ foreignKeys: readJson(args[1]), quickCheck: readJson(args[2]) });
-    const actual = snapshotFromRemote({
+    const optional = (file) => (file ? readJson(file) : undefined);
+    const evidence = {
       aggregates: readJson(args[3]),
       identities: readJson(args[4]),
-      fileName: receipt.step.file,
-    });
-    const expectedPost = expectedSnapshot(receipt.step.file);
-    const pre = {
-      recipeCount: receipt.preSnapshot.recipeCount,
-      idSetHash: receipt.preSnapshot.recipeIdSetHash,
-      orderedHash: receipt.preSnapshot.orderedHash,
-      counts: receipt.preSnapshot.counts,
-      integrity: receipt.preSnapshot.integrity,
+      health: { foreignKeys: readJson(args[1]), quickCheck: readJson(args[2]) },
+      mediaSummary: optional(args[5]),
+      mediaSlots: optional(args[6]),
+      mediaSchema: optional(args[7]),
+      onboarding: optional(args[8]),
     };
-    receipt.postCertification = certifyPostState(receipt.step, actual, expectedPost, pre);
+    const { certification, checkpoint } = certifyPostState(receipt.step, evidence, {
+      pre: receipt.preSnapshot,
+      mode: receipt.preLedger.mode,
+    });
+    const actual = checkpoint.snapshot;
+    receipt.postHealth = { foreignKeyCheck: '[]', quickCheck: 'ok' };
+    receipt.postCertification = certification;
     receipt.post = {
       ledgerTip: receipt.postLedger.tip,
       recipeCount: actual.recipeCount,
       recipeIdSetHash: actual.idSetHash,
+      identityHash: actual.identityHash,
       foreignKeyCheck: 'PASS',
       quickCheck: 'PASS',
       certification: 'PASS',
     };
-    if (receipt.step.media || receipt.step.file >= '0035_recipe_media_layer.sql') {
-      receipt.recipeMedia = verifyRecipeMediaSeed({
-        summary: readJson(args[5]),
-        slots: readJson(args[6]),
-        schema: readJson(args[7]),
-        recipes: receipt.step.postRecipes,
-      });
-    }
+    if (checkpoint.media !== 'NOT_APPLICABLE') receipt.recipeMedia = checkpoint.media;
     if (receipt.step.onboarding) {
-      receipt.onboarding = certifyOnboarding(
-        rows(readJson(args[8]), 'onboarding')[0],
-        receipt.preSnapshot.counts.profiles,
-      );
-      if (args[9]) {
-        const gateRows = rows(readJson(args[9]), 'schema-gate');
-        if (gateRows.length !== 0) throw new Error('Repository D1 schema gate found drift');
-        receipt.schemaGate = 'PASS';
-      }
+      receipt.onboarding = checkpoint.onboarding;
+      if (!args[9]) throw new Error('Repository D1 schema gate evidence is required for 0038');
+      const gateRows = rows(readJson(args[9]), 'schema-gate');
+      if (gateRows.length !== 0) throw new Error('Repository D1 schema gate found drift');
+      receipt.schemaGate = 'PASS';
     }
     receipt.migration = {
       filename: receipt.step.file,
@@ -1013,6 +1225,7 @@ export async function run(command, file, args = []) {
       ledgerTip: receipt.preLedger.tip,
       recipeCount: receipt.preSnapshot.recipeCount,
       recipeIdSetHash: receipt.preSnapshot.recipeIdSetHash,
+      certification: receipt.preState.status,
       foreignKeyCheck: 'PASS',
       quickCheck: 'PASS',
       bookmark: receipt.timeTravel.bookmark,
@@ -1029,30 +1242,44 @@ export async function run(command, file, args = []) {
 }
 
 export function localReplayAndCertify({ sourceDir = path.resolve('migrations') } = {}) {
+  const names = listMigrations(sourceDir);
+  const workDir = mkdtempSync(path.join(tmpdir(), 'staging-catchup-replay-'));
+  const db = new DatabaseSync(':memory:');
+  const applied = [];
+  const apply = (dir, name) => {
+    db.exec(readFileSync(path.join(dir, name), 'utf8'));
+    applied.push(name);
+  };
   const results = [];
-  const baseline = expectedSnapshot('0033_scan_evidence_completeness.sql', { sourceDir });
-  certify0033Baseline(baseline, baseline);
-  results.push({ tip: '0033', recipes: baseline.recipeCount, certified: 'STAGING_0033_BASELINE_CERTIFIED' });
-  let previous = baseline;
-  for (const step of Object.values(CATCHUP_STEPS)) {
-    const actual = expectedSnapshot(step.file, { sourceDir });
-    if (step.collision) findCollisions(previous, { ...incomingCatalog(step), label: step.file });
-    const certification = certifyPostState(step, actual, actual, previous);
-    if (step.onboarding) {
-      const db = new DatabaseSync(':memory:');
-      try {
-        db.exec('PRAGMA foreign_keys = ON');
-        const names = listMigrations(sourceDir);
-        for (const name of names.slice(0, names.indexOf(step.file) + 1)) {
-          db.exec(readFileSync(path.join(sourceDir, name), 'utf8'));
-        }
-        certifyOnboarding(db.prepare(onboardingQuery()).get(), previous.counts.profiles);
-      } finally {
-        db.close();
+  try {
+    db.exec('PRAGMA foreign_keys = ON');
+    for (const name of names.slice(0, names.indexOf(BASELINE_TIP) + 1)) apply(sourceDir, name);
+    const baseline = certifyCheckpoint(BASELINE_TIP, collectCheckpointEvidence(db, BASELINE_TIP), { sourceDir });
+    results.push({ tip: '0033', recipes: baseline.snapshot.recipeCount, preState: baseline.status, certified: baseline.status });
+    for (const step of Object.values(CATCHUP_STEPS)) {
+      const preState = certifyPreState(step, collectCheckpointEvidence(db, step.preTip), { sourceDir });
+      if (step.collision) findCollisions(preState.snapshot, { ...incomingCatalog(step, { sourceDir }), label: step.file });
+      const destDir = path.join(workDir, step.target, 'migrations');
+      const prefix = buildMigrationPrefix({ target: step.target, sourceDir, destDir });
+      verifyPrefixIntegrity(prefix, { sourceDir, destDir });
+      const pending = prefix.included.map((entry) => entry.filename).filter((name) => !applied.includes(name));
+      if (JSON.stringify(pending) !== JSON.stringify([step.file])) {
+        throw new Error(`Local replay prefix for ${step.target} must leave exactly one pending migration`);
       }
+      apply(destDir, step.file);
+      const post = certifyPostState(step, collectCheckpointEvidence(db, step.file), {
+        pre: preState.snapshot, mode: 'apply', sourceDir,
+      });
+      results.push({
+        tip: step.target,
+        recipes: post.checkpoint.snapshot.recipeCount,
+        preState: preState.status,
+        certified: post.certification,
+      });
     }
-    results.push({ tip: step.target, recipes: actual.recipeCount, certified: certification });
-    previous = actual;
+  } finally {
+    db.close();
+    rmSync(workDir, { recursive: true, force: true });
   }
   return results;
 }
