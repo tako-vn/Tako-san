@@ -1,3 +1,40 @@
+# Current state — T20 live staging planner prerequisite PR #17 (2026-09-27)
+
+**Status: `T20_STAGING_PLANNER_PR17_REVIEW_PENDING`.** Canonical main is
+`b44e9355ce8988e7acb7c3b12c55bc2b27340e1a`. Staging Deploy run
+`36305024017` succeeded on that exact SHA with T20 Worker/UI flags true,
+recipe authority static/0/cutover false, production skipped, and runtime
+served recipes 71. Live health reports the same SHA, staging, health ok and
+database ok. The 500 physical staging D1 recipes remain outside static
+runtime authority.
+
+Two registered staging test accounts now exist: User A
+`usr_1790496416217_u02mk` / household
+`hh_usr_1790496416217_u02mk`; User B
+`usr_1790496420287_ajiz4` / household
+`hh_usr_1790496420287_ajiz4`. Credentials and sessions are stored only
+in a local mode-0600 temporary file; no secrets appear in this record.
+The unauthenticated picker returned 401, but the authenticated T20 picker
+returned 404 `MEAL_PLANNER_DISABLED`. Source confirms the parent
+`MEAL_PLANNER_ENABLED` Worker gate and `VITE_MEAL_PLANNER_ENABLED` UI gate
+were absent from staging. No test meal plan has been created yet.
+The operator explicitly authorized enabling both planner prerequisites
+on staging while retaining T20=true and static recipe authority.
+
+PR #17 (`codex/t20-staging-planner-enabled`, implementation head
+`7c8b6d8b548872b95c2695862e7bd1a962ad7701`) sets only staging
+Worker/UI planner flags and adds a release guard that rejects a T20 staging
+build if either planner prerequisite is off. Production configuration and
+recipe authority are unchanged. Local focused tests 20/20, lint, typecheck,
+staging-style build and migration smoke passed; local full check passed
+4,726/4,727 tests, with the known local Wrangler D1 catch-up timeout.
+Hosted PR CI run `36305647997` is in progress and must pass on the final
+head. After review/merge, require exact-main CI, then manual staging-only
+Deploy with T20=true/static/0/production=false. Reverify live SHA and run
+the full original LIVE matrix. Do not infer certification from source or CI.
+
+---
+
 # Current state — T20 staging account fix PR #16 (2026-09-27)
 
 **Status: `T20_STAGING_PR16_REVIEW_PENDING`.** Canonical main remains

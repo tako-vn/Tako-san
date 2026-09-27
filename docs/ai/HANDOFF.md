@@ -1,3 +1,33 @@
+# Handoff — T20 live staging planner prerequisite PR #17 (2026-09-27)
+
+**Status: `T20_STAGING_PLANNER_PR17_REVIEW_PENDING`.** Main and live
+staging Worker are `b44e9355ce8988e7acb7c3b12c55bc2b27340e1a`.
+Deploy `36305024017` succeeded with T20 Worker/UI flags true, static
+recipe authority (served 71), and production skipped. Two registered
+staging test accounts exist: A `usr_1790496416217_u02mk` /
+`hh_usr_1790496416217_u02mk`, B `usr_1790496420287_ajiz4` /
+`hh_usr_1790496420287_ajiz4`; secret sessions remain only in a local
+mode-0600 temporary file.
+
+Live unauthenticated picker was 401 as expected; authenticated picker
+was 404 `MEAL_PLANNER_DISABLED`, so the T20 live matrix has not started
+and no plan exists. Operator authorized staging-only
+`MEAL_PLANNER_ENABLED=true` and `VITE_MEAL_PLANNER_ENABLED=true`.
+PR #17 at `7c8b6d8b548872b95c2695862e7bd1a962ad7701` implements
+these flags and a release prerequisite guard. Production config, T20
+enablement, recipe authority, migration ledger and D1 catalog are
+unchanged. Local focused 20/20, lint, typecheck, staging-style build and
+migration smoke pass. Local full check had the known Wrangler catch-up
+timeout (4,726/4,727); hosted PR CI `36305647997` is in progress.
+
+Next: verify exact-head hosted CI and independent review/merge. Then
+verify exact-main CI, dispatch only staging Deploy with T20=true/static/0
+and production=false, and check live SHA before exercising the original
+full live matrix. Production/T19/0040 are forbidden in this task.
+Do not report source tests as live certification.
+
+---
+
 # Handoff — T20 staging account fix PR #16 (2026-09-27)
 
 **Status: `T20_STAGING_PR16_REVIEW_PENDING`.** Main and live staging Worker
