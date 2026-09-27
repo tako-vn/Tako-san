@@ -1,19 +1,23 @@
 import { Env } from '../types';
 
-// Only explicit development/staging environments may disable bot protection.
 const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+// Cloudflare publishes this pair for automated tests. Staging advertises the test site key,
+// so a retained real Worker secret must not make every registration fail.
+const STAGING_TEST_SITE_KEY = '1x00000000000000000000AA';
+const STAGING_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
 
 export async function verifyTurnstileToken(
   env: Env,
   token: unknown,
   clientIp?: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const secret = env.TURNSTILE_SECRET_KEY?.trim();
+  const stagingTestWidget = env.ENVIRONMENT === 'staging' && env.TURNSTILE_SITE_KEY?.trim() === STAGING_TEST_SITE_KEY;
+  const secret = stagingTestWidget ? STAGING_TEST_SECRET_KEY : env.TURNSTILE_SECRET_KEY?.trim();
   if (env.ENVIRONMENT === 'production' && (!secret || !env.TURNSTILE_SITE_KEY?.trim())) {
     return { ok: false, error: 'Turnstile chưa được cấu hình' };
   }
   if (!secret) {
-    return { ok: env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'staging' };
+    return { ok: env.ENVIRONMENT === 'development' };
   }
 
   if (!token || typeof token !== 'string') {
@@ -32,7 +36,6 @@ export async function verifyTurnstileToken(
     if (res.ok && data.success === true) return { ok: true };
     return { ok: false, error: `Turnstile: ${(data['error-codes'] || ['unknown']).join(',')}` };
   } catch {
-    // Fail closed: if we cannot reach siteverify, reject rather than allow.
     console.error(JSON.stringify({ event: 'turnstile_verification_failed' }));
     return { ok: false, error: 'Không thể xác minh Turnstile' };
   }

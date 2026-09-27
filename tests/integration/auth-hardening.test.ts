@@ -396,6 +396,31 @@ describe('cookie authentication and production CSRF', () => {
     expect(db.query('SELECT * FROM auth_accounts WHERE email = ?', EMAIL)).toEqual([]);
   });
 
+  it('registers and verifies a staging account with the test widget despite a retained Worker secret', async () => {
+    const outbound = vi.fn(async () => Response.json({ success: true }));
+    vi.stubGlobal('fetch', outbound);
+    const stagingEnv = {
+      ENVIRONMENT: 'staging' as const,
+      TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+      TURNSTILE_SECRET_KEY: 'stale-real-secret',
+    };
+    const registration = await request('/auth/register', {
+      body: { name: 'T20 Staging Test', email: EMAIL, password: PASSWORD, turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX' },
+      env: stagingEnv,
+    });
+    expect(registration.status, JSON.stringify(registration.json)).toBe(200);
+    expect(registration.json.devOtp).toMatch(/^\d{6}$/);
+    const [, init] = outbound.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.body as FormData).get('secret')).toBe('1x0000000000000000000000000000000AA');
+    const verified = await request('/auth/verify-otp', {
+      body: { email: EMAIL, code: registration.json.devOtp, purpose: 'register' },
+      env: stagingEnv,
+    });
+    expect(verified.status, JSON.stringify(verified.json)).toBe(200);
+    expect(verified.json.user.isGuest).toBe(false);
+    expect(cookieFrom(verified.response)).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
+  });
+
   it('does not require another Turnstile challenge for login, password recovery, or OTP resend', async () => {
     const registration = await register();
     vi.mocked(fetch).mockClear();
