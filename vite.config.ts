@@ -24,20 +24,24 @@ function injectServiceWorkerBuildId() {
   };
 }
 
-// Records the value Vite actually compiled into the UI (outside the served assets directory)
-// so the release guard can prove it matches the Worker var.
+// Records the planner and T20 values Vite actually compiled outside the served assets.
 function recordCompositionFlag(): Plugin {
-  let compiled: string | null = null;
+  let compiledComposition: string | null = null;
+  let compiledPlanner: string | null = null;
   return {
     name: 'record-composition-flag',
     apply: 'build',
     configResolved(config) {
-      compiled = config.env.VITE_MEAL_COMPOSITION_V2_ENABLED ?? null;
+      compiledComposition = config.env.VITE_MEAL_COMPOSITION_V2_ENABLED ?? null;
+      compiledPlanner = config.env.VITE_MEAL_PLANNER_ENABLED ?? null;
     },
     closeBundle() {
       writeFileSync(
         path.resolve(__dirname, 'dist/composition-flags.json'),
-        `${JSON.stringify({ VITE_MEAL_COMPOSITION_V2_ENABLED: compiled })}\n`,
+        `${JSON.stringify({
+          VITE_MEAL_COMPOSITION_V2_ENABLED: compiledComposition,
+          VITE_MEAL_PLANNER_ENABLED: compiledPlanner,
+        })}\n`,
       );
     },
   };

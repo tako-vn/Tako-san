@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   verifyCompositionFlagPair,
   verifyCompositionRelease,
+  verifyStagingPlannerPrerequisite,
 } from '../../scripts/composition-flags.mjs';
 import { resolveMealCompositionV2Release } from '../../scripts/release-check.mjs';
 import { parseWranglerJsonc } from '../../scripts/d1-migration-check.mjs';
@@ -28,6 +29,25 @@ describe('T20 composition flags: Wrangler defaults', () => {
       expect(parseWranglerJsonc(read(file), file).vars.MEAL_COMPOSITION_V2_ENABLED).toBe('false');
     },
   );
+});
+
+describe('T20 staging planner prerequisites', () => {
+  const staging = parseWranglerJsonc(read('wrangler.staging.jsonc'), 'wrangler.staging.jsonc');
+  it('configures the planner on the staging Worker and in the staging UI build', () => {
+    expect(staging.vars.MEAL_PLANNER_ENABLED).toBe('true');
+    const build = deploy.jobs.staging.steps.find((step) => step.name === 'Build');
+    expect(build.env.VITE_MEAL_PLANNER_ENABLED).toBe('true');
+    const productionBuild = deploy.jobs.production.steps.find((step) => step.name === 'Build');
+    expect(productionBuild.env.VITE_MEAL_PLANNER_ENABLED).toBeUndefined();
+  });
+  it('rejects T20 when either staging planner flag is missing or the wrong environment is supplied', () => {
+    const built = { VITE_MEAL_PLANNER_ENABLED: 'true' };
+    expect(() => verifyStagingPlannerPrerequisite({ composition: 'true', config: staging, buildRecord: built })).not.toThrow();
+    expect(() => verifyStagingPlannerPrerequisite({ composition: 'true', config: { vars: { ...staging.vars, MEAL_PLANNER_ENABLED: 'false' } }, buildRecord: built })).toThrow(/MEAL_PLANNER_ENABLED/);
+    expect(() => verifyStagingPlannerPrerequisite({ composition: 'true', config: staging, buildRecord: {} })).toThrow(/VITE_MEAL_PLANNER_ENABLED/);
+    expect(() => verifyStagingPlannerPrerequisite({ composition: 'true', config: { vars: { ENVIRONMENT: 'production' } }, buildRecord: built })).toThrow(/staging Wrangler/);
+    expect(() => verifyStagingPlannerPrerequisite({ composition: 'false', config: { vars: { ENVIRONMENT: 'staging' } }, buildRecord: {} })).not.toThrow();
+  });
 });
 
 describe('T20 composition flags: release gate normalization', () => {
@@ -90,9 +110,9 @@ describe('T20 composition flags: deploy workflow wiring', () => {
       expect(steps[build].env.VITE_MEAL_COMPOSITION_V2_ENABLED).toBe(OUTPUT);
       expect(guard).toBeGreaterThan(build);
       expect(deployStep).toBeGreaterThan(guard);
-      expect(steps[guard].run).toBe(
-        'node scripts/composition-flags.mjs verify release-manifest.json dist/composition-flags.json',
-      );
+      expect(steps[guard].run).toBe(job === 'staging'
+        ? 'node scripts/composition-flags.mjs verify release-manifest.json dist/composition-flags.json wrangler.staging.jsonc'
+        : 'node scripts/composition-flags.mjs verify release-manifest.json dist/composition-flags.json');
       expect(steps[guard].env).toEqual({
         MEAL_COMPOSITION_V2_ENABLED: OUTPUT,
         VITE_MEAL_COMPOSITION_V2_ENABLED: OUTPUT,
