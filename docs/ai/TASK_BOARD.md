@@ -1,3 +1,17 @@
+# Task board — T19 staging shadow smoke + authorized canary cohort (2026-09-28)
+
+**Status: `T19_STAGING_SHADOW_LIVE_SMOKE_AND_COHORT_BLOCKED`.** Canary dispatch: NO. Production: NO.
+
+- [x] Re-fetch main `85660fa4…`; live Worker commit matches; Deploy `36372371894` shadow/0/false T20=true; production skipped.
+- [x] Staging D1 runtime readiness receipt `STAGING_D1_RUNTIME_READINESS_CERTIFIED` (`36364583331`).
+- [x] Live public shadow proof: health/ready shadow+static+no fallback; 71 recipes; imported 404.
+- [ ] Authenticated SHADOW live matrix (planner/detail/cooking/shopping/T20 Manual+Assisted+Auto/save-reload/hard restrictions).
+- [ ] Provision cohort Worker secrets (INCLUDE+EXCLUDE digests) while mode stays shadow.
+- [ ] Re-prove shadow healthy, static for normal users, secrets inert, no config error, no fallback, T20 ON.
+- [ ] Only then: `T19_STAGING_CANARY_1_READY_FOR_OPERATOR_DISPATCH` (human Canary dispatch).
+
+---
+
 # Task board — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Remote D1 mutation: NO.

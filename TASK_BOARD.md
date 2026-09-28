@@ -1,3 +1,10 @@
+# Current — T19 staging shadow smoke + authorized cohort (2026-09-28)
+
+**Status: `T19_STAGING_SHADOW_LIVE_SMOKE_AND_COHORT_BLOCKED`.** Canary/production/D1 mutation: NO.
+Live staging is shadow/0/false on `85660fa4…` with certified 500 D1. Authenticated smoke and cohort secret put are blocked (no sessions, no Cloudflare token).
+
+---
+
 # Current — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Deploy/D1 mutation/T20/authority: NO.

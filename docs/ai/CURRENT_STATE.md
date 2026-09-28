@@ -1,3 +1,17 @@
+# Current state — T19 staging shadow smoke + authorized cohort (2026-09-28)
+
+**Status: `T19_STAGING_SHADOW_LIVE_SMOKE_AND_COHORT_BLOCKED`.** Production: `UNTOUCHED`. Canary 1%: **not dispatched**.
+
+Verified live origin/main and staging Worker are `85660fa497f3da7110a07ec2189309fbef81d701` (user-stated `0d7b7d1` is not this repository's current main). Staging Deploy `36372371894` SUCCESS, production job skipped, vars `RECIPE_CATALOG_MODE=shadow` / percent `0` / cutover `false` / `MEAL_COMPOSITION_V2_ENABLED=true`. Staging D1 Runtime Readiness `36364583331` receipt `STAGING_D1_RUNTIME_READINESS_CERTIFIED` (500, ID/order/hydration/legacy/fingerprint/provenance match, FK/quick_check PASS, ledger `0039`).
+
+Live `GET /api/v1/health/ready` (2026-09-28T03:19Z): `ok`, database `ok`, `config.ok=true`, issues `[]`, `recipeAuthority.configuredMode=shadow`, `cutoverEnabled=false`, `canaryPercent=0`, `globalSource=static`, `fallbackReason=null`, `expectedRecipeCount=500`. Public catalog is **71 static** (`vn-*` 59 + `gl-*` 12, `imp-*` 0); imported id 404; `vn-canh-01` 200. Planner/shopping/cook/generate unauthenticated = 401, no HTTP 500 on probed public routes. `/sw.js` embeds `BUILD_ID=85660fa4…`. Planner chunk contains T20 composition/assisted/simple_food UI. Deploy receipt post-proof: shadow probe `actualSource=d1` served 500, `d1Readiness=ready`, `fallbackReason=null`. Pre-deploy staging had been `canary/1/true` with `authorizedInclude=0` / `authorizedExclude=0` (cohort not active).
+
+**NOT executed (blocked):** authenticated SHADOW live matrix (planner, recipe detail as a logged-in user, cooking, shopping, T20 Manual/Assisted/Auto, save/reload, hard restrictions). This workspace has no staging session cookies; live readiness reports `email.providerConfigured=false`, so OTP cannot be issued here. **NOT executed:** `wrangler secret put` for `RECIPE_CATALOG_TEST_COHORT_ENABLED` / `TEST_INCLUDE` / `TEST_EXCLUDE`. `pnpm wrangler whoami` is unauthenticated; no `CLOUDFLARE_API_TOKEN`. No raw household IDs were written.
+
+Next: operator supplies two staging test-account sessions (or Cloudflare access plus the two operator-owned household digests computed offline) and a staging Cloudflare API token. Then re-run the authenticated SHADOW matrix, put the three Worker secrets while keeping `RECIPE_CATALOG_MODE=shadow`, re-prove health/static/no-fallback/T20, and only then report `T19_STAGING_CANARY_1_READY_FOR_OPERATOR_DISPATCH`. Do not dispatch Canary from this workspace.
+
+---
+
 # Current state — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.**

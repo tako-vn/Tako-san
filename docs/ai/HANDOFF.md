@@ -1,3 +1,11 @@
+# Handoff — T19 staging shadow smoke + authorized cohort (2026-09-28)
+
+**Status: `T19_STAGING_SHADOW_LIVE_SMOKE_AND_COHORT_BLOCKED`.** Main/Worker `85660fa497f3da7110a07ec2189309fbef81d701`. Staging authority live: `shadow / 0 / false`, public catalog 71 static, D1 readiness previously CERTIFIED. T20 was deployed ON (`36372371894`) and production was skipped. Authenticated SHADOW live smoke and cohort secret provisioning did **not** run: no staging sessions and no Cloudflare login in this workspace. Email on staging readiness is not provider-configured. Do not claim `T19_STAGING_CANARY_1_READY_FOR_OPERATOR_DISPATCH`. Do not dispatch Canary. Do not touch production, D1 data, migrations, or 0040.
+
+Next action: operator provides (a) two staging test sessions for the operator-owned INCLUDE/EXCLUDE households and (b) staging Cloudflare credentials. Compute digests offline as SHA-256(`recipe-catalog-test-cohort:` + householdId); never paste raw IDs into git/chat/artifacts. Put secrets on `frigo-staging` only, keep mode=shadow, then re-prove.
+
+---
+
 # Handoff — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Main remains
