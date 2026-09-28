@@ -1,3 +1,30 @@
+# Handoff — T19 staging canary-1 observation / canary-5 attempt (2026-09-28)
+
+**Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Main
+`85660fa497f3`. Staging serves `canary / 1 / true` from Deploy `36385014725` and
+was not changed. The agent GitHub App has `actions: read` only.
+`gh workflow run` returned HTTP 403 before and after credential rotation, so
+Staging D1 Runtime Readiness and Deploy could not be dispatched. The last
+readiness certification (`36364583331`, 01:05Z) predates the canary and is not
+fresh.
+
+Fresh evidence: public `/health/ready` matches canary/1/true, `mixed`,
+`rel-bd00a4f53fcaeee4`, fallback null, commit main. Outside-cohort live smoke with 3 new
+registered staging test accounts passed (85 requests, 0 HTTP 500, 0 unexpected
+404). D1-only recipes were fenced (422/404) and static authority was consistent
+across every flow. Not run: inside-cohort (no in-cohort household without
+test-cohort secrets or mass registration), cook complete, dietary/allergen/nutrition
+restrictions, and fresh protected authority fields. The test accounts were not
+cleaned up, and no identifiers were recorded.
+
+Observation: the staging Deploy job does not call `validateRecipeCatalogTransition()`;
+only production does. Next: grant `actions: write` or dispatch manually, run fresh
+readiness, decide how to get inside-cohort evidence, then run the staging canary/5
+Deploy (see receipt `recipe-catalog/T19_STAGING_CANARY_5_RECEIPT.md`). No
+production action.
+
+---
+
 # Handoff — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Main remains

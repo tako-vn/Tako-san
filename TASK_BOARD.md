@@ -1,3 +1,12 @@
+# Current — T19 staging canary-1 observation / canary-5 (2026-09-28)
+
+**Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Deploy/D1/secret/production: NO.
+Staging stays canary/1/true. Outside-cohort smoke PASS. Readiness and Deploy
+dispatch failed with HTTP 403 (agent App lacks `actions: write`). See
+`docs/ai/recipe-catalog/T19_STAGING_CANARY_5_RECEIPT.md`.
+
+---
+
 # Current — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Deploy/D1 mutation/T20/authority: NO.

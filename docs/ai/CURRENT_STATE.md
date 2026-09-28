@@ -1,3 +1,18 @@
+# Current state — T19 staging canary-1 observation / canary-5 attempt (2026-09-28)
+
+**Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Main `85660fa497f3`
+(PR #19 merged). Staging is still `canary / 1 / true` from Deploy `36385014725`,
+and fresh public readiness confirms mode, percent, cutover, `mixed`, release
+`rel-bd00a4f53fcaeee4` and `fallbackReason=null`. It was not promoted: the agent GitHub App
+cannot dispatch workflows (HTTP 403, `actions: read` only), so neither the fresh
+readiness run nor the 5% Deploy ran. Fresh outside-cohort live smoke passed: 3
+test accounts, 85 requests, 0 HTTP 500, 0 unexpected 404, static authority
+consistent across planner, detail, cooking, shopping and T20. Inside-cohort was
+not run. No D1, migration, secret, production or Worker change was made. Receipt:
+`recipe-catalog/T19_STAGING_CANARY_5_RECEIPT.md`.
+
+---
+
 # Current state — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.**
