@@ -25,7 +25,7 @@ import { tenancyGuard } from '../middleware/tenancy';
 import { rateLimiter } from '../middleware/rate-limit';
 import { ScanConfirmSchema } from '../validation/schemas';
 import { fetchHouseholdInventoryFromDb } from './inventory';
-import { reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
+import { getScanQuota, reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
 import { ensureScanQueueIntent } from '../services/scan-queue';
 import { sha256Hex } from '../utils/session';
 import { aiConfigFromEnv, logAIUsage } from '../config/ai';
@@ -376,6 +376,8 @@ function publicScanErrorMessage(code: unknown): string | undefined {
       return 'Bản quét đã hết số lần xử lý tự động. Vui lòng thử lại với ảnh mới.';
     case 'RESERVATION_EXPIRED':
       return 'Bản quét đã hết thời gian chờ xử lý. Vui lòng gửi lại ảnh để tạo bản quét mới.';
+    case 'SCAN_FAILED':
+      return 'Bản quét trước đã thất bại. Vui lòng tạo một lượt quét mới.';
     default:
       return code ? 'Không thể xử lý bản quét. Vui lòng thử lại với ảnh rõ hơn.' : undefined;
   }
@@ -383,6 +385,7 @@ function publicScanErrorMessage(code: unknown): string | undefined {
 
 function scanFailureStatus(code: string): 400 | 413 | 422 | 429 | 500 | 503 | 504 {
   if (code === 'RATE_LIMITED') return 429;
+  if (code === 'SCAN_FAILED') return 503;
   if (code === 'REQUEST_TIMEOUT' || code === 'AI_SCAN_TIMEOUT') return 504;
   if (code === 'AI_SCAN_NO_USABLE_ITEMS' || code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') return 422;
   if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') return 400;
@@ -670,8 +673,9 @@ function scanReservationSpec(
   scanType: 'fridge' | 'food' | 'receipt',
   image: Pick<NormalizedImagePayload, 'mimeType'>,
   requestFingerprint: string,
+  replayFailedWithoutJob: boolean,
 ): ScanReservationSpec {
-  return { imageKey, scanType, imageMimeType: image.mimeType, requestFingerprint };
+  return { imageKey, scanType, imageMimeType: image.mimeType, requestFingerprint, replayFailedWithoutJob };
 }
 
 async function persistScanFailure(
@@ -767,7 +771,7 @@ async function recoverScan(
       `SELECT error_code, attempts, max_attempts FROM scan_queue_jobs
        WHERE scan_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1`,
     ).bind(scanId).first<{ error_code: string | null; attempts: number; max_attempts: number }>();
-    const code = failedJob?.error_code || 'AI_SCAN_UNAVAILABLE';
+    const code = failedJob?.error_code || 'SCAN_FAILED';
     await finalizeScanQuota(c.env.DB, reservationId, 'released');
     return c.json({
       error: publicScanErrorMessage(code) || 'Không thể xử lý bản quét.',
@@ -821,7 +825,7 @@ async function recoverScan(
     } catch {
       return c.json({ error: 'Không thể xếp hàng bản quét', code: 'QUEUE_UNAVAILABLE' }, 503);
     }
-    await finalizeScanQuota(c.env.DB, reservationId, 'consumed');
+    // The consumer settles quota in the same fenced batch as the scan result.
   }
   const items = row ? await c.env.DB.prepare(SQL.GET_SCAN_ITEMS).bind(scanId).all() : { results: [] };
   const scan = {
@@ -873,11 +877,12 @@ scanRoutes.post('/scans/fridge', async (c) => {
     householdId: auth.householdId,
     scanId,
     idempotencyKey,
-    scan: scanReservationSpec(imageKey, scanType, image, requestFingerprint),
+    scan: scanReservationSpec(imageKey, scanType, image, requestFingerprint, c.env.SCAN_QUEUE_MODE === 'async' && !!c.env.SCAN_QUEUE),
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
+    const quotaState = quota.reason === 'exceeded' ? await getScanQuota(db, auth.userId).catch(() => null) : null;
+    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE', resetAt: quotaState?.resetAt, quota: quotaState }, status);
   }
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, scanType, idempotencyKey, reservationId, image, requestFingerprint);
@@ -926,6 +931,12 @@ scanRoutes.post('/scans/fridge', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
+    } catch {
+      await persistScanFailure(db, scanId, auth, 'DATABASE_ERROR');
+      await finalizeScanQuota(db, reservationId, 'released');
+      return c.json({ error: 'Không thể lưu yêu cầu xử lý nền', code: 'DATABASE_ERROR' }, 503);
+    }
+    try {
       await c.env.SCAN_QUEUE.send({
         type: 'scan.process.v1',
         jobId: `scan_job_${scanId}`,
@@ -939,7 +950,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
-      await finalizeScanQuota(db, reservationId, 'consumed');
+      // Queue acceptance reserves a slot; only a ready scan consumes it.
       return c.json({
         success: true,
         queued: true,
@@ -1094,11 +1105,12 @@ scanRoutes.post('/scans/receipt', async (c) => {
     householdId: auth.householdId,
     scanId,
     idempotencyKey,
-    scan: scanReservationSpec(imageKey, 'receipt', image, requestFingerprint),
+    scan: scanReservationSpec(imageKey, 'receipt', image, requestFingerprint, c.env.SCAN_QUEUE_MODE === 'async' && !!c.env.SCAN_QUEUE),
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
+    const quotaState = quota.reason === 'exceeded' ? await getScanQuota(db, auth.userId).catch(() => null) : null;
+    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE', resetAt: quotaState?.resetAt, quota: quotaState }, status);
   }
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, 'receipt', idempotencyKey, reservationId, image, requestFingerprint);
@@ -1141,6 +1153,12 @@ scanRoutes.post('/scans/receipt', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
+    } catch {
+      await persistScanFailure(db, scanId, auth, 'DATABASE_ERROR');
+      await finalizeScanQuota(db, reservationId, 'released');
+      return c.json({ error: 'Không thể lưu yêu cầu xử lý nền', code: 'DATABASE_ERROR' }, 503);
+    }
+    try {
       await c.env.SCAN_QUEUE.send({
         type: 'scan.process.v1',
         jobId: `scan_job_${scanId}`,
@@ -1154,7 +1172,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
-      await finalizeScanQuota(db, reservationId, 'consumed');
+      // Queue acceptance reserves a slot; only a ready scan consumes it.
       return c.json({
         success: true,
         queued: true,
@@ -1338,6 +1356,7 @@ scanRoutes.get('/scans/:id', async (c) => {
         purchaseDate: scan.purchase_date ?? undefined,
         totalAmountVnd: scan.total_amount_vnd == null ? undefined : Number(scan.total_amount_vnd),
         errorCode: scan.status === 'failed' ? queueJob?.error_code ?? undefined : undefined,
+        supportId: (await sha256Hex(scan.id)).slice(0, 12),
         errorMessage: scan.status === 'failed' ? publicScanErrorMessage(queueJob?.error_code) : undefined,
         attempts: queueJob?.attempts == null ? undefined : Number(queueJob.attempts),
         maxAttempts: queueJob?.max_attempts == null ? undefined : Number(queueJob.max_attempts),

@@ -8,6 +8,7 @@ export type ScanReservationSpec = {
   scanType: 'fridge' | 'food' | 'receipt';
   requestFingerprint: string;
   imageMimeType: string;
+  replayFailedWithoutJob?: boolean;
 };
 
 /** Read one snapshot without creating subscriptions, periods, or reservations. */
@@ -52,9 +53,10 @@ export async function reserveScanQuota(
       existing.user_id !== input.userId || existing.household_id !== input.householdId)) {
       return { ok: false, reason: 'conflict' };
     }
+    let existingScan: any = null;
     if (input.scan) {
-      const existingScan: any = await db.prepare(
-        `SELECT id, user_id, household_id, scan_type, request_fingerprint, image_mime_type
+      existingScan = await db.prepare(
+        `SELECT id, user_id, household_id, scan_type, status, request_fingerprint, image_mime_type
            FROM scans WHERE id = ? LIMIT 1`
       ).bind(input.scanId).first();
       if (existingScan && (
@@ -66,6 +68,17 @@ export async function reserveScanQuota(
       )) {
         return { ok: false, reason: 'conflict' };
       }
+    }
+    // A terminal failed scan stays the same command even when queue-intent
+    // persistence failed before a job row could be written. Only a synthetic
+    // reservation-expiry tombstone may be re-armed with the same key.
+    if (existing?.status === 'released' && input.scan && existingScan?.status === 'failed') {
+      const job = await db.prepare(
+        'SELECT error_code FROM scan_queue_jobs WHERE scan_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+      ).bind(input.scanId).first<{ error_code: string | null }>();
+      if ((job && job.error_code !== 'RESERVATION_EXPIRED') || (!job && input.scan.replayFailedWithoutJob)) return { ok: true, acquired: false, reservation: {
+        reservationId: existing.id, periodStart: existing.period_start, scanId: existing.scan_id,
+      } };
     }
     // Only released rows can move periods; their reclaim always uses today's allowance.
     const now = new Date();
@@ -193,6 +206,29 @@ export async function finalizeScanQuota(db: D1DatabaseBinding, reservationId: st
     db.prepare("UPDATE scan_quota_ledger SET status = 'released', completed_at = datetime('now') WHERE id = ? AND status = 'reserved'").bind(reservationId),
     refreshUsage(db, row.user_id, row.period_start),
   ]);
+}
+
+
+/** Settle a queue reservation inside the same fenced D1 batch as the scan terminal state. */
+export function queueQuotaSettlementStatements(
+  db: D1DatabaseBinding,
+  scanId: string,
+  userId: string,
+  householdId: string,
+  guard: string,
+  bindings: readonly string[],
+  outcome: 'consumed' | 'released',
+) {
+  const eligible = outcome === 'consumed' ? "status = 'reserved'" : "status IN ('reserved', 'consumed')";
+  return [
+    db.prepare(`UPDATE scan_quota_ledger SET status = ?, completed_at = datetime('now')
+      WHERE scan_id = ? AND user_id = ? AND household_id = ? AND ${eligible} AND ${guard}`)
+      .bind(outcome, scanId, userId, householdId, ...bindings),
+    db.prepare(`UPDATE scan_quota_periods SET used_count = (
+        SELECT COUNT(*) FROM scan_quota_ledger q WHERE q.user_id = scan_quota_periods.user_id
+          AND q.period_start = scan_quota_periods.period_start AND q.status != 'released'
+      ), updated_at = datetime('now') WHERE user_id = ?`).bind(userId),
+  ];
 }
 
 export interface ScanReservationReconciliation {

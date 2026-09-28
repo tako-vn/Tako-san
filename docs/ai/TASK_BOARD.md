@@ -1,3 +1,15 @@
+# Task board — Scan/OCR/AI quota remediation (2026-09-28)
+
+- [x] Reproduce guest five-scan quota and frontend error masking; implement fenced async consume/release, idempotency, queue retry/reconciliation, tenant isolation, support IDs, server quota snapshot, Vietnamese canonical matching, and private OCR harness.
+- [x] Review PR #22; fix replay after queue-intent persistence fails before a job exists. Verify replay gives `SCAN_FAILED`/503, quota stays released, and no second message is sent.
+- [x] Final local `pnpm check`: 216 files / 4,804 tests, typecheck, lint, migration smoke, build. Initial unrelated timeout passed focused rerun and full rerun.
+- [x] Read-only staging health/ready 200 at main SHA `12348efd...`, DB and Queue ok, AI mock. Record that main-only release gating prevents deploying PR #22 to staging.
+- [x] Implementation head `45b6115` passed hosted CI run `36437178487`; final PR head CI must stay green.
+- [ ] Obtain independent review and operator-led staging certification after a valid main release. Do not merge or deploy production in this task.
+- [ ] Operator supplies four original PII-safe QA images and independent `qa/ocr/expected.json`; run private live OCR and preprocessing certification. Until then: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.
+
+---
+
 # Task board — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Remote D1 mutation: NO.

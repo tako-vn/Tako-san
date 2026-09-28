@@ -1,3 +1,15 @@
+# Handoff — Scan/OCR/AI quota remediation (2026-09-28)
+
+PR #22 (`takovn2/Tako-san`) contains the async quota, UI taxonomy, support ID, canonical ingredient, queue fencing/retry, and OCR harness changes. A follow-up review fixed replay of a terminal failed scan after queue-intent persistence fails before a job row exists. The same key now returns `SCAN_FAILED`/503 without reserving quota or sending work; a new key explicitly starts a new attempt. Regression is in `tests/integration/scan-async-quota-lifecycle.test.ts`. No migration or production configuration change.
+
+Final unfiltered `pnpm check` PASS: 216 files / 4,804 tests, typecheck, ESLint, migration smoke, build. First full run timed out one unrelated AI provider test at five seconds; focused 23/23 and second full 4,804/4,804 passed. `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed. Staging read-only health/ready returned 200 and reported SHA `12348efd015ae72337fbeb08651150a7d28ee638`, database/queue ok, AI mock. Deploy workflow permits reviewed main SHAs only; this PR was not deployed. No live staging scan certification is claimed.
+
+Private dataset requirements and runnable fixture tests: `qa/ocr/README.md`; schema: `qa/ocr/expected.schema.json`. The four originals and independent ground truth are missing. `node scripts/ocr-benchmark.mjs prepare --dataset qa/ocr` returns `DATASET_UNAVAILABLE`; live gate remains `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. No production receipt, PII, synthetic QA image, or invented ground truth was used.
+
+Implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a` passed hosted CI run `36437178487` / job `108977987256`: ESLint, typecheck, Vitest (216 files), migration smoke, and build. Next: verify the current PR head remains green and obtain independent review. A later release owner can stage a reviewed main release under the existing gate, but staging's AI mock cannot certify actual Qwen OCR. The operator must provide the private four-image dataset and ground truth before live OCR scoring. Do not merge or deploy production in this task. Recommendation: `NOT_READY_FOR_PRODUCTION`.
+
+---
+
 # Handoff — T19 cooking hard-restriction hotfix (2026-09-28)
 
 **Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch

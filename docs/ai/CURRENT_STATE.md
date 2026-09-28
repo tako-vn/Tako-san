@@ -1,3 +1,13 @@
+# Current state — Scan/OCR/AI quota remediation (2026-09-28)
+
+**Status: `SCAN_REMEDIATION_CODE_CERTIFIED_LOCAL`; live gate `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.** PR #22 is open on `fix/scan-ai-quota-ocr-reliability`. Review found that an async queue-intent write failure left a failed scan and released quota but replaying the same key could reserve again. The fix keeps that command terminal even without a queue job, returns `SCAN_FAILED`/503, and requires a new key for a new attempt. Sync replay behavior remains covered by its existing tests.
+
+The final unfiltered local `pnpm check` passed: 216 files / 4,804 tests, typecheck, ESLint, migration smoke, and build. The first run had one unrelated 5-second AI provider test timeout (4,803/4,804); its focused rerun and the second full run passed. Implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a` passed hosted CI run `36437178487` (ESLint, typecheck, 216 test files, migration smoke, build). Verify the final PR head has a green check before any release decision. Staging read-only health and readiness returned 200 at `12348efd015ae72337fbeb08651150a7d28ee638`, with DB/queue ok and AI `mock`. The staging release workflow accepts reviewed main releases, so PR #22 was not deployed; staging does not certify the PR or live OCR.
+
+The private four-receipt dataset is absent. `qa/ocr/README.md` identifies runnable repository fixture tests and the exact operator paths/schema. The benchmark correctly returns `DATASET_UNAVAILABLE`. No QA data was invented; no merge or production deploy occurred. Production recommendation: `NOT_READY_FOR_PRODUCTION`.
+
+---
+
 # Current state — T19 cooking hard-restriction hotfix (2026-09-28)
 
 **Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch

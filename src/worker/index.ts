@@ -33,7 +33,9 @@ const app = new Hono<WorkerApp>();
 // 1. Structured request logging with correlation + traceability. Sensitive
 // headers (Cookie, Authorization, tokens) are never logged.
 app.use('*', async (c, next) => {
-  const requestId = c.req.header('X-Request-Id') || crypto.randomUUID();
+  const suppliedRequestId = c.req.header('X-Request-Id');
+  const requestId = suppliedRequestId && /^[A-Za-z0-9_-]{8,64}$/.test(suppliedRequestId)
+    ? suppliedRequestId : crypto.randomUUID();
   c.set('requestId', requestId);
   const startedAt = Date.now();
   let status = 500;
@@ -175,12 +177,12 @@ export default {
       } catch (error) {
         const retryable = error instanceof ScanQueueError ? error.retryable : true;
         if (retryable) {
-          console.warn('[Queue] Retryable scan job failure', error);
+          console.warn(JSON.stringify({ event: 'scan_queue_retry', code: error instanceof ScanQueueError ? error.code : 'UNEXPECTED_ERROR' }));
           msg.retry({ delaySeconds: SCAN_RETRY_DELAY_SECONDS });
         } else {
           // Permanent failures are acknowledged after being persisted as
           // failed; this prevents poison messages from blocking the queue.
-          console.error('[Queue] Permanent scan job failure', error);
+          console.error(JSON.stringify({ event: 'scan_queue_failed', code: error instanceof ScanQueueError ? error.code : 'UNEXPECTED_ERROR' }));
           msg.ack();
         }
       }

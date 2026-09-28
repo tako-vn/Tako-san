@@ -12,6 +12,7 @@ import { capturePrivateSession } from '../lib/private-session';
 import { invalidateInventoryDependents } from '../lib/query-invalidation';
 import { presentConfidence, presentDomainError, presentRefetchOutcome } from '../lib/inventory-truth';
 import { ApiError } from '../services/http';
+import { scanErrorMessage } from '../lib/scan-errors';
 import { ScanProcessingState } from '../components/scan/ScanProcessingState';
 
 const UNITS: StandardUnit[] = ['piece', 'g', 'kg', 'ml', 'l', 'pack', 'bunch', 'slice'];
@@ -23,28 +24,6 @@ const confidenceClass = {
   high: 'text-takosan-green-deep bg-takosan-mint',
 };
 
-function scanErrorText(code?: string, _detail?: string): string {
-  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
-    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
-  }
-  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
-    return 'Dịch vụ nhận diện phản hồi quá lâu. Hãy thử lại với ảnh nhỏ và rõ hơn.';
-  }
-  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
-    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
-    return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Hãy thử lại hoặc nhập thủ công.';
-  }
-  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
-    return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
-  }
-  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
-    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
-  }
-  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
-    return 'Ảnh quét không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
-  }
-  return 'Không thể xử lý bản quét. Hãy thử lại với ảnh rõ hơn.';
-}
 
 export const ScanResultPage: React.FC = () => {
   const { id: paramScanId } = useParams<{ id: string }>();
@@ -137,7 +116,7 @@ const ScanReview: React.FC<{ effectiveScanId: string }> = ({ effectiveScanId }) 
         }
         if (scan.status === 'failed') {
           setScanStatus('failed');
-          setPollError(scanErrorText(scan.errorCode, scan.errorMessage));
+          setPollError(scanErrorMessage(scan.errorCode, 'fridge', { requestId: scan.supportId }));
           return;
         }
       } catch {
