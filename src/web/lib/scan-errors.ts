@@ -84,6 +84,9 @@ export function scanErrorMessage(
     case 'DATABASE_ERROR':
       message = 'Chưa thể lưu bản quét. Vui lòng thử lại sau.';
       break;
+    case 'SCAN_FAILED':
+      message = 'Bản quét trước đã thất bại. Hãy tạo lượt quét mới.';
+      break;
     default:
       message = context === 'receipt'
         ? 'Chưa thể xử lý hóa đơn. Vui lòng thử lại sau.'

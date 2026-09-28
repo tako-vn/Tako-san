@@ -10,7 +10,7 @@ One logical scan command, scoped to user and household and its idempotency key, 
 | Permanent provider/schema/no-usable-result failure | failed | released | Same key returns durable failure; new AI attempt uses a new key |
 | Transient failure before retry limit | pending | reserved | Queue retries the same job |
 | Retry exhausted or lease expired at max attempts | failed | released | Late worker cannot commit |
-| Queue-intent persistence failure before send | failed | released | No queued work is asserted |
+| Queue-intent persistence failure before send | failed, no job | released | Same key returns `SCAN_FAILED`/503 without a new reservation or send; a new attempt needs a new key |
 | Ambiguous queue send | pending | reserved | Same key re-sends one intent; reconciler bounds staleness |
 | Storage or DB failure before usable result | failed | released | No charge; DB outage may itself prevent durable settlement |
 | Reservation expiry | failed | released | Reconciliation closes old work; a new attempt needs capacity |

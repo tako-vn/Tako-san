@@ -16,3 +16,13 @@ Run `node scripts/ocr-benchmark.mjs prepare --dataset qa/ocr` to create original
 Use a clean staging Plus QA account to submit each private variant through the normal scan endpoint. Record reviewed outputs in private `qa/ocr/results.json` as `{ "version": 1, "runs": [...] }` with exactly 16 entries, one per case and variant. Each run has `case`, `variant` (`original`, `current_2000_q82`, `candidate_2400_q90`, or `lossless_png`), nonnegative `latencyMs`, `items` with the same item fields as ground truth, and nonnegative `totalAmountVnd`. Keep sanitized request correlation, model routing, attempts, escalation, and provider cost in a private operator record. Run `node scripts/ocr-benchmark.mjs score --dataset qa/ocr`. The scorer matches exact normalized names across row order, then computes a row independent name edit metric; quantity and price matches are counted only for exact name pairs. Human review against the original images is still required.
 
 Existing repository tests can already run without these images: mocked Qwen receipt schema/provider tests, receipt scan API and queue tests, canonical ingredient matching, and receipt confirmation and inventory tests on local D1. Only real receipt OCR accuracy, image preprocessing A/B comparison, original receipt line item correctness, latency and cost on the four QA images, and live staging behavior for those images require the missing private dataset.
+
+## Exact test boundary
+
+The repository fixtures support this local OCR/scan contract command now:
+
+```bash
+pnpm exec vitest run tests/integration/t13-receipt-vision-truth.test.ts tests/integration/t13-receipt-vision-d1.test.mjs tests/integration/production-integration-scan-flow.test.ts tests/integration/scan-async-quota-lifecycle.test.ts tests/integration/scan-queue-fencing.test.ts tests/integration/scan-queue-retry-policy.test.ts tests/unit/t13-receipt-vision-truth.test.ts tests/unit/receipt-scan.test.ts tests/unit/t13b-receipt-review.test.tsx tests/unit/canonical-ocr-normalization.test.ts
+```
+
+These tests cover mocked Qwen response parsing, receipt persistence and review, queue settlement/retry/fencing, and canonical normalization. They do not use the four original QA images. Only the operator-supplied `receipt_easy.*`, `receipt_medium.*`, `receipt_hard.*`, `receipt_veryhard.*` and independently transcribed `expected.json` enable the four-receipt line-item accuracy gate, preprocessing A/B, and live staging OCR certification. The `prepare` and `score` benchmark commands intentionally stop when their required private inputs are absent.

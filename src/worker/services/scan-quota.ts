@@ -8,6 +8,7 @@ export type ScanReservationSpec = {
   scanType: 'fridge' | 'food' | 'receipt';
   requestFingerprint: string;
   imageMimeType: string;
+  replayFailedWithoutJob?: boolean;
 };
 
 /** Read one snapshot without creating subscriptions, periods, or reservations. */
@@ -52,9 +53,10 @@ export async function reserveScanQuota(
       existing.user_id !== input.userId || existing.household_id !== input.householdId)) {
       return { ok: false, reason: 'conflict' };
     }
+    let existingScan: any = null;
     if (input.scan) {
-      const existingScan: any = await db.prepare(
-        `SELECT id, user_id, household_id, scan_type, request_fingerprint, image_mime_type
+      existingScan = await db.prepare(
+        `SELECT id, user_id, household_id, scan_type, status, request_fingerprint, image_mime_type
            FROM scans WHERE id = ? LIMIT 1`
       ).bind(input.scanId).first();
       if (existingScan && (
@@ -67,13 +69,14 @@ export async function reserveScanQuota(
         return { ok: false, reason: 'conflict' };
       }
     }
-    // A terminal failed scan remains the same logical command on replay.
-    // Reprocessing requires a new key and a new, explicit quota reservation.
-    if (existing?.status === 'released' && input.scan) {
-      const terminalJob = await db.prepare(
-        "SELECT id FROM scan_queue_jobs WHERE scan_id = ? AND status = 'failed' AND error_code != 'RESERVATION_EXPIRED' LIMIT 1"
-      ).bind(input.scanId).first();
-      if (terminalJob) return { ok: true, acquired: false, reservation: {
+    // A terminal failed scan stays the same command even when queue-intent
+    // persistence failed before a job row could be written. Only a synthetic
+    // reservation-expiry tombstone may be re-armed with the same key.
+    if (existing?.status === 'released' && input.scan && existingScan?.status === 'failed') {
+      const job = await db.prepare(
+        'SELECT error_code FROM scan_queue_jobs WHERE scan_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+      ).bind(input.scanId).first<{ error_code: string | null }>();
+      if ((job && job.error_code !== 'RESERVATION_EXPIRED') || (!job && input.scan.replayFailedWithoutJob)) return { ok: true, acquired: false, reservation: {
         reservationId: existing.id, periodStart: existing.period_start, scanId: existing.scan_id,
       } };
     }

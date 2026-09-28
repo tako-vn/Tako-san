@@ -376,6 +376,8 @@ function publicScanErrorMessage(code: unknown): string | undefined {
       return 'Bản quét đã hết số lần xử lý tự động. Vui lòng thử lại với ảnh mới.';
     case 'RESERVATION_EXPIRED':
       return 'Bản quét đã hết thời gian chờ xử lý. Vui lòng gửi lại ảnh để tạo bản quét mới.';
+    case 'SCAN_FAILED':
+      return 'Bản quét trước đã thất bại. Vui lòng tạo một lượt quét mới.';
     default:
       return code ? 'Không thể xử lý bản quét. Vui lòng thử lại với ảnh rõ hơn.' : undefined;
   }
@@ -383,6 +385,7 @@ function publicScanErrorMessage(code: unknown): string | undefined {
 
 function scanFailureStatus(code: string): 400 | 413 | 422 | 429 | 500 | 503 | 504 {
   if (code === 'RATE_LIMITED') return 429;
+  if (code === 'SCAN_FAILED') return 503;
   if (code === 'REQUEST_TIMEOUT' || code === 'AI_SCAN_TIMEOUT') return 504;
   if (code === 'AI_SCAN_NO_USABLE_ITEMS' || code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') return 422;
   if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') return 400;
@@ -670,8 +673,9 @@ function scanReservationSpec(
   scanType: 'fridge' | 'food' | 'receipt',
   image: Pick<NormalizedImagePayload, 'mimeType'>,
   requestFingerprint: string,
+  replayFailedWithoutJob: boolean,
 ): ScanReservationSpec {
-  return { imageKey, scanType, imageMimeType: image.mimeType, requestFingerprint };
+  return { imageKey, scanType, imageMimeType: image.mimeType, requestFingerprint, replayFailedWithoutJob };
 }
 
 async function persistScanFailure(
@@ -767,7 +771,7 @@ async function recoverScan(
       `SELECT error_code, attempts, max_attempts FROM scan_queue_jobs
        WHERE scan_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1`,
     ).bind(scanId).first<{ error_code: string | null; attempts: number; max_attempts: number }>();
-    const code = failedJob?.error_code || 'AI_SCAN_UNAVAILABLE';
+    const code = failedJob?.error_code || 'SCAN_FAILED';
     await finalizeScanQuota(c.env.DB, reservationId, 'released');
     return c.json({
       error: publicScanErrorMessage(code) || 'Không thể xử lý bản quét.',
@@ -873,7 +877,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
     householdId: auth.householdId,
     scanId,
     idempotencyKey,
-    scan: scanReservationSpec(imageKey, scanType, image, requestFingerprint),
+    scan: scanReservationSpec(imageKey, scanType, image, requestFingerprint, c.env.SCAN_QUEUE_MODE === 'async' && !!c.env.SCAN_QUEUE),
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
@@ -1101,7 +1105,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
     householdId: auth.householdId,
     scanId,
     idempotencyKey,
-    scan: scanReservationSpec(imageKey, 'receipt', image, requestFingerprint),
+    scan: scanReservationSpec(imageKey, 'receipt', image, requestFingerprint, c.env.SCAN_QUEUE_MODE === 'async' && !!c.env.SCAN_QUEUE),
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;

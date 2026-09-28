@@ -1,14 +1,11 @@
 # Task board — Scan/OCR/AI quota remediation (2026-09-28)
 
-- [x] Verify repository and main; reproduce five-scan async quota defect and frontend masking.
-- [x] Settle async quota on fenced ready/failure, cover success, permanent failure, exhausted retries, ambiguous enqueue, idempotent replay, and tenant isolation.
-- [x] Centralize frontend error taxonomy, support ID, server quota snapshot, and distinct retry/recovery keys.
-- [x] Normalize canonical Vietnamese names safely; remove duck egg alias from chicken egg; keep food mode ingredient wording.
-- [x] Prepare private four-receipt manifest/schema and benchmark without fabricated images or ground truth.
-- [x] Final unfiltered `pnpm check` PASS after rebase: 216 files / 4,804 tests, typecheck, lint, migration smoke, build; diff check pass.
-- [x] Wrangler D1 catch-up subprocess test passed 32/32 in the final canonical run; verify on hosted Node 22 CI.
-- [ ] Obtain the original PII-safe four QA images and independently transcribed `qa/ocr/expected.json`; perform live OCR/staging certification.
-- [ ] Exact-head hosted CI, review, and PR only after prerequisites; no merge or production deploy in this task.
+- [x] Reproduce guest five-scan quota and frontend error masking; implement fenced async consume/release, idempotency, queue retry/reconciliation, tenant isolation, support IDs, server quota snapshot, Vietnamese canonical matching, and private OCR harness.
+- [x] Review PR #22; fix replay after queue-intent persistence fails before a job exists. Verify replay gives `SCAN_FAILED`/503, quota stays released, and no second message is sent.
+- [x] Final local `pnpm check`: 216 files / 4,804 tests, typecheck, lint, migration smoke, build. Initial unrelated timeout passed focused rerun and full rerun.
+- [x] Read-only staging health/ready 200 at main SHA `12348efd...`, DB and Queue ok, AI mock. Record that main-only release gating prevents deploying PR #22 to staging.
+- [ ] Await exact-head hosted CI and independent review. Do not merge or deploy production in this task.
+- [ ] Operator supplies four original PII-safe QA images and independent `qa/ocr/expected.json`; run private live OCR and preprocessing certification. Until then: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.
 
 ---
 

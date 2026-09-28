@@ -1,13 +1,12 @@
 # Scan and OCR remediation certification (2026-09-28)
 
-**Status:** `SCAN_REMEDIATION_CODE_COMPLETE`. **Live OCR gate:** `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. The live data blocker does not invalidate the green local code gate.
+**Status:** `SCAN_REMEDIATION_CODE_CERTIFIED_LOCAL`. **Live OCR gate:** `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. The live data blocker does not invalidate the green local code gate.
 
 ## Local evidence
 
-- Initial `pnpm check`: 4,780 passed / 3 failed. Two scan regressions were fixed. The local Wrangler subprocess test was intermittently slow.
-- Full Vitest with only the Wrangler subprocess case excluded by test-name filter: 215 files passed, 4,783 tests passed, 1 skipped. This run preceded the last small UI retry/network-message change; the affected UI tests were rerun afterward, 5/5 passed. The new guest async lifecycle integration suite passed 11/11.
-- Final unfiltered `pnpm check` passed after rebase on main `12348efd015ae72337fbeb08651150a7d28ee638`: 216 test files / 4,804 tests, typecheck, lint, `migration-smoke=ok`, and production build. `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed.
-- The Wrangler catch-up test passed 32/32 in the final canonical run. Earlier isolated runs timed out locally, so hosted Node 22 CI remains an important independent check. No test assertion or gate was weakened to conceal this issue.
+- PR #22 review found an async queue-intent failure replay gap: failed scan/released quota with no job could reserve again on the same idempotency key. The regression now returns `SCAN_FAILED`/503 with no new reservation or Queue message. Synchronous replay coverage remains green.
+- First follow-up `pnpm check` passed typecheck and lint, then timed out one unrelated AI provider test at five seconds (4,803/4,804 tests). The isolated suite passed 23/23 and the second unfiltered `pnpm check` passed 216 files / 4,804 tests, typecheck, lint, `migration-smoke=ok`, and build. The exact OCR/scan fixture command in `qa/ocr/README.md` passed 10 files / 210 tests.
+- `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed. Hosted CI on PR head `d4c981ab42c7626a1ee3430540286cd2a613dcee` passed before this review fix; exact-head CI on the new commit remains required.
 
 ## OCR dataset boundary
 
@@ -21,6 +20,6 @@ The benchmark prepares original, current frontend 2000 px JPEG quality 0.82, can
 
 Receipt uses `receipt_ocr`, primary `QWEN_OCR` (default physical `qwen-vl-ocr`) with `QWEN_MULTIMODAL` escalation. Fridge and food currently share `fridge_image_analysis`, primary `QWEN_MULTIMODAL` (default `qwen3.8-flash`). The UI labels food mode as ingredient recognition; distinct dish inference was not introduced. Task runtime allows up to three model attempts for these tasks; queue retries are separately bounded at three. Production model configuration was not changed.
 
-Staging was not deployed or certified. Production recommendation: `NOT_READY_FOR_PRODUCTION` until exact-head CI, review, staging verification, and the private live OCR dataset gate are completed by the operator. No merge or production deployment was performed.
+Staging read-only health and readiness were 200 at `12348efd015ae72337fbeb08651150a7d28ee638`; DB/Queue were ok and AI was `mock`. The release workflow only deploys reviewed main SHAs, so PR #22 was not staged. This health check does not certify the PR or real Qwen OCR. Production recommendation: `NOT_READY_FOR_PRODUCTION` until exact-head CI, independent review, a valid staging release path, and the private live OCR dataset gate are completed by the operator. No merge or production deployment was performed.
 
-Private `qa/ocr/receipt_*`, `qa/ocr/expected.json`, and `qa/ocr/results.json` are Git ignored. CI config uses Node 22; local checks used host Node 25.9.0 except the isolated bundled Node 24 attempt. The earlier intermittent Wrangler timing issue should be checked in exact-head hosted CI.
+Private `qa/ocr/receipt_*`, `expected.json`, and `results.json` are Git ignored. CI uses Node 22; local checks used host Node 25.9.0. The unrelated provider test timeout passed in the focused rerun and full rerun.

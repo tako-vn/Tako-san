@@ -144,6 +144,13 @@ describe('guest async scan quota lifecycle', () => {
     expect(usage()).toBe(0);
     expect(messages).toHaveLength(0);
     expect(db.query('SELECT status FROM scans')).toEqual([{ status: 'failed' }]);
+    const replay = await post('intent-failure');
+    expect(replay.status).toBe(503);
+    expect(await replay.json()).toMatchObject({ code: 'SCAN_FAILED', retryable: false });
+    expect(ledger()).toEqual(['released']);
+    expect(usage()).toBe(0);
+    expect(messages).toHaveLength(0);
+    expect(db.query('SELECT status FROM scans')).toEqual([{ status: 'failed' }]);
   });
 
   it('rejects different bytes and MIME under one async command', async () => {
