@@ -1,3 +1,13 @@
+# Current — T19 cooking hard-restriction hotfix (2026-09-28)
+
+**Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch
+`fix/t19-cooking-hard-restriction-bypass` from `85660fa`. cook/start +
+cook/complete now enforce canonical hard restrictions (422
+`HARD_CONSTRAINT_CONFLICT`, fail-closed). Deploy/D1/migration/secret/config: NO.
+Staging stays canary 1%. Next: PR + review/merge; do NOT promote canary.
+
+---
+
 # Current — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Deploy/D1 mutation/T20/authority: NO.

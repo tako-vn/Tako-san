@@ -27,6 +27,7 @@ class SqliteD1 {
     const sqlite = this.sqlite;
     let values: any[] = [];
     return {
+      sql,
       bind(...nextValues: any[]) {
         values = nextValues;
         return this;
@@ -44,11 +45,22 @@ class SqliteD1 {
     };
   }
 
-  async batch(statements: Array<{ run: () => Promise<{ success: boolean; meta: Record<string, unknown> }> }>) {
+  async batch(
+    statements: Array<{
+      run: () => Promise<{ success: boolean; meta: Record<string, unknown> }>;
+      all: () => Promise<{ results: unknown[]; success: boolean; meta: Record<string, unknown> }>;
+    }>
+  ) {
     this.sqlite.exec('BEGIN');
     try {
       const results = [];
-      for (const statement of statements) results.push(await statement.run());
+      for (const statement of statements) {
+        // The T19 cooking hard-restriction check reads the ranking context via
+        // db.batch(). Real D1 returns row results for SELECTs in a batch; this
+        // adapter must do the same instead of dropping them via .run().
+        const isSelect = /^\s*select/i.test((statement as any).sql ?? '');
+        results.push(isSelect ? await statement.all() : await statement.run());
+      }
       this.sqlite.exec('COMMIT');
       return results;
     } catch (error) {

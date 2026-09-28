@@ -1,3 +1,31 @@
+# Handoff — T19 cooking hard-restriction hotfix (2026-09-28)
+
+**Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch
+`fix/t19-cooking-hard-restriction-bypass` from exact main
+`85660fa497f3da7110a07ec2189309fbef81d701` (not yet pushed at handoff time).
+
+Problem: `cook/start` and `cook/complete` could be called directly to bypass
+household hard restrictions already enforced by the planner and T20
+Manual/Assisted/Auto. Fix: new `src/worker/services/cooking-hard-restrictions.ts`
+evaluates the canonical `evaluateHardRestrictions` (fail-closed) before any
+success response (`cook/start`) or durable mutation (`cook/complete`, after the
+idempotent-replay lookup on both legacy and adopted-lot paths). Facts reuse
+`candidateRestrictionFacts` over the served authority recipe: static authority
+uses the recipe only (no D1 planner enrichment); D1 adds `prep_time_minutes`,
+`recipe_classifications`, and the canonical nutrition evidence provider.
+Response contract matches T20: 422 `HARD_CONSTRAINT_CONFLICT`.
+
+Local gates: regression 15/15 PASS (9 failed before fix, proving the bug);
+nearby authority/T20 suites 50/50 PASS; worker typecheck clean; eslint clean.
+No D1 catalog mutation, no migration, no secret/config/rollout change, no
+staging or production deploy. Staging remains canary 1% — do NOT promote.
+
+Next: push branch, open PR `fix(t19): enforce hard restrictions at cooking
+boundary`, await review and merge. After merge, the T19 rollout restarts from
+shadow on the new main SHA (fresh D1 proof required; old evidence stale).
+
+---
+
 # Handoff — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Main remains

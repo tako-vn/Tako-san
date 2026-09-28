@@ -502,6 +502,19 @@ class CookingDatabase extends FakeDatabase {
   }
 
   async batch(statements: FakeStatement[]): Promise<D1Result[]> {
+    // The T19 cooking hard-restriction check reads the ranking context before
+    // any mutation. This fixture household has no preferences, so the check
+    // passes. Reads are not recorded as mutation batches.
+    if (statements.length === 6 && statements[0].sql.includes('FROM household_members')) {
+      return [
+        { success: true, meta: { changes: 0 }, results: [{ present: 1 }] },
+        { success: true, meta: { changes: 0 }, results: [] },
+        { success: true, meta: { changes: 0 }, results: [] },
+        { success: true, meta: { changes: 0 }, results: [] },
+        { success: true, meta: { changes: 0 }, results: [] },
+        { success: true, meta: { changes: 0 }, results: [] },
+      ];
+    }
     this.batches.push(statements);
     if (this.failBatchAfterCommit) {
       this.prior = {
