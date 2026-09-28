@@ -13,6 +13,9 @@ import { invalidateInventoryDependents } from '../lib/query-invalidation';
 import { presentConfidence, presentDomainError, presentRefetchOutcome } from '../lib/inventory-truth';
 import { ApiError } from '../services/http';
 import { ScanProcessingState } from '../components/scan/ScanProcessingState';
+import { describeScanFailure } from '../lib/scan-errors';
+import { queryClient } from '../lib/query-client';
+import { queryKeys } from '../lib/queryKeys';
 
 const UNITS: StandardUnit[] = ['piece', 'g', 'kg', 'ml', 'l', 'pack', 'bunch', 'slice'];
 const fieldClass = 'mt-1 w-full min-w-0 h-11 px-3 rounded-lg border border-semantic-border text-sm text-semantic-text-primary bg-white focus:border-takosan-green focus:outline-none';
@@ -23,28 +26,7 @@ const confidenceClass = {
   high: 'text-takosan-green-deep bg-takosan-mint',
 };
 
-function scanErrorText(code?: string, _detail?: string): string {
-  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
-    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
-  }
-  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
-    return 'Dịch vụ nhận diện phản hồi quá lâu. Hãy thử lại với ảnh nhỏ và rõ hơn.';
-  }
-  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
-    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
-    return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Hãy thử lại hoặc nhập thủ công.';
-  }
-  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
-    return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
-  }
-  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
-    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
-  }
-  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
-    return 'Ảnh quét không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
-  }
-  return 'Không thể xử lý bản quét. Hãy thử lại với ảnh rõ hơn.';
-}
+type FailureDetail = { quotaNote?: string; supportCode?: string };
 
 export const ScanResultPage: React.FC = () => {
   const { id: paramScanId } = useParams<{ id: string }>();
@@ -74,6 +56,7 @@ const ScanReview: React.FC<{ effectiveScanId: string }> = ({ effectiveScanId }) 
   const [addQty, setAddQty] = useState(1);
   const [addUnit, setAddUnit] = useState<StandardUnit>('piece');
   const [pollError, setPollError] = useState<string | null>(null);
+  const [failureDetail, setFailureDetail] = useState<FailureDetail | null>(null);
   const [scanStatus, setScanStatus] = useState<'pending' | 'ready' | 'confirmed' | 'failed'>(
     !effectiveScanId ? 'failed'
       : matchesScan && reviewStatus ? reviewStatus
@@ -131,13 +114,22 @@ const ScanReview: React.FC<{ effectiveScanId: string }> = ({ effectiveScanId }) 
         setPollError(null);
         if (scan.status === 'ready' || scan.status === 'confirmed') {
           setScanStatus(scan.status);
+          void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
           if (!active()) return;
           useScanStore.getState().setScanResults(effectiveScanId, scan.items || [], scan.status);
           return;
         }
         if (scan.status === 'failed') {
+          const failure = describeScanFailure({
+            code: scan.errorCode,
+            scanType: scan.scanType === 'food' ? 'food' : 'fridge',
+            quotaStatus: scan.quotaStatus,
+            supportRef: scan.supportRef,
+          });
           setScanStatus('failed');
-          setPollError(scanErrorText(scan.errorCode, scan.errorMessage));
+          setPollError(failure.message);
+          setFailureDetail({ quotaNote: failure.quotaNote, supportCode: failure.supportCode });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
           return;
         }
       } catch {
@@ -282,7 +274,15 @@ const ScanReview: React.FC<{ effectiveScanId: string }> = ({ effectiveScanId }) 
         </div>
         {pollError && (
           <div role={scanStatus === 'pending' ? 'alert' : undefined} className="rounded-xl border border-semantic-warning/30 bg-semantic-warning-soft px-3 py-2 text-xs text-semantic-warning-strong flex items-center justify-between gap-3">
-            <span>{pollError}</span>
+            <span>
+              <span className="block">{pollError}</span>
+              {scanStatus === 'failed' && failureDetail?.quotaNote && (
+                <span className="block mt-0.5">{failureDetail.quotaNote}</span>
+              )}
+              {scanStatus === 'failed' && failureDetail?.supportCode && (
+                <span className="block mt-0.5">Mã hỗ trợ: <span className="font-mono">{failureDetail.supportCode}</span></span>
+              )}
+            </span>
             <div className="flex items-center gap-2 shrink-0">
               {scanStatus === 'pending' && (
                 <button className="underline font-semibold" onClick={() => { setPollError(null); setRetryIndex((value) => value + 1); }}>

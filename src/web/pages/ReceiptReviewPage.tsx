@@ -13,29 +13,10 @@ import { invalidateInventoryDependents } from '../lib/query-invalidation';
 import { presentConfidence, presentDomainError, presentPrice, presentPurchaseDate, presentRefetchOutcome } from '../lib/inventory-truth';
 import { ApiError } from '../services/http';
 import { ScanProcessingState } from '../components/scan/ScanProcessingState';
-
-function receiptErrorText(code?: string, _detail?: string): string {
-  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
-    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
-  }
-  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
-    return 'Dịch vụ đọc hóa đơn phản hồi quá lâu. Hãy thử lại với ảnh gọn và rõ hơn.';
-  }
-  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
-    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
-    return 'Dịch vụ đọc hóa đơn đang tạm thời không khả dụng. Bạn có thể nhập thủ công.';
-  }
-  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
-    return 'Dịch vụ đọc hóa đơn đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
-  }
-  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
-    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
-  }
-  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
-    return 'Ảnh hóa đơn không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
-  }
-  return 'Không thể đọc hóa đơn. Hãy thử lại với ảnh rõ hơn.';
-}
+import { describeScanFailure } from '../lib/scan-errors';
+import { queryClient } from '../lib/query-client';
+import { queryKeys } from '../lib/queryKeys';
+import { useScanStore } from '../stores/useScanStore';
 
 interface ReceiptItemState {
   id: string;
@@ -128,6 +109,7 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
   const [pollError, setPollError] = useState<string | null>(
     receiptScanId ? null : 'Không tìm thấy bản quét hóa đơn. Vui lòng quay lại và quét ảnh mới.'
   );
+  const [failureDetail, setFailureDetail] = useState<{ quotaNote?: string; supportCode?: string } | null>(null);
   const [retryIndex, setRetryIndex] = useState(0);
   const [items, setItems] = useState<ReceiptItemState[]>([]);
   const isPending = liveReceipt.status === 'pending' || liveReceipt.status === 'processing';
@@ -164,7 +146,14 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
           if (attempts < 90) timer = window.setTimeout(poll, 1000);
           else setPollError('Hóa đơn đang xử lý lâu hơn dự kiến. Bạn có thể kiểm tra lại hoặc chọn ảnh mới.');
         } else if (next.status === 'failed') {
-          setPollError(receiptErrorText(next.errorCode, next.errorMessage));
+          const failure = describeScanFailure({
+            code: next.errorCode, scanType: 'receipt', quotaStatus: next.quotaStatus, supportRef: next.supportRef,
+          });
+          setPollError(failure.message);
+          setFailureDetail({ quotaNote: failure.quotaNote, supportCode: failure.supportCode });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
+        } else {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
         }
       } catch {
         if (cancelled || !isCurrent()) return;
@@ -283,7 +272,15 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
           <div role="alert" className="rounded-xl border border-semantic-danger/30 bg-semantic-danger-soft px-3 py-2 text-xs text-semantic-danger-strong flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{pollError}</span>
+              <span>
+                <span className="block">{pollError}</span>
+                {liveReceipt.status === 'failed' && failureDetail?.quotaNote && (
+                  <span className="block mt-0.5">{failureDetail.quotaNote}</span>
+                )}
+                {liveReceipt.status === 'failed' && failureDetail?.supportCode && (
+                  <span className="block mt-0.5">Mã hỗ trợ: <span className="font-mono">{failureDetail.supportCode}</span></span>
+                )}
+              </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {isPending && (
@@ -297,7 +294,7 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
                 </button>
               )}
               {!isPending && !isReady && (
-                <button className="underline font-semibold" onClick={() => navigate('/scan')}>
+                <button className="underline font-semibold" onClick={() => { useScanStore.getState().reset(); navigate('/scan'); }}>
                   Quét ảnh mới
                 </button>
               )}

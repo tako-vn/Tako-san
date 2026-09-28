@@ -48,6 +48,8 @@ app.use('*', async (c, next) => {
     const environment = c.env.ENVIRONMENT || 'development';
     const record = {
       requestId,
+      // Exact-match key for the short "Mã hỗ trợ" the client shows on errors.
+      supportCode: requestId.slice(0, 8),
       method: c.req.method,
       path: c.req.path,
       status,
