@@ -33,7 +33,9 @@ const app = new Hono<WorkerApp>();
 // 1. Structured request logging with correlation + traceability. Sensitive
 // headers (Cookie, Authorization, tokens) are never logged.
 app.use('*', async (c, next) => {
-  const requestId = c.req.header('X-Request-Id') || crypto.randomUUID();
+  // Accept an upstream correlation id only in a bounded, log-safe shape.
+  const inbound = c.req.header('X-Request-Id');
+  const requestId = inbound && /^[A-Za-z0-9._:-]{8,128}$/.test(inbound) ? inbound : crypto.randomUUID();
   c.set('requestId', requestId);
   const startedAt = Date.now();
   let status = 500;
@@ -100,6 +102,8 @@ app.use('*', cors({
   // separately-hosted frontend as well as same-origin deployments.
   allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-household-id',
     'X-Frigo-Expected-User-Id', 'X-Frigo-Expected-Household-Id', 'Idempotency-Key', 'If-Match'],
+  // Error UIs show the correlation id as a support code.
+  exposeHeaders: ['X-Request-Id', 'Retry-After'],
   credentials: true,
   maxAge: 86400,
 }));

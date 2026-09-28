@@ -25,8 +25,8 @@ import { tenancyGuard } from '../middleware/tenancy';
 import { rateLimiter } from '../middleware/rate-limit';
 import { ScanConfirmSchema } from '../validation/schemas';
 import { fetchHouseholdInventoryFromDb } from './inventory';
-import { reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
-import { ensureScanQueueIntent } from '../services/scan-queue';
+import { reserveScanQuota, finalizeScanQuota, getScanQuota, type ScanReservationSpec } from '../services/scan-quota';
+import { ensureScanQueueIntent, logScanEvent, scanReference, type ScanQueueMessage } from '../services/scan-queue';
 import { sha256Hex } from '../utils/session';
 import { aiConfigFromEnv, logAIUsage } from '../config/ai';
 
@@ -38,6 +38,7 @@ const RETRYABLE_SCAN_CODES = new Set([
   'NETWORK_ERROR',
   'RATE_LIMITED',
   'UPSTREAM_ERROR',
+  'UPSTREAM_BUSY',
   'AI_SCAN_UNAVAILABLE',
 ]);
 
@@ -351,6 +352,7 @@ function publicScanErrorMessage(code: unknown): string | undefined {
     case 'NETWORK_ERROR':
     case 'RATE_LIMITED':
     case 'UPSTREAM_ERROR':
+    case 'UPSTREAM_BUSY':
       return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
     case 'AI_SCAN_UNAVAILABLE':
     case 'AI_UNAVAILABLE':
@@ -363,15 +365,27 @@ function publicScanErrorMessage(code: unknown): string | undefined {
     case 'AUTHENTICATION_FAILED':
     case 'PERMISSION_DENIED':
     case 'LICENSE_REQUIRED':
+    case 'PROVIDER_REQUEST_REJECTED':
+    case 'RESOURCE_NOT_FOUND':
       return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Vui lòng thử lại sau hoặc nhập thủ công.';
     case 'AI_IMAGE_TOO_LARGE':
       return 'Ảnh quá lớn để xử lý nhanh. Vui lòng chọn ảnh nhỏ hơn 5MB hoặc chụp lại với độ phân giải thấp hơn.';
+    case 'AI_BUDGET_EXCEEDED':
+      return 'Ảnh có quá nhiều chi tiết để xử lý trong giới hạn cho phép. Vui lòng chụp gần hơn hoặc chia nhỏ hóa đơn.';
     case 'INVALID_RESPONSE':
     case 'SCHEMA_VALIDATION':
       return 'Không nhận diện được dữ liệu đủ rõ từ ảnh. Vui lòng chụp lại gần hơn, đủ sáng và không bị lóa.';
     case 'IMAGE_NOT_FOUND':
     case 'IMAGE_UNAVAILABLE':
       return 'Ảnh quét không còn khả dụng. Vui lòng tải lên ảnh mới.';
+    case 'QUEUE_UNAVAILABLE':
+    case 'IMAGE_STORAGE_FAILED':
+    case 'QUEUE_PAYLOAD_TOO_LARGE':
+      return 'Không thể đưa bản quét vào hàng xử lý. Vui lòng thử lại sau ít phút.';
+    case 'DATABASE_ERROR':
+    case 'CLAIM_LOST':
+    case 'CLAIM_FAILED':
+      return 'Không thể lưu trạng thái bản quét. Vui lòng thử lại sau ít phút.';
     case 'MAX_ATTEMPTS_EXCEEDED':
       return 'Bản quét đã hết số lần xử lý tự động. Vui lòng thử lại với ảnh mới.';
     case 'RESERVATION_EXPIRED':
@@ -389,7 +403,9 @@ function scanFailureStatus(code: string): 400 | 413 | 422 | 429 | 500 | 503 | 50
   if (code === 'AI_BUDGET_EXCEEDED') return 422;
   if (code === 'AI_IMAGE_TOO_LARGE') return 413;
   if (RETRYABLE_SCAN_CODES.has(code) || code === 'MODEL_NOT_FOUND' || code === 'UNSUPPORTED_REQUEST_OPTION' || code === 'AUTHENTICATION_FAILED' ||
-      code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED' || code === 'RESERVATION_EXPIRED') return 503;
+      code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED' || code === 'RESERVATION_EXPIRED' ||
+      code === 'PROVIDER_REQUEST_REJECTED' || code === 'RESOURCE_NOT_FOUND' || code === 'AI_UNAVAILABLE' ||
+      code === 'AI_ESCALATION_EXHAUSTED') return 503;
   return 500;
 }
 
@@ -698,6 +714,98 @@ async function persistScanFailure(
   }
 }
 
+type ScanContext = Context<{ Bindings: Env; Variables: { auth: AuthContext } }>;
+type QuotaStatus = 'reserved' | 'consumed' | 'released';
+
+function requestIdOf(c: ScanContext): string | undefined {
+  const value = (c as unknown as Context<{ Variables: { requestId?: string } }>).get('requestId');
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+async function readQuotaStatus(db: Env['DB'], scanId: string, householdId: string): Promise<QuotaStatus | undefined> {
+  try {
+    const row = await db!.prepare('SELECT status FROM scan_quota_ledger WHERE scan_id = ? AND household_id = ?')
+      .bind(scanId, householdId).first<{ status: QuotaStatus }>();
+    return row?.status;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Map a failed reservation to its machine code; quota rejections carry the server snapshot. */
+async function quotaRejection(
+  c: ScanContext,
+  db: NonNullable<Env['DB']>,
+  scanId: string,
+  scanType: string,
+  reason: 'exceeded' | 'unavailable' | 'conflict',
+) {
+  if (reason === 'conflict') {
+    return c.json({ error: 'Idempotency key đã được sử dụng cho bản quét khác', code: 'IDEMPOTENCY_CONFLICT' }, 409);
+  }
+  if (reason === 'unavailable') {
+    return c.json({ error: 'Không thể kiểm tra hạn mức quét', code: 'QUOTA_UNAVAILABLE', retryable: true }, 503);
+  }
+  let quota: { plan: string; limit: number; used: number; remaining: number; resetAt: string } | undefined;
+  try {
+    const snapshot = await getScanQuota(db, c.get('auth').userId);
+    quota = { plan: snapshot.plan, limit: snapshot.limit, used: snapshot.used, remaining: snapshot.remaining, resetAt: snapshot.resetAt };
+  } catch {
+    quota = undefined;
+  }
+  logScanEvent({
+    event: 'scan_rejected', scanRef: await scanReference(scanId), scanType, errorCode: 'SCAN_QUOTA_EXCEEDED',
+    retryable: false, requestId: requestIdOf(c), plan: quota?.plan, limit: quota?.limit, used: quota?.used,
+  });
+  return c.json({
+    error: 'Đã vượt hạn mức quét trong tháng',
+    code: 'SCAN_QUOTA_EXCEEDED',
+    retryable: false,
+    ...(quota ? { quota } : {}),
+  }, 429);
+}
+
+/**
+ * Persist the queue intent, then send. The reservation stays `reserved`: the
+ * consumer consumes it with `ready` and releases it on terminal failure
+ * (ADR-039). Returns an error response, or null once the job is queued.
+ */
+async function enqueueScanJob(
+  c: ScanContext,
+  reservationId: string,
+  message: ScanQueueMessage,
+  options: { firstSend: boolean },
+): Promise<Response | null> {
+  const db = c.env.DB!;
+  const scanType = message.scanType || 'fridge';
+  const scanRef = await scanReference(message.scanId);
+  const requestId = requestIdOf(c);
+  const error = scanType === 'receipt' ? 'Không thể xếp hàng hóa đơn' : 'Không thể xếp hàng bản quét';
+  try {
+    await ensureScanQueueIntent(c.env, message);
+  } catch {
+    if (options.firstSend) {
+      // Nothing was sent for this fresh reservation, so no consumer can commit
+      // it: fail the scan and refund now instead of waiting for reconciliation.
+      await persistScanFailure(db, message.scanId, c.get('auth'), 'QUEUE_UNAVAILABLE');
+      await finalizeScanQuota(db, reservationId, 'released');
+    }
+    const quota: QuotaStatus = options.firstSend ? 'released' : 'reserved';
+    logScanEvent({ event: 'scan_enqueue_failed', scanRef, scanType, stage: 'intent', errorCode: 'QUEUE_UNAVAILABLE', retryable: true, quota, requestId }, 'error');
+    return c.json({ error, code: 'QUEUE_UNAVAILABLE', retryable: true, quotaStatus: quota }, 503);
+  }
+  try {
+    await c.env.SCAN_QUEUE!.send(message);
+  } catch {
+    // The platform may have accepted the message. Keep the reservation: a
+    // same-key retry re-sends the same job and reconciliation bounds the hold.
+    logScanEvent({ event: 'scan_enqueue_failed', scanRef, scanType, stage: 'send', errorCode: 'QUEUE_UNAVAILABLE', retryable: true, quota: 'reserved', requestId }, 'error');
+    return c.json({ error, code: 'QUEUE_UNAVAILABLE', retryable: true, quotaStatus: 'reserved' }, 503);
+  }
+  logScanEvent({ event: 'scan_enqueued', scanRef, scanType, state: 'pending', quota: 'reserved', requestId });
+  return null;
+}
+
 async function scanCommand(c: Context<{ Bindings: Env; Variables: { auth: AuthContext } }>, scanType: string) {
   const key = c.req.header('Idempotency-Key');
   if (key !== undefined && !/^[A-Za-z0-9:_-]{1,128}$/.test(key)) return null;
@@ -773,6 +881,7 @@ async function recoverScan(
       error: publicScanErrorMessage(code) || 'Không thể xử lý bản quét.',
       code,
       retryable: RETRYABLE_SCAN_CODES.has(code),
+      quotaStatus: await readQuotaStatus(c.env.DB, scanId, auth.householdId),
       scan: { id: scanId, userId: auth.userId, householdId: auth.householdId, scanType, status: 'failed' },
     }, scanFailureStatus(code));
   }
@@ -799,29 +908,17 @@ async function recoverScan(
         return c.json({ error: 'Không thể lưu ảnh để xử lý nền', code: 'IMAGE_STORAGE_FAILED' }, 503);
       }
     }
-    try {
-      await ensureScanQueueIntent(c.env, {
-        type: 'scan.process.v1', jobId: `scan_job_${scanId}`, scanId,
-        userId: auth.userId, householdId: auth.householdId, scanType,
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : replayImage.base64,
-        mimeType: persistedMime || replayImage.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-      await c.env.SCAN_QUEUE.send({
-        type: 'scan.process.v1', jobId: `scan_job_${scanId}`, scanId,
-        userId: auth.userId, householdId: auth.householdId, scanType,
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : replayImage.base64,
-        mimeType: persistedMime || replayImage.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-    } catch {
-      return c.json({ error: 'Không thể xếp hàng bản quét', code: 'QUEUE_UNAVAILABLE' }, 503);
-    }
-    await finalizeScanQuota(c.env.DB, reservationId, 'consumed');
+    // A replay never refunds on a failed re-send: the original send may be live.
+    const queued = await enqueueScanJob(c, reservationId, {
+      type: 'scan.process.v1', jobId: `scan_job_${scanId}`, scanId,
+      userId: auth.userId, householdId: auth.householdId, scanType,
+      imageKey: imageKey || undefined,
+      imageBase64: imageKey ? undefined : replayImage.base64,
+      mimeType: persistedMime || replayImage.mimeType,
+      idempotencyKey,
+      requestFingerprint,
+    }, { firstSend: false });
+    if (queued) return queued;
   }
   const items = row ? await c.env.DB.prepare(SQL.GET_SCAN_ITEMS).bind(scanId).all() : { results: [] };
   const scan = {
@@ -875,10 +972,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
     idempotencyKey,
     scan: scanReservationSpec(imageKey, scanType, image, requestFingerprint),
   });
-  if (!quota.ok) {
-    const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
-  }
+  if (!quota.ok) return quotaRejection(c, db, scanId, scanType, quota.reason);
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, scanType, idempotencyKey, reservationId, image, requestFingerprint);
   let imageStored = false;
@@ -912,43 +1006,25 @@ scanRoutes.post('/scans/fridge', async (c) => {
       await finalizeScanQuota(db, reservationId, 'released');
       return c.json({ error: 'Môi trường xử lý nền cần R2 để lưu ảnh lớn', code: 'QUEUE_PAYLOAD_TOO_LARGE' }, 413);
     }
-    try {
-      await ensureScanQueueIntent(c.env, {
-        type: 'scan.process.v1',
-        jobId: `scan_job_${scanId}`,
-        scanId,
-        userId: auth.userId,
-        householdId: auth.householdId,
-        scanType: scanType === 'food' ? 'food' : 'fridge',
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : image.base64,
-        mimeType: image.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-      await c.env.SCAN_QUEUE.send({
-        type: 'scan.process.v1',
-        jobId: `scan_job_${scanId}`,
-        scanId,
-        userId: auth.userId,
-        householdId: auth.householdId,
-        scanType: scanType === 'food' ? 'food' : 'fridge',
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : image.base64,
-        mimeType: image.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-      await finalizeScanQuota(db, reservationId, 'consumed');
-      return c.json({
-        success: true,
-        queued: true,
-        scan: { id: scanId, userId: auth.userId, householdId: auth.householdId, imageKey, scanType, status: 'pending', items: [], createdAt: new Date().toISOString() },
-      }, 202);
-    } catch {
-      console.error('Scan queue enqueue failed');
-      return c.json({ error: 'Không thể xếp hàng bản quét', code: 'QUEUE_UNAVAILABLE' }, 503);
-    }
+    const queued = await enqueueScanJob(c, reservationId, {
+      type: 'scan.process.v1',
+      jobId: `scan_job_${scanId}`,
+      scanId,
+      userId: auth.userId,
+      householdId: auth.householdId,
+      scanType: scanType === 'food' ? 'food' : 'fridge',
+      imageKey: imageKey || undefined,
+      imageBase64: imageKey ? undefined : image.base64,
+      mimeType: image.mimeType,
+      idempotencyKey,
+      requestFingerprint,
+    }, { firstSend: true });
+    if (queued) return queued;
+    return c.json({
+      success: true,
+      queued: true,
+      scan: { id: scanId, userId: auth.userId, householdId: auth.householdId, imageKey, scanType, status: 'pending', items: [], createdAt: new Date().toISOString() },
+    }, 202);
   }
 
   // Bound the provider call so a hung request cannot hold the Worker open
@@ -1096,10 +1172,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
     idempotencyKey,
     scan: scanReservationSpec(imageKey, 'receipt', image, requestFingerprint),
   });
-  if (!quota.ok) {
-    const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
-  }
+  if (!quota.ok) return quotaRejection(c, db, scanId, 'receipt', quota.reason);
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, 'receipt', idempotencyKey, reservationId, image, requestFingerprint);
   let imageStored = false;
@@ -1127,52 +1200,34 @@ scanRoutes.post('/scans/receipt', async (c) => {
       return c.json({ error: 'Môi trường xử lý nền cần R2 để lưu ảnh lớn', code: 'QUEUE_PAYLOAD_TOO_LARGE' }, 413);
     }
 
-    try {
-      await ensureScanQueueIntent(c.env, {
-        type: 'scan.process.v1',
-        jobId: `scan_job_${scanId}`,
-        scanId,
+    const queued = await enqueueScanJob(c, reservationId, {
+      type: 'scan.process.v1',
+      jobId: `scan_job_${scanId}`,
+      scanId,
+      userId: auth.userId,
+      householdId: auth.householdId,
+      scanType: 'receipt',
+      imageKey: imageKey || undefined,
+      imageBase64: imageKey ? undefined : image.base64,
+      mimeType: image.mimeType,
+      idempotencyKey,
+      requestFingerprint,
+    }, { firstSend: true });
+    if (queued) return queued;
+    return c.json({
+      success: true,
+      queued: true,
+      receipt: {
+        id: scanId,
         userId: auth.userId,
         householdId: auth.householdId,
+        imageKey,
         scanType: 'receipt',
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : image.base64,
-        mimeType: image.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-      await c.env.SCAN_QUEUE.send({
-        type: 'scan.process.v1',
-        jobId: `scan_job_${scanId}`,
-        scanId,
-        userId: auth.userId,
-        householdId: auth.householdId,
-        scanType: 'receipt',
-        imageKey: imageKey || undefined,
-        imageBase64: imageKey ? undefined : image.base64,
-        mimeType: image.mimeType,
-        idempotencyKey,
-        requestFingerprint,
-      });
-      await finalizeScanQuota(db, reservationId, 'consumed');
-      return c.json({
-        success: true,
-        queued: true,
-        receipt: {
-          id: scanId,
-          userId: auth.userId,
-          householdId: auth.householdId,
-          imageKey,
-          scanType: 'receipt',
-          status: 'pending',
-          items: [],
-          createdAt: new Date().toISOString(),
-        },
-      }, 202);
-    } catch {
-      console.error('Receipt queue enqueue failed');
-      return c.json({ error: 'Không thể xếp hàng hóa đơn', code: 'QUEUE_UNAVAILABLE' }, 503);
-    }
+        status: 'pending',
+        items: [],
+        createdAt: new Date().toISOString(),
+      },
+    }, 202);
   }
 
   let receiptResult;
@@ -1316,12 +1371,14 @@ scanRoutes.get('/scans/:id', async (c) => {
       return c.json({ error: 'Bản quét không tồn tại hoặc bạn không có quyền xem', code: 'NOT_FOUND' }, 404);
     }
 
-    const [itemsRes, queueJob] = await Promise.all([
+    const [itemsRes, queueJob, quotaStatus, supportRef] = await Promise.all([
       db.prepare(SQL.GET_SCAN_ITEMS).bind(id).all(),
       db.prepare(`SELECT error_code, attempts, max_attempts
         FROM scan_queue_jobs WHERE scan_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1`)
         .bind(id)
         .first<{ error_code: string | null; attempts: number; max_attempts: number }>(),
+      readQuotaStatus(db, scan.id, auth.householdId),
+      scanReference(scan.id),
     ]);
     const items = (itemsRes.results || []).map((row: any) => scanItemDto(row, scan.id));
 
@@ -1341,6 +1398,9 @@ scanRoutes.get('/scans/:id', async (c) => {
         errorMessage: scan.status === 'failed' ? publicScanErrorMessage(queueJob?.error_code) : undefined,
         attempts: queueJob?.attempts == null ? undefined : Number(queueJob.attempts),
         maxAttempts: queueJob?.max_attempts == null ? undefined : Number(queueJob.max_attempts),
+        // ADR-039: lets the client state truthfully whether this scan counted.
+        quotaStatus,
+        supportRef,
         items,
         createdAt: scan.created_at,
       },

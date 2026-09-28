@@ -39,11 +39,12 @@ export function aiConfigFromEnv(env: Env, backgroundExecutor?: (promise: Promise
   };
 }
 
-/** Emit non-PII usage metadata for Workers observability. */
-export function logAIUsage(log: AIUsageLog): void {
+/** Emit non-PII usage metadata for Workers observability. `scanRef` joins AI attempts to scan events. */
+export function logAIUsage(log: AIUsageLog, context?: { scanRef?: string; scanType?: string }): void {
   console.log(JSON.stringify({
     level: 'info',
     event: 'ai_usage',
+    ...(context?.scanRef ? { scanRef: context.scanRef, scanType: context.scanType } : {}),
     task: log.task,
     provider: log.provider,
     logicalModel: log.logicalModel,

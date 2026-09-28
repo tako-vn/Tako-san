@@ -3,6 +3,7 @@ import { findCanonicalIngredient, findCanonicalIngredientById, StandardUnit } fr
 import { Env } from '../types';
 import { sha256Hex } from '../utils/session';
 import { aiConfigFromEnv, logAIUsage } from '../config/ai';
+import { consumeScanReservationStatement, releaseScanReservationStatements, type ScanReservationScope } from './scan-quota';
 
 // scan_items.confidence is NOT NULL with a historical 0.9 default and cannot
 // express "the provider reported none". Like the synchronous route, the queue
@@ -43,6 +44,42 @@ export class ScanQueueError extends Error {
   }
 }
 
+/**
+ * Short, non-reversible scan reference shared by producer/consumer logs and
+ * the public scan status (`supportRef`), so an operator can correlate a
+ * user-visible failure without logging tenant identifiers.
+ */
+export async function scanReference(scanId: string): Promise<string> {
+  return (await sha256Hex(`scan-ref:${scanId}`)).slice(0, 12);
+}
+
+export type ScanEvent = {
+  event: string;
+  scanRef: string;
+  scanType?: string;
+  state?: string;
+  errorCode?: string;
+  retryable?: boolean;
+  attempt?: number;
+  maxAttempts?: number;
+  latencyMs?: number;
+  quota?: 'reserved' | 'consumed' | 'released';
+  requestId?: string;
+  itemCount?: number;
+  stage?: string;
+  plan?: string;
+  limit?: number;
+  used?: number;
+};
+
+/** Structured, PII-free scan lifecycle log line (no user/household ids, no OCR text). */
+export function logScanEvent(record: ScanEvent, level: 'info' | 'warn' | 'error' = 'info'): void {
+  const line = JSON.stringify({ level, ...record });
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+}
+
 /** Persist the queue intent before sending so an ambiguous producer response
  * can be retried by the scheduled reconciler without charging another scan. */
 export async function ensureScanQueueIntent(env: Env, message: ScanQueueMessage): Promise<void> {
@@ -66,17 +103,26 @@ export async function ensureScanQueueIntent(env: Env, message: ScanQueueMessage)
   ).run();
   if (!inserted.success) throw new ScanQueueError('Queue intent could not be persisted', 'DATABASE_ERROR', true);
 
-  // A client retry is evidence that the producer is still active. Re-arm only
-  // a synthetic reservation-expiry tombstone; permanent provider failures and
-  // active processing leases must remain untouched.
+  // Re-arm a terminal job only for a new attempt of the same command: the scan
+  // is `pending` again and holds a fresh `reserved` ledger row, which only
+  // reserveScanQuota's re-reservation of a released (refunded/expired) row
+  // produces. Active leases and terminal jobs without a new reservation stay.
   const rearmed = await env.DB.prepare(
     `UPDATE scan_queue_jobs SET status = 'pending', attempts = 0,
         claim_token = NULL, claim_attempt = 0, locked_at = NULL,
         error_code = NULL, error_message = NULL, completed_at = NULL,
         updated_at = datetime('now')
        WHERE id = ? AND scan_id = ? AND user_id = ? AND household_id = ?
-         AND status = 'failed' AND error_code = 'RESERVATION_EXPIRED'`,
-  ).bind(jobId, message.scanId, message.userId, message.householdId).run();
+         AND status = 'failed'
+         AND EXISTS (SELECT 1 FROM scans
+           WHERE id = ? AND user_id = ? AND household_id = ? AND status = 'pending')
+         AND EXISTS (SELECT 1 FROM scan_quota_ledger
+           WHERE scan_id = ? AND user_id = ? AND household_id = ? AND status = 'reserved')`,
+  ).bind(
+    jobId, message.scanId, message.userId, message.householdId,
+    message.scanId, message.userId, message.householdId,
+    message.scanId, message.userId, message.householdId,
+  ).run();
   if (!rearmed.success) throw new ScanQueueError('Queue intent could not be re-armed', 'DATABASE_ERROR', true);
 
   // Refresh only a pending intent; never disturb a worker's processing lease.
@@ -138,7 +184,11 @@ export function sanitizedScanErrorMessage(code: string): string {
     case 'NETWORK_ERROR':
     case 'RATE_LIMITED':
     case 'UPSTREAM_ERROR':
+    case 'UPSTREAM_BUSY':
       return 'Dịch vụ nhận diện đang bận hoặc mất kết nối.';
+    case 'PROVIDER_REQUEST_REJECTED':
+    case 'RESOURCE_NOT_FOUND':
+      return 'Dịch vụ nhận diện đang tạm thời không khả dụng.';
     case 'IMAGE_NOT_FOUND':
     case 'IMAGE_UNAVAILABLE':
       return 'Ảnh bản quét không còn khả dụng.';
@@ -266,8 +316,8 @@ async function verifyScanRequestIdentity(
   }
 }
 
-function getRouter(env: Env): AIRouter {
-  return new AIRouter(aiConfigFromEnv(env), logAIUsage);
+function getRouter(env: Env, context: { scanRef: string; scanType: string }): AIRouter {
+  return new AIRouter(aiConfigFromEnv(env), (log) => logAIUsage(log, context));
 }
 
 async function loadImage(env: Env, message: ScanQueueMessage): Promise<{ data: string; mimeType: string }> {
@@ -288,7 +338,9 @@ async function loadImage(env: Env, message: ScanQueueMessage): Promise<{ data: s
   };
 }
 
-type ScanClaim = { status: 'claimed'; jobId: string; claimToken: string } | { status: 'done' | 'missing' };
+type ScanClaim =
+  | { status: 'claimed'; jobId: string; claimToken: string; attempt?: number; maxAttempts?: number }
+  | { status: 'done' | 'missing' };
 
 function newClaimToken(): string {
   return typeof crypto.randomUUID === 'function'
@@ -342,6 +394,8 @@ async function claimScanJobWithLease(env: Env, message: ScanQueueMessage): Promi
   const exhaustedToken = newClaimToken();
   const eligible = `(status = 'pending' OR (status = 'processing'
     AND (locked_at IS NULL OR datetime(locked_at) <= datetime('now', '-10 minutes'))))`;
+  const scope: ScanReservationScope = { scanId: message.scanId, userId: message.userId, householdId: message.householdId };
+  const exhaustedGuard = `EXISTS (SELECT 1 FROM scan_queue_jobs WHERE id = ? AND status = 'failed' AND claim_token = ?)`;
   const results = await env.DB.batch([
     env.DB.prepare(`UPDATE scan_queue_jobs SET status = 'failed', error_code = 'MAX_ATTEMPTS_EXCEEDED',
       error_message = 'Processing lease expired after maximum attempts', completed_at = datetime('now'), updated_at = datetime('now'), claim_token = ?
@@ -365,9 +419,22 @@ async function claimScanJobWithLease(env: Env, message: ScanQueueMessage): Promi
       WHERE id = ? AND status IN ('pending', 'processing')
         AND EXISTS (SELECT 1 FROM scan_queue_jobs WHERE id = ? AND status = 'processing' AND claim_token = ?)`)
       .bind(message.scanId, jobId, claimToken),
+    // A lease that expired on its final attempt is terminal: refund it in the
+    // same batch that fails the scan (no-op unless this batch exhausted it).
+    ...releaseScanReservationStatements(env.DB, scope, exhaustedGuard, [jobId, exhaustedToken]),
   ]);
   if (results.some((result) => !result.success)) throw new ScanQueueError('Scan claim failed', 'CLAIM_FAILED', true);
-  if (results[2].meta?.changes === 1) return { status: 'claimed', jobId, claimToken };
+  if (results[2].meta?.changes === 1) {
+    const lease = await env.DB.prepare('SELECT attempts, max_attempts FROM scan_queue_jobs WHERE id = ? AND claim_token = ?')
+      .bind(jobId, claimToken).first<{ attempts: number; max_attempts: number }>().catch(() => null);
+    return { status: 'claimed', jobId, claimToken, attempt: lease?.attempts, maxAttempts: lease?.max_attempts };
+  }
+  if (results[0].meta?.changes === 1) {
+    logScanEvent({
+      event: 'scan_job_failed', scanRef: await scanReference(message.scanId), scanType,
+      state: 'failed', errorCode: 'MAX_ATTEMPTS_EXCEEDED', retryable: false, quota: 'released',
+    }, 'warn');
+  }
   const current = await env.DB.prepare(`SELECT scans.status AS scan_status, scan_queue_jobs.status AS job_status
     FROM scans LEFT JOIN scan_queue_jobs ON scan_queue_jobs.id = ? WHERE scans.id = ?`)
     .bind(jobId, message.scanId).first<{ scan_status: string; job_status: string | null }>();
@@ -415,14 +482,19 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
   if (claim.status !== 'claimed') return;
 
   const { jobId, claimToken } = claim;
+  const startedAt = Date.now();
+  const scanType = message.scanType || 'fridge';
+  const scanRef = await scanReference(message.scanId);
+  const scope: ScanReservationScope = { scanId: message.scanId, userId: message.userId, householdId: message.householdId };
   try {
     const image = await loadImage(env, message);
     await verifyScanRequestIdentity(env, message, image);
-    const router = getRouter(env);
-    const scanType = message.scanType || 'fridge';
+    const router = getRouter(env, { scanRef, scanType });
     const fence = commitFence(env, message, jobId, claimToken);
+    let itemCount = 0;
     if (scanType === 'receipt') {
       const receipt = await runScanAI(router.receiptScan({ imageBase64OrUrl: image.data, mimeType: image.mimeType }));
+      itemCount = receipt.items.length;
       const statements = receipt.items.map((item, index) => {
         const canonical = findCanonicalIngredient(item.raw_name);
         const providerCanonical = item.canonical_id ? findCanonicalIngredientById(item.canonical_id) : null;
@@ -468,6 +540,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
              total_amount_vnd = ?, updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND ${fence.guard}`,
         ).bind(receipt.merchant_name ?? null, receipt.invoice_number ?? null, receipt.purchase_date ?? null, receipt.total_amount_vnd ?? null, message.scanId, ...fence.bindings),
+        consumeScanReservationStatement(env.DB, scope, fence.guard, fence.bindings),
         env.DB.prepare(
           `UPDATE scan_queue_jobs SET status = 'ready', completed_at = datetime('now'), updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND claim_token = ?`,
@@ -480,6 +553,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
         imageBase64OrUrl: image.data,
         mimeType: image.mimeType,
       }));
+      itemCount = result.items.length;
       const statements = result.items.map((item, index) => {
         const canonical = findCanonicalIngredient(item.raw_name);
         const providerCanonical = item.canonical_id
@@ -519,6 +593,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
         ...statements,
         env.DB.prepare(`UPDATE scans SET status = 'ready', updated_at = datetime('now') WHERE id = ? AND status = 'processing' AND ${fence.guard}`)
           .bind(message.scanId, ...fence.bindings),
+        consumeScanReservationStatement(env.DB, scope, fence.guard, fence.bindings),
         env.DB.prepare(
           `UPDATE scan_queue_jobs SET status = 'ready', completed_at = datetime('now'), updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND claim_token = ?`,
@@ -527,6 +602,10 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       const commitResults = await env.DB.batch(commitStatements);
       assertFencedCommit(commitResults);
     }
+    logScanEvent({
+      event: 'scan_job_ready', scanRef, scanType, state: 'ready', attempt: claim.attempt,
+      maxAttempts: claim.maxAttempts, itemCount, latencyMs: Date.now() - startedAt, quota: 'consumed',
+    });
   } catch (error) {
     const classification = classifyScanError(error);
     const code = classification.code;
@@ -542,6 +621,9 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       env.DB.prepare(`UPDATE scans SET status = ?, updated_at = datetime('now')
         WHERE id = ? AND status = 'processing' AND ${fence.guard}`)
         .bind(retryable ? 'pending' : 'failed', message.scanId, ...fence.bindings),
+      // Terminal failure produced no usable result: refund in the same fenced
+      // batch. A retryable attempt keeps its reservation for the next delivery.
+      ...(retryable ? [] : releaseScanReservationStatements(env.DB, scope, fence.guard, fence.bindings)),
       env.DB.prepare(`UPDATE scan_queue_jobs SET status = ?, error_code = ?, error_message = ?,
         completed_at = CASE WHEN ? = 'failed' THEN datetime('now') ELSE NULL END, updated_at = datetime('now')
         WHERE id = ? AND status = 'processing' AND claim_token = ?`)
@@ -549,6 +631,12 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
           retryable ? 'pending' : 'failed', ...fence.bindings),
     ]);
     assertFencedCommit(failureResults);
+    logScanEvent({
+      event: retryable ? 'scan_job_retry' : 'scan_job_failed', scanRef, scanType,
+      state: retryable ? 'pending' : 'failed', errorCode: code, retryable,
+      attempt: attemptsRow.attempts, maxAttempts: attemptsRow.max_attempts,
+      latencyMs: Date.now() - startedAt, quota: retryable ? 'reserved' : 'released',
+    }, 'warn');
     throw new ScanQueueError(sanitizedScanErrorMessage(code), code, retryable);
   }
 }

@@ -195,6 +195,49 @@ export async function finalizeScanQuota(db: D1DatabaseBinding, reservationId: st
   ]);
 }
 
+export type ScanReservationScope = { scanId: string; userId: string; householdId: string };
+
+type StatementFactory<S> = { prepare(sql: string): { bind(...values: unknown[]): S } };
+
+/**
+ * Async quota authority (ADR-039): the queue consumer consumes a reservation in
+ * the same fenced D1 batch that commits `ready`. Only a `reserved` row moves, so
+ * a replayed/stale commit cannot double-charge and an expired (released) row is
+ * never resurrected; `guard` must be the caller's lease fence.
+ */
+export function consumeScanReservationStatement<S>(
+  db: StatementFactory<S>,
+  scope: ScanReservationScope,
+  guard: string,
+  guardBindings: readonly unknown[],
+): S {
+  return db.prepare(`UPDATE scan_quota_ledger SET status = 'consumed', completed_at = datetime('now')
+    WHERE scan_id = ? AND user_id = ? AND household_id = ? AND status = 'reserved' AND ${guard}`)
+    .bind(scope.scanId, scope.userId, scope.householdId, ...guardBindings);
+}
+
+/** Release a reservation inside the caller's fenced terminal-failure batch. */
+export function releaseScanReservationStatements<S>(
+  db: StatementFactory<S>,
+  scope: ScanReservationScope,
+  guard: string,
+  guardBindings: readonly unknown[],
+): S[] {
+  return [
+    db.prepare(`UPDATE scan_quota_ledger SET status = 'released', completed_at = datetime('now')
+      WHERE scan_id = ? AND user_id = ? AND household_id = ? AND status = 'reserved' AND ${guard}`)
+      .bind(scope.scanId, scope.userId, scope.householdId, ...guardBindings),
+    // used_count is a projection of the ledger; recomputing it is idempotent.
+    db.prepare(`UPDATE scan_quota_periods SET used_count = (
+        SELECT COUNT(*) FROM scan_quota_ledger q
+         WHERE q.user_id = scan_quota_periods.user_id AND q.period_start = scan_quota_periods.period_start
+           AND q.status != 'released'),
+        updated_at = datetime('now')
+      WHERE user_id = ? AND period_start IN (SELECT period_start FROM scan_quota_ledger WHERE scan_id = ?)`)
+      .bind(scope.userId, scope.scanId),
+  ];
+}
+
 export interface ScanReservationReconciliation {
   consumed: number;
   released: number;

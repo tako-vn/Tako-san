@@ -1,6 +1,61 @@
 # Architecture Decisions
 
 
+## ADR-039 — Async scan quota: reserve on accept, consume on ready, release on terminal failure
+
+**Status:** Proposed 2026-09-28 for review on `hoplite/rhegion-c9ff1930`.
+Does not authorize any production deploy or production data change.
+
+**Context:** Production runs `SCAN_QUEUE_MODE=async`. The producer called
+`finalizeScanQuota(..., 'consumed')` right after `SCAN_QUEUE.send`, before any
+AI work, and the queue consumer never touched `scan_quota_ledger`. Failed async
+scans (permanent provider error, exhausted retries, no usable items, missing
+image) therefore kept their quota. The synchronous path in the same route
+already released on provider/persistence failure and consumed only after a
+persisted result. Guests are free accounts with 5 scans per UTC month. See
+`docs/ai/scan/SCAN_PIPELINE_ROOT_CAUSE.md` (pre-fix reproduction at `36004e8`).
+
+**Decision:** One authority per transition (`docs/ai/scan/SCAN_QUOTA_SEMANTICS.md`):
+
+- `reserved` is taken when a valid command is accepted (after image
+  validation, unchanged) and counts toward the limit so concurrent commands
+  cannot oversubscribe.
+- The producer never consumes on enqueue. The consumer consumes in the same
+  lease-fenced D1 batch that commits `ready`; only a `reserved` row moves.
+- A terminal failure (non-retryable code, attempts exhausted, or a lease that
+  expired on its final attempt) releases in the same fenced batch that commits
+  `failed`. A retryable attempt keeps `reserved`.
+- A queue-intent failure before any send fails the scan and releases at once.
+  An ambiguous `send()` failure keeps `reserved` for same-key recovery or the
+  existing stale-reservation reconciler (60-minute threshold, daily cron).
+- Same `Idempotency-Key`: pending → re-send the same job; ready/confirmed →
+  stored result, no charge; failed and released → a new attempt of the same
+  command (re-reserve, re-arm its job) that is charged only on success. One
+  ledger row per command, so a command is charged at most once.
+- "No usable result" (`INVALID_RESPONSE`, `SCHEMA_VALIDATION`,
+  `AI_SCAN_NO_USABLE_ITEMS`) is a terminal failure and is released, matching
+  the synchronous path. Synchronous mode is unchanged.
+
+**Compatibility:** No migration; existing `scan_quota_ledger`, `scans` and
+`scan_queue_jobs` identifiers already tie a reservation to its scan. Rows the
+old Worker consumed at enqueue stay consumed (no retroactive refund without an
+operator decision). Mixed versions converge: new consumer on an old-producer
+row is a no-op (row already consumed); old consumer on a new-producer row is
+settled by the reconciler (ready → consumed, failed/missing → released).
+Rolling the Worker back is therefore safe.
+
+**Consequences:** Users are charged only for usable results; `GET /scans/:id`
+exposes `quotaStatus` so the UI can say truthfully whether a failure counted.
+Failed attempts still cost provider spend and remain bounded by the scan rate
+limit (12/min per endpoint), 3 queue attempts and at most 3 provider calls per
+attempt; abuse monitoring of repeated failures is a follow-up. A queued scan
+shows as used until it settles.
+
+**Alternatives considered:** refund in the route (it cannot observe async
+outcomes); consume on confirm (`ready` already delivers the value and
+unconfirmed drafts would become free); keep consume-at-enqueue and refund in
+the consumer (two authorities and double-transition races).
+
 ## ADR-038 — Project unplanned slot fields explicitly and share slot time policy with T20
 
 **Status:** Proposed 2026-09-27 for review. Staging remains on

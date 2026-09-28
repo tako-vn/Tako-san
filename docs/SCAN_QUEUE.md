@@ -36,6 +36,15 @@ classification; the public scan status exposes only an actionable code/message
 and attempt counters, never provider credentials or raw image data.
 OCR output is still an untrusted review draft and must not bypass confirmation.
 
+Quota (ADR-039, `docs/ai/scan/SCAN_QUOTA_SEMANTICS.md`): the producer only
+reserves. The consumer consumes the reservation in the fenced batch that
+commits `ready` and releases it in the fenced batch that commits a terminal
+`failed` (including a lease that expired on its final attempt). A retryable
+attempt keeps the reservation. Producer and consumer log PII-free
+`scan_enqueued` / `scan_enqueue_failed` / `scan_rejected` / `scan_job_ready` /
+`scan_job_retry` / `scan_job_failed` events keyed by `scanRef`, which
+`ai_usage` lines and the public scan status (`supportRef`) also carry.
+
 Before sending jobs, apply the complete migration ledger through the candidate's
 current migration (including `0012_scan_queue_jobs.sql` and, for the OCR
 recovery candidate, `0023_scan_request_fingerprint.sql`) to the target D1
