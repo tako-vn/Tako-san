@@ -6,7 +6,7 @@ Final unfiltered `pnpm check` PASS: 216 files / 4,804 tests, typecheck, ESLint, 
 
 Private dataset requirements and runnable fixture tests: `qa/ocr/README.md`; schema: `qa/ocr/expected.schema.json`. The four originals and independent ground truth are missing. `node scripts/ocr-benchmark.mjs prepare --dataset qa/ocr` returns `DATASET_UNAVAILABLE`; live gate remains `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. No production receipt, PII, synthetic QA image, or invented ground truth was used.
 
-Next: await exact-head CI and independent review. A later release owner can stage a reviewed main release under the existing gate, but staging's AI mock cannot certify actual Qwen OCR. The operator must provide the private four-image dataset and ground truth before live OCR scoring. Do not merge or deploy production in this task. Recommendation: `NOT_READY_FOR_PRODUCTION`.
+Implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a` passed hosted CI run `36437178487` / job `108977987256`: ESLint, typecheck, Vitest (216 files), migration smoke, and build. Next: verify the current PR head remains green and obtain independent review. A later release owner can stage a reviewed main release under the existing gate, but staging's AI mock cannot certify actual Qwen OCR. The operator must provide the private four-image dataset and ground truth before live OCR scoring. Do not merge or deploy production in this task. Recommendation: `NOT_READY_FOR_PRODUCTION`.
 
 ---
 

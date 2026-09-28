@@ -6,7 +6,7 @@
 
 - PR #22 review found an async queue-intent failure replay gap: failed scan/released quota with no job could reserve again on the same idempotency key. The regression now returns `SCAN_FAILED`/503 with no new reservation or Queue message. Synchronous replay coverage remains green.
 - First follow-up `pnpm check` passed typecheck and lint, then timed out one unrelated AI provider test at five seconds (4,803/4,804 tests). The isolated suite passed 23/23 and the second unfiltered `pnpm check` passed 216 files / 4,804 tests, typecheck, lint, `migration-smoke=ok`, and build. The exact OCR/scan fixture command in `qa/ocr/README.md` passed 10 files / 210 tests.
-- `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed. Hosted CI on PR head `d4c981ab42c7626a1ee3430540286cd2a613dcee` passed before this review fix; exact-head CI on the new commit remains required.
+- `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed. Hosted CI run `36437178487` / job `108977987256` passed on implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a`: ESLint, typecheck, 216 Vitest files, migration smoke, and build. Verify the current PR head check after any later documentation commit.
 
 ## OCR dataset boundary
 
