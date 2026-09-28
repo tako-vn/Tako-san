@@ -103,6 +103,7 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-household-id',
     'X-Frigo-Expected-User-Id', 'X-Frigo-Expected-Household-Id', 'Idempotency-Key', 'If-Match'],
   credentials: true,
+  exposeHeaders: ['X-Request-Id'],
   maxAge: 86400,
 }));
 

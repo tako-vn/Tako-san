@@ -1,4 +1,14 @@
-# Handoff — Scan/OCR/AI quota remediation (2026-09-28)
+# Scan/OCR handoff — 2026-09-29
+
+PR #22 was reviewed at `439451afeb81aee732c3e7d13acaf0a194b1e70e`, merged as `94056d29ed00a1000e65eb8e1348384638bc02af`, and passed exact-main CI run `36476834182` / job `109112533990` (216 files / 4,804 tests, lint, typecheck, migration smoke, build). Official staging deploy run `36477693577` succeeded on that SHA; production job was skipped. Staging serves AI mock with DB/Queue ready, recipe canary 1%, T20 true. Guest quota API covered 5 ready scans, 6th quota rejection, replay and tenancy. Direct D1 ledger, provider failure, retry exhaustion and no-job fault injection remain unverified on staging.
+
+This follow-up branch `codex/scan-synthetic-ocr-certification` is based on the merge SHA and has local focused 28/28 plus full `pnpm check` PASS. It adds 4 deterministic fictitious receipts/16 variants and a source-first manifest. Apple Vision local baseline achieved 100% normalized names, quantity/unit, line prices and totals with 194-512 ms per image; Qwen OCR was not run. The branch also removes `trứng` and `mozzarella` as incorrect canonical aliases and exposes `X-Request-Id` to trusted CORS origins. Follow-up changes are not in the staging deploy above.
+
+Next: obtain hosted CI and independent review for the follow-up PR before any merge. A dedicated non-production Qwen environment with isolated data resources and approved secret/configuration is needed for real OCR certification. The four original QA images and independently transcribed `qa/ocr/expected.json` are still unavailable; do not infer them from the old incident report. See `docs/ai/scan/SCAN_OCR_REMEDIATION_CERTIFICATION.md`, `qa/ocr/synthetic/README.md`, and `qa/ocr/README.md`. Status: `REAL_QWEN_STAGING_CERTIFICATION_BLOCKED_CONFIGURATION`, `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`, production `NOT_READY_FOR_PRODUCTION`. No production deployment or data mutation.
+
+---
+
+# Historical handoff — Scan/OCR/AI quota remediation (2026-09-28)
 
 PR #22 (`takovn2/Tako-san`) contains the async quota, UI taxonomy, support ID, canonical ingredient, queue fencing/retry, and OCR harness changes. A follow-up review fixed replay of a terminal failed scan after queue-intent persistence fails before a job row exists. The same key now returns `SCAN_FAILED`/503 without reserving quota or sending work; a new key explicitly starts a new attempt. Regression is in `tests/integration/scan-async-quota-lifecycle.test.ts`. No migration or production configuration change.
 
