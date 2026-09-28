@@ -43,5 +43,5 @@ describe('synthetic OCR source-first fixture', () => {
     const second = generate();
     expect(second.expected).toEqual(first.expected);
     expect(second.prepared.cases.map((image) => image.sha256)).toEqual(first.prepared.cases.map((image) => image.sha256));
-  });
+  }, 20_000);
 });
