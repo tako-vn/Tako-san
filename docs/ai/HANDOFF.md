@@ -4,9 +4,9 @@
 
 Local implementation and contract: `docs/ai/scan/`. New tests exercise guest 1–6, ready/failed quota settlement, queue retry/fencing, ambiguous enqueue, request correlation, canonical Vietnamese matching, and UI error/retry behavior. OCR harness expects private `qa/ocr/receipt_easy.*`, `receipt_medium.*`, `receipt_hard.*`, `receipt_veryhard.*`, and `expected.json` per schema; no data was invented. Live status: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.
 
-Final unfiltered `pnpm check` PASS: 215 files / 4,785 tests, typecheck, lint, migration smoke, build. Earlier scan failures were repaired; the Wrangler case passed 32/32 in this canonical run after intermittent isolated timeouts. Diff check passed; no exact-head hosted CI, PR, staging cert, merge, or deploy. Next: rebase on updated main, then hosted CI/review, safe staging, and original private OCR dataset. Production recommendation: `NOT_READY_FOR_PRODUCTION`.
+Final unfiltered `pnpm check` PASS after rebase on `12348efd015ae72337fbeb08651150a7d28ee638`: 216 files / 4,804 tests, typecheck, lint, migration smoke, build. Earlier scan failures were repaired; the Wrangler case passed 32/32 in this canonical run after intermittent isolated timeouts. Diff check passed; no exact-head hosted CI, PR, staging cert, merge, or deploy. Next: push branch and verify exact-head hosted CI/review, safe staging, and original private OCR dataset. Production recommendation: `NOT_READY_FOR_PRODUCTION`.
 
-Local Wrangler gate follow-up: the final canonical run passed 32/32; prior isolated local runs timed out. CI specifies Node 22 for independent verification. `qa/ocr/receipt_*`, `expected.json`, and `results.json` are Git ignored to protect private operator inputs. Remote main advanced five unrelated T19 commits; rebase/revalidation are required before PR.
+Local Wrangler gate follow-up: the final canonical run passed 32/32; prior isolated local runs timed out. CI specifies Node 22 for independent verification. `qa/ocr/receipt_*`, `expected.json`, and `results.json` are Git ignored to protect private operator inputs. Remote main advanced five T19 commits; rebase and full local revalidation passed.
 
 ---
 

@@ -6,7 +6,7 @@
 
 - Initial `pnpm check`: 4,780 passed / 3 failed. Two scan regressions were fixed. The local Wrangler subprocess test was intermittently slow.
 - Full Vitest with only the Wrangler subprocess case excluded by test-name filter: 215 files passed, 4,783 tests passed, 1 skipped. This run preceded the last small UI retry/network-message change; the affected UI tests were rerun afterward, 5/5 passed. The new guest async lifecycle integration suite passed 11/11.
-- Final unfiltered `pnpm check` passed: 215 test files / 4,785 tests, typecheck, lint, `migration-smoke=ok`, and production build. `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed.
+- Final unfiltered `pnpm check` passed after rebase on main `12348efd015ae72337fbeb08651150a7d28ee638`: 216 test files / 4,804 tests, typecheck, lint, `migration-smoke=ok`, and production build. `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed.
 - The Wrangler catch-up test passed 32/32 in the final canonical run. Earlier isolated runs timed out locally, so hosted Node 22 CI remains an important independent check. No test assertion or gate was weakened to conceal this issue.
 
 ## OCR dataset boundary
