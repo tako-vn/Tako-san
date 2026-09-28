@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWorker } from '../helpers/worker-fetch.mjs';
 import { isRecipeCanaryTenant } from '../../packages/recipes/src/recipe-authority';
+import { backfillLegacyInventory } from '../../packages/db/src/inventory-truth';
+import { readInventoryAuthorityMode } from '../../packages/db/src/inventory-writer-fence';
 import {
   resetRecipeAuthorityCacheForTests,
   resetRecipeAuthorityCountersForTests,
@@ -85,6 +87,36 @@ async function seedHousehold(householdId: string) {
 function setPreferences(householdId: string, values: Record<string, unknown>) {
   db.seed(`INSERT INTO household_ranking_preferences (household_id, values_json, updated_at)
     VALUES ('${householdId}', '${JSON.stringify({ version: 1, values })}', '2029-01-01T00:00:00.000Z')`);
+}
+
+/**
+ * Seeds a household and activates native inventory lot authority via the real
+ * adoption flow (backfill + POST /inventory/adopt), not a mocked
+ * `readInventoryAuthorityMode()`. After this, `cook/complete` routes through
+ * `completeAdoptedCooking`.
+ */
+async function seedNativeHousehold(householdId: string) {
+  await seedHousehold(householdId);
+  await backfillLegacyInventory(db, householdId);
+  const adopt = await call('d1', householdId, 'POST', '/inventory/adopt', {});
+  expect(adopt.status, JSON.stringify(adopt.json)).toBe(201);
+  expect(await readInventoryAuthorityMode(db, householdId)).toBe('native');
+}
+
+function nativeStateSnapshot(householdId: string) {
+  const q = (sql: string, ...params: unknown[]) => (db.query(sql, ...params) as any)[0];
+  return {
+    cookedMeals: q('SELECT COUNT(*) AS n FROM cooked_meals WHERE household_id = ?', householdId).n,
+    commands: q('SELECT COUNT(*) AS n FROM inventory_commands WHERE household_id = ?', householdId).n,
+    events: q('SELECT COUNT(*) AS n FROM inventory_events WHERE household_id = ?', householdId).n,
+    lots: JSON.stringify(
+      db.query(
+        'SELECT id, quantity_milli, version, state FROM inventory_lots WHERE household_id = ? ORDER BY id',
+        householdId,
+      ),
+    ),
+    legacyProjection: JSON.stringify(stockSnapshot(householdId)),
+  };
 }
 
 function env(mode: Mode, extra: Partial<Env> = {}): Env {
@@ -305,5 +337,97 @@ describe('T19 cooking hard-restriction bypass — regression', () => {
       expect(complete.status, `${mode}: ${JSON.stringify(complete.json)}`).toBe(422);
       expect(complete.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
     }
+  }, CASE_TIMEOUT_MS);
+});
+
+describe('T19 cooking hard restrictions — native/adopted inventory authority', () => {
+  const NATIVE_BODY = {
+    servings: 2,
+    deductions: [{ ingredientId: 'CHICKEN_EGG', quantityDeducted: 2, unit: 'piece' }],
+  };
+
+  it('restricted recipe on native authority: blocked before any durable mutation', async () => {
+    const householdId = `t19hr-native-blocked-${counter}`;
+    await seedNativeHousehold(householdId);
+    // Deterministic verdict, no safety-evidence dependency.
+    setPreferences(householdId, { forbiddenIngredientIds: ['CHICKEN_EGG'] });
+    const before = nativeStateSnapshot(householdId);
+
+    const complete = await call('d1', householdId, 'POST', `/recipes/${RECIPE}/cook/complete`, NATIVE_BODY, {
+      'Idempotency-Key': `t19hr-native-blocked-${counter}`,
+    });
+    expect(complete.status, JSON.stringify(complete.json)).toBe(422);
+    expect(complete.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+
+    // The restriction check runs before the adopted lot batch: nothing durable
+    // may change.
+    expect(nativeStateSnapshot(householdId)).toEqual(before);
+  }, CASE_TIMEOUT_MS);
+
+  it('blocked native retry stays blocked with zero mutation', async () => {
+    const householdId = `t19hr-native-retry-${counter}`;
+    await seedNativeHousehold(householdId);
+    setPreferences(householdId, { forbiddenIngredientIds: ['CHICKEN_EGG'] });
+    const before = nativeStateSnapshot(householdId);
+    const key = `t19hr-native-retry-${counter}`;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const complete = await call('d1', householdId, 'POST', `/recipes/${RECIPE}/cook/complete`, NATIVE_BODY, {
+        'Idempotency-Key': key,
+      });
+      expect(complete.status, `attempt ${attempt}: ${JSON.stringify(complete.json)}`).toBe(422);
+      expect(complete.json.code).toBe('HARD_CONSTRAINT_CONFLICT');
+    }
+    expect(nativeStateSnapshot(householdId)).toEqual(before);
+  }, CASE_TIMEOUT_MS);
+
+  it('allowed recipe on native authority: cook/complete succeeds with lot deductions', async () => {
+    const householdId = `t19hr-native-happy-${counter}`;
+    await seedNativeHousehold(householdId);
+    const before = nativeStateSnapshot(householdId);
+    const key = `t19hr-native-happy-${counter}`;
+
+    const complete = await call('d1', householdId, 'POST', `/recipes/${RECIPE}/cook/complete`, NATIVE_BODY, {
+      'Idempotency-Key': key,
+    });
+    expect(complete.status, JSON.stringify(complete.json)).toBe(200);
+    expect(complete.json.success).toBe(true);
+    expect(complete.json.cookId).toBeTruthy();
+
+    const after = nativeStateSnapshot(householdId);
+    // One logical cook recorded.
+    expect(after.cookedMeals).toBe(before.cookedMeals + 1);
+    // The adopted lot batch wrote commands and events.
+    expect(after.commands).toBeGreaterThan(before.commands);
+    expect(after.events).toBeGreaterThan(before.events);
+    // CHICKEN_EGG lot decreased by exactly 2 pieces (2000 milli), version bumped.
+    const beforeLots = JSON.parse(before.lots) as Array<{ id: string; quantity_milli: number; version: number }>;
+    const afterLots = JSON.parse(after.lots) as Array<{ id: string; quantity_milli: number; version: number }>;
+    const eggBefore = beforeLots.find((lot) => lot.id.includes('chicken_egg') || lot.id.includes('CHICKEN_EGG'));
+    const eggAfter = afterLots.find((lot) => lot.id === eggBefore?.id);
+    expect(eggBefore).toBeTruthy();
+    expect(eggAfter!.quantity_milli).toBe(eggBefore!.quantity_milli - 2000);
+    expect(eggAfter!.version).toBeGreaterThan(eggBefore!.version);
+  }, CASE_TIMEOUT_MS);
+
+  it('native idempotent replay returns the durable receipt without double deduction', async () => {
+    const householdId = `t19hr-native-replay-${counter}`;
+    await seedNativeHousehold(householdId);
+    const key = `t19hr-native-replay-${counter}`;
+
+    const first = await call('d1', householdId, 'POST', `/recipes/${RECIPE}/cook/complete`, NATIVE_BODY, {
+      'Idempotency-Key': key,
+    });
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const afterFirst = nativeStateSnapshot(householdId);
+
+    const replay = await call('d1', householdId, 'POST', `/recipes/${RECIPE}/cook/complete`, NATIVE_BODY, {
+      'Idempotency-Key': key,
+    });
+    expect(replay.status, JSON.stringify(replay.json)).toBe(200);
+    expect(replay.json).toMatchObject({ success: true, idempotentReplay: true, cookId: first.json.cookId });
+
+    // No second deduction, no duplicate commands/events, still one logical cook.
+    expect(nativeStateSnapshot(householdId)).toEqual(afterFirst);
   }, CASE_TIMEOUT_MS);
 });
