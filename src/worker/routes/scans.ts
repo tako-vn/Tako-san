@@ -25,7 +25,7 @@ import { tenancyGuard } from '../middleware/tenancy';
 import { rateLimiter } from '../middleware/rate-limit';
 import { ScanConfirmSchema } from '../validation/schemas';
 import { fetchHouseholdInventoryFromDb } from './inventory';
-import { reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
+import { getScanQuota, reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
 import { ensureScanQueueIntent } from '../services/scan-queue';
 import { sha256Hex } from '../utils/session';
 import { aiConfigFromEnv, logAIUsage } from '../config/ai';
@@ -821,7 +821,7 @@ async function recoverScan(
     } catch {
       return c.json({ error: 'Không thể xếp hàng bản quét', code: 'QUEUE_UNAVAILABLE' }, 503);
     }
-    await finalizeScanQuota(c.env.DB, reservationId, 'consumed');
+    // The consumer settles quota in the same fenced batch as the scan result.
   }
   const items = row ? await c.env.DB.prepare(SQL.GET_SCAN_ITEMS).bind(scanId).all() : { results: [] };
   const scan = {
@@ -877,7 +877,8 @@ scanRoutes.post('/scans/fridge', async (c) => {
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
+    const quotaState = quota.reason === 'exceeded' ? await getScanQuota(db, auth.userId).catch(() => null) : null;
+    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE', resetAt: quotaState?.resetAt, quota: quotaState }, status);
   }
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, scanType, idempotencyKey, reservationId, image, requestFingerprint);
@@ -926,6 +927,12 @@ scanRoutes.post('/scans/fridge', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
+    } catch {
+      await persistScanFailure(db, scanId, auth, 'DATABASE_ERROR');
+      await finalizeScanQuota(db, reservationId, 'released');
+      return c.json({ error: 'Không thể lưu yêu cầu xử lý nền', code: 'DATABASE_ERROR' }, 503);
+    }
+    try {
       await c.env.SCAN_QUEUE.send({
         type: 'scan.process.v1',
         jobId: `scan_job_${scanId}`,
@@ -939,7 +946,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
-      await finalizeScanQuota(db, reservationId, 'consumed');
+      // Queue acceptance reserves a slot; only a ready scan consumes it.
       return c.json({
         success: true,
         queued: true,
@@ -1098,7 +1105,8 @@ scanRoutes.post('/scans/receipt', async (c) => {
   });
   if (!quota.ok) {
     const status = quota.reason === 'exceeded' ? 429 : quota.reason === 'conflict' ? 409 : 503;
-    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE' }, status);
+    const quotaState = quota.reason === 'exceeded' ? await getScanQuota(db, auth.userId).catch(() => null) : null;
+    return c.json({ error: quota.reason === 'exceeded' ? 'Đã vượt hạn mức quét trong tháng' : quota.reason === 'conflict' ? 'Idempotency key đã được sử dụng cho bản quét khác' : 'Không thể kiểm tra hạn mức quét', code: quota.reason === 'exceeded' ? 'SCAN_QUOTA_EXCEEDED' : quota.reason === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'QUOTA_UNAVAILABLE', resetAt: quotaState?.resetAt, quota: quotaState }, status);
   }
   const reservationId = quota.reservation.reservationId;
   if (!quota.acquired) return recoverScan(c, scanId, 'receipt', idempotencyKey, reservationId, image, requestFingerprint);
@@ -1141,6 +1149,12 @@ scanRoutes.post('/scans/receipt', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
+    } catch {
+      await persistScanFailure(db, scanId, auth, 'DATABASE_ERROR');
+      await finalizeScanQuota(db, reservationId, 'released');
+      return c.json({ error: 'Không thể lưu yêu cầu xử lý nền', code: 'DATABASE_ERROR' }, 503);
+    }
+    try {
       await c.env.SCAN_QUEUE.send({
         type: 'scan.process.v1',
         jobId: `scan_job_${scanId}`,
@@ -1154,7 +1168,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
         idempotencyKey,
         requestFingerprint,
       });
-      await finalizeScanQuota(db, reservationId, 'consumed');
+      // Queue acceptance reserves a slot; only a ready scan consumes it.
       return c.json({
         success: true,
         queued: true,
@@ -1338,6 +1352,7 @@ scanRoutes.get('/scans/:id', async (c) => {
         purchaseDate: scan.purchase_date ?? undefined,
         totalAmountVnd: scan.total_amount_vnd == null ? undefined : Number(scan.total_amount_vnd),
         errorCode: scan.status === 'failed' ? queueJob?.error_code ?? undefined : undefined,
+        supportId: (await sha256Hex(scan.id)).slice(0, 12),
         errorMessage: scan.status === 'failed' ? publicScanErrorMessage(queueJob?.error_code) : undefined,
         attempts: queueJob?.attempts == null ? undefined : Number(queueJob.attempts),
         maxAttempts: queueJob?.max_attempts == null ? undefined : Number(queueJob.max_attempts),

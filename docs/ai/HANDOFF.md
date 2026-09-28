@@ -1,3 +1,15 @@
+# Handoff — Scan/OCR/AI quota remediation (2026-09-28)
+
+`takovn2/Tako-san` (`R_kgDOUpIhiQ`), `fix/scan-ai-quota-ocr-reliability`, starting/current remote main `85660fa497f3da7110a07ec2189309fbef81d701`. Root-cause checkpoint: free/guest quota five; async POST previously consumed on Queue send; UI could mask quota rejection as OCR/image failure. Old QA requests themselves remain uncorrelated. Production run `36183890785` deployed `136cb6f`; later `36285175574` failed staging and skipped production.
+
+Local implementation and contract: `docs/ai/scan/`. New tests exercise guest 1–6, ready/failed quota settlement, queue retry/fencing, ambiguous enqueue, request correlation, canonical Vietnamese matching, and UI error/retry behavior. OCR harness expects private `qa/ocr/receipt_easy.*`, `receipt_medium.*`, `receipt_hard.*`, `receipt_veryhard.*`, and `expected.json` per schema; no data was invented. Live status: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.
+
+Final unfiltered `pnpm check` PASS: 215 files / 4,785 tests, typecheck, lint, migration smoke, build. Earlier scan failures were repaired; the Wrangler case passed 32/32 in this canonical run after intermittent isolated timeouts. Diff check passed; no exact-head hosted CI, PR, staging cert, merge, or deploy. Next: rebase on updated main, then hosted CI/review, safe staging, and original private OCR dataset. Production recommendation: `NOT_READY_FOR_PRODUCTION`.
+
+Local Wrangler gate follow-up: the final canonical run passed 32/32; prior isolated local runs timed out. CI specifies Node 22 for independent verification. `qa/ocr/receipt_*`, `expected.json`, and `results.json` are Git ignored to protect private operator inputs. Remote main advanced five unrelated T19 commits; rebase/revalidation are required before PR.
+
+---
+
 # Handoff — T19 cooking hard-restriction hotfix (2026-09-28)
 
 **Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch

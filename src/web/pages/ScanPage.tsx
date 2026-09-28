@@ -8,25 +8,8 @@ import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { capturePrivateSession } from '../lib/private-session';
 import { readPrivateImage } from '../lib/private-image';
-
-function scanFailureMessage(error: unknown, fallback: string): string {
-  const detail = error instanceof Error ? error.message.toUpperCase() : '';
-  if (detail.includes('AI_SCAN_NO_USABLE_ITEMS') || detail.includes('INVALID_RESPONSE') || detail.includes('SCHEMA_VALIDATION')) {
-    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
-  }
-  if (detail.includes('AI_SCAN_TIMEOUT') || detail.includes('REQUEST_TIMEOUT')) {
-    return 'Dịch vụ nhận diện phản hồi quá lâu. Hãy thử lại với ảnh nhỏ và rõ hơn.';
-  }
-  if (detail.includes('AI_SCAN_UNAVAILABLE') || detail.includes('MODEL_NOT_FOUND') ||
-    detail.includes('AUTHENTICATION_FAILED') || detail.includes('PERMISSION_DENIED') ||
-    detail.includes('LICENSE_REQUIRED')) {
-    return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Bạn có thể thử lại hoặc nhập thủ công.';
-  }
-  if (detail.includes('NETWORK_ERROR') || detail.includes('RATE_LIMITED') || detail.includes('UPSTREAM_ERROR')) {
-    return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
-  }
-  return fallback;
-}
+import { ApiError } from '../services/http';
+import { scanApiErrorMessage, type ScanQuota } from '../lib/scan-errors';
 
 export const ScanPage: React.FC = () => {
   const navigate = useNavigate();
@@ -52,11 +35,26 @@ export const ScanPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'fridge' | 'food' | 'receipt'>('fridge');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [retryIsRecovery, setRetryIsRecovery] = useState(false);
+  const [quota, setQuota] = useState<ScanQuota | null>(null);
   const [processingStage, setProcessingStage] = useState<ScanProcessingStage>('uploading');
+
+  const refreshQuota = async () => {
+    const isCurrent = capturePrivateSession();
+    try {
+      const me = await api.getMe({ requireServer: true });
+      if (isCurrent()) setQuota(me?.user?.subscription ?? null);
+    } catch {
+      if (isCurrent()) setQuota(null);
+    }
+  };
+
+  useEffect(() => { void refreshQuota(); }, []);
 
   const tabs = [
     { id: 'fridge' as const, label: 'Tủ lạnh' },
-    { id: 'food' as const, label: 'Thực phẩm' },
+    { id: 'food' as const, label: 'Nguyên liệu' },
     { id: 'receipt' as const, label: 'Hóa đơn' },
   ];
 
@@ -67,6 +65,8 @@ export const ScanPage: React.FC = () => {
     cancelRead.current?.();
     commandRef.current = null;
     setErrorMsg(null);
+    setErrorCode(null);
+    setRetryIsRecovery(false);
     cancelRead.current = readPrivateImage(file, (base64) => {
       setImage(base64, base64);
       void startAIScan(base64);
@@ -90,6 +90,8 @@ export const ScanPage: React.FC = () => {
     };
     inFlight.current = true;
     setErrorMsg(null);
+    setErrorCode(null);
+    setRetryIsRecovery(false);
     if (activeTab === 'receipt') {
       setProcessingStage('uploading');
       setProcessing(true, 'Đang quét hóa đơn mua sắm...');
@@ -102,10 +104,16 @@ export const ScanPage: React.FC = () => {
 
         if (!isCurrent()) return;
         setProcessing(false);
+        void refreshQuota();
         navigate(`/scan/receipt-review?scanId=${encodeURIComponent(receiptRes.id)}`);
       } catch (error) {
         if (!isCurrent()) return;
-        setErrorMsg(scanFailureMessage(error, 'Không thể bóc tách hóa đơn. Vui lòng thử lại với ảnh rõ nét hơn!'));
+        setErrorCode(error instanceof ApiError ? error.code : null);
+        setRetryIsRecovery(error instanceof ApiError && (error.kind === 'offline' && error.retryable === true
+            || ['QUEUE_UNAVAILABLE', 'NETWORK_ERROR'].includes(error.code || ''))
+          && (error.payload?.scan as { status?: string } | undefined)?.status !== 'failed');
+        setErrorMsg(scanApiErrorMessage(error, 'receipt', quota));
+        void refreshQuota();
         setProcessing(false);
       } finally {
         stageTimers.forEach(clearTimeout);
@@ -124,11 +132,17 @@ export const ScanPage: React.FC = () => {
       const scanRes = await api.scanFridge(base64, activeTab, commandId);
 
       if (!isCurrent()) return;
+      void refreshQuota();
       setScanResults(scanRes.id, scanRes.items);
       navigate(`/scan/${scanRes.id}/review`);
     } catch (error) {
       if (!isCurrent()) return;
-      setErrorMsg(scanFailureMessage(error, 'Không thể xử lý ảnh hoặc nhận diện thất bại. Vui lòng thử lại!'));
+      setErrorCode(error instanceof ApiError ? error.code : null);
+      setRetryIsRecovery(error instanceof ApiError && (error.kind === 'offline' && error.retryable === true
+          || ['QUEUE_UNAVAILABLE', 'NETWORK_ERROR'].includes(error.code || ''))
+        && (error.payload?.scan as { status?: string } | undefined)?.status !== 'failed');
+      setErrorMsg(scanApiErrorMessage(error, activeTab, quota));
+      void refreshQuota();
       setProcessing(false);
     } finally {
       // Delayed presentation stages must not restart processing after failure.
@@ -180,6 +194,12 @@ export const ScanPage: React.FC = () => {
         <div className="w-10" />
       </div>
 
+      {quota?.plan === 'free' && (
+        <p className="z-10 mx-auto mt-3 text-xs text-white/85" data-testid="scan-quota">
+          Còn {quota.remaining}/{quota.limit} lượt quét miễn phí trong tháng
+        </p>
+      )}
+
       {/* Viewfinder Area */}
       <div className="flex-1 flex flex-col items-center justify-center my-2 z-10 w-full max-w-sm mx-auto">
         <div className="relative w-full">
@@ -212,9 +232,14 @@ export const ScanPage: React.FC = () => {
           <div role="alert" className="mt-3 bg-semantic-danger/25 border border-semantic-danger/50 rounded-xl p-3 text-xs text-white flex items-center gap-2 max-w-sm w-full">
             <AlertCircle className="w-4 h-4 shrink-0 text-white" />
             <span>{errorMsg}</span>
-            <button className="underline shrink-0" onClick={() => {
-              if (commandRef.current) void startAIScan(commandRef.current.image);
-            }}>Thử lại</button>
+            {errorCode !== 'SCAN_QUOTA_EXCEEDED' && (
+              <button className="underline shrink-0" onClick={() => {
+                if (!commandRef.current) return;
+                const image = commandRef.current.image;
+                if (!retryIsRecovery) commandRef.current = null;
+                void startAIScan(image);
+              }}>{retryIsRecovery ? 'Kiểm tra lại' : 'Thử xử lý lại'}</button>
+            )}
           </div>
         )}
       </div>

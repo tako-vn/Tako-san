@@ -90,7 +90,7 @@ export const CANONICAL_INGREDIENTS: CanonicalIngredient[] = [
     id: 'BEEF_SIRLOIN',
     nameVi: 'Thịt bò',
     nameEn: 'Beef sirloin',
-    aliases: ['thịt bò', 'bò phi lê', 'thịt thăn bò', 'bắp bò'],
+    aliases: ['thịt bò', 'bò phi lê', 'thịt bò phi lê', 'thịt thăn bò', 'bắp bò'],
     category: 'meat',
     defaultUnit: 'g',
     defaultShelfLifeDays: 4,
@@ -142,7 +142,7 @@ export const CANONICAL_INGREDIENTS: CanonicalIngredient[] = [
     id: 'CHICKEN_EGG',
     nameVi: 'Trứng gà',
     nameEn: 'Chicken egg',
-    aliases: ['trứng', 'trứng gà', 'trứng gà ta', 'trứng vịt', 'egg'],
+    aliases: ['trứng', 'trứng gà', 'trứng gà ta', 'egg', 'eggs', 'chicken egg'],
     category: 'egg',
     defaultUnit: 'piece',
     defaultShelfLifeDays: 14,
@@ -521,28 +521,45 @@ export const CANONICAL_INGREDIENTS: CanonicalIngredient[] = [
   }
 ];
 
-// Helper to find canonical ingredient by raw text or alias
+/** Normalize catalog names and OCR labels without guessing species or ingredients. */
+export function normalizeIngredientText(input: string): string {
+  return input.normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function uniqueIngredient(matches: CanonicalIngredient[]): CanonicalIngredient | null {
+  const ids = new Set(matches.map((ingredient) => ingredient.id));
+  return ids.size === 1 ? matches[0] : null;
+}
+
 export function findCanonicalIngredient(input: string): CanonicalIngredient | null {
   if (!input) return null;
-  const clean = input.toLowerCase().trim();
-  
-  // Exact match on ID
-  const byId = CANONICAL_INGREDIENTS.find(i => i.id.toLowerCase() === clean);
+  const id = input.trim().toLowerCase();
+  const byId = CANONICAL_INGREDIENTS.find((ingredient) => ingredient.id.toLowerCase() === id);
   if (byId) return byId;
 
-  // Exact match on Vietnamese or English name
-  const byName = CANONICAL_INGREDIENTS.find(
-    i => i.nameVi.toLowerCase() === clean || i.nameEn.toLowerCase() === clean
-  );
+  const clean = normalizeIngredientText(input);
+  if (!clean) return null;
+  const byName = uniqueIngredient(CANONICAL_INGREDIENTS.filter((ingredient) =>
+    normalizeIngredientText(ingredient.nameVi) === clean || normalizeIngredientText(ingredient.nameEn) === clean));
   if (byName) return byName;
-
-  // Match alias
-  const byAlias = CANONICAL_INGREDIENTS.find(
-    i => i.aliases.some(alias => alias.toLowerCase() === clean || clean.includes(alias.toLowerCase()))
-  );
+  const byAlias = uniqueIngredient(CANONICAL_INGREDIENTS.filter((ingredient) =>
+    ingredient.aliases.some((alias) => normalizeIngredientText(alias) === clean)));
   if (byAlias) return byAlias;
 
-  return null;
+  // OCR sometimes appends a separate numeric quantity and unit. Strip only
+  // that complete suffix, never arbitrary words or substrings.
+  const withoutQuantity = clean.replace(/(?:\s+\d+(?:\s+\d+)?\s*(?:kg|g|gram|gam|ml|l|lit|qua|cai|con|goi|hop|bich|tui|pack|pcs?))+$/, '');
+  if (withoutQuantity === clean) return null;
+  return uniqueIngredient(CANONICAL_INGREDIENTS.filter((ingredient) =>
+    normalizeIngredientText(ingredient.nameVi) === withoutQuantity ||
+    normalizeIngredientText(ingredient.nameEn) === withoutQuantity ||
+    ingredient.aliases.some((alias) => normalizeIngredientText(alias) === withoutQuantity)));
 }
 
 /** Resolve a catalog ID without applying the fuzzy name/alias matching above. */

@@ -1,3 +1,13 @@
+# Current state — Scan/OCR/AI quota remediation (2026-09-28)
+
+**Status: `SCAN_REMEDIATION_CODE_COMPLETE`; live gate `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.** `takovn2/Tako-san` (`R_kgDOUpIhiQ`), branch `fix/scan-ai-quota-ocr-reliability` from main `85660fa497f3da7110a07ec2189309fbef81d701`. Local edits reserve quota through async Queue and settle it on fenced terminal scan state, distinguish machine errors, surface server quota and support correlation, normalize Vietnamese canonical ingredients, and prepare a private OCR benchmark. See `docs/ai/scan/` for root cause, contract, and evidence.
+
+Final unfiltered `pnpm check` passed: 215 files / 4,785 tests, typecheck, lint, migration smoke, and build. Earlier scan regressions were fixed; an isolated Wrangler test timed out intermittently but passed in the canonical run. No original QA images/ground truth, staging deploy, production change, merge, or PR. Next: exact-head CI and review, safe staging verification, and operator-supplied private OCR dataset. Do not claim live OCR accuracy.
+
+Private OCR operator inputs are Git ignored. Remote main advanced five unrelated T19 commits during this work; rebase and revalidation are required before PR.
+
+---
+
 # Current state — T19 cooking hard-restriction hotfix (2026-09-28)
 
 **Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch

@@ -16,13 +16,15 @@ export class ApiError extends Error {
   kind: ApiErrorKind;
   status?: number;
   retryable?: boolean;
+  requestId?: string;
   payload: Record<string, unknown> | null;
-  constructor(kind: ApiErrorKind, message: string, status?: number, options?: { retryable?: boolean }) {
+  constructor(kind: ApiErrorKind, message: string, status?: number, options?: { retryable?: boolean; requestId?: string }) {
     super(message);
     this.name = 'ApiError';
     this.kind = kind;
     this.status = status;
     this.retryable = options?.retryable;
+    this.requestId = options?.requestId;
     const envelope = /^HTTP \d{3}: ([\s\S]*)$/.exec(message);
     try {
       const parsed = envelope ? JSON.parse(envelope[1]) : null;
@@ -111,15 +113,16 @@ export async function fetchJson<T>(path: string, options?: RequestInit): Promise
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    const requestId = res.headers.get('X-Request-Id') || undefined;
     assertCurrent();
     if (res.status === 401) {
       handleUnauthorized();
-      throw new ApiError('auth', `HTTP 401: ${text}`, 401);
+      throw new ApiError('auth', `HTTP 401: ${text}`, 401, { requestId });
     }
     if (res.status === 403) {
-      throw new ApiError('auth', `HTTP 403: ${text}`, 403);
+      throw new ApiError('auth', `HTTP 403: ${text}`, 403, { requestId });
     }
-    throw new ApiError('http', `HTTP ${res.status}: ${text}`, res.status);
+    throw new ApiError('http', `HTTP ${res.status}: ${text}`, res.status, { requestId });
   }
 
   try {

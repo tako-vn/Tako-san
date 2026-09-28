@@ -1,3 +1,17 @@
+# Task board — Scan/OCR/AI quota remediation (2026-09-28)
+
+- [x] Verify repository and main; reproduce five-scan async quota defect and frontend masking.
+- [x] Settle async quota on fenced ready/failure, cover success, permanent failure, exhausted retries, ambiguous enqueue, idempotent replay, and tenant isolation.
+- [x] Centralize frontend error taxonomy, support ID, server quota snapshot, and distinct retry/recovery keys.
+- [x] Normalize canonical Vietnamese names safely; remove duck egg alias from chicken egg; keep food mode ingredient wording.
+- [x] Prepare private four-receipt manifest/schema and benchmark without fabricated images or ground truth.
+- [x] Final unfiltered `pnpm check` PASS: 215 files / 4,785 tests, typecheck, lint, migration smoke, build; diff check pass.
+- [x] Wrangler D1 catch-up subprocess test passed 32/32 in the final canonical run; verify on hosted Node 22 CI.
+- [ ] Obtain the original PII-safe four QA images and independently transcribed `qa/ocr/expected.json`; perform live OCR/staging certification.
+- [ ] Exact-head hosted CI, review, and PR only after prerequisites; no merge or production deploy in this task.
+
+---
+
 # Task board — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Remote D1 mutation: NO.

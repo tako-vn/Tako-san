@@ -67,6 +67,16 @@ export async function reserveScanQuota(
         return { ok: false, reason: 'conflict' };
       }
     }
+    // A terminal failed scan remains the same logical command on replay.
+    // Reprocessing requires a new key and a new, explicit quota reservation.
+    if (existing?.status === 'released' && input.scan) {
+      const terminalJob = await db.prepare(
+        "SELECT id FROM scan_queue_jobs WHERE scan_id = ? AND status = 'failed' AND error_code != 'RESERVATION_EXPIRED' LIMIT 1"
+      ).bind(input.scanId).first();
+      if (terminalJob) return { ok: true, acquired: false, reservation: {
+        reservationId: existing.id, periodStart: existing.period_start, scanId: existing.scan_id,
+      } };
+    }
     // Only released rows can move periods; their reclaim always uses today's allowance.
     const now = new Date();
     const period = getScanQuotaPeriod(now).start;
@@ -193,6 +203,29 @@ export async function finalizeScanQuota(db: D1DatabaseBinding, reservationId: st
     db.prepare("UPDATE scan_quota_ledger SET status = 'released', completed_at = datetime('now') WHERE id = ? AND status = 'reserved'").bind(reservationId),
     refreshUsage(db, row.user_id, row.period_start),
   ]);
+}
+
+
+/** Settle a queue reservation inside the same fenced D1 batch as the scan terminal state. */
+export function queueQuotaSettlementStatements(
+  db: D1DatabaseBinding,
+  scanId: string,
+  userId: string,
+  householdId: string,
+  guard: string,
+  bindings: readonly string[],
+  outcome: 'consumed' | 'released',
+) {
+  const eligible = outcome === 'consumed' ? "status = 'reserved'" : "status IN ('reserved', 'consumed')";
+  return [
+    db.prepare(`UPDATE scan_quota_ledger SET status = ?, completed_at = datetime('now')
+      WHERE scan_id = ? AND user_id = ? AND household_id = ? AND ${eligible} AND ${guard}`)
+      .bind(outcome, scanId, userId, householdId, ...bindings),
+    db.prepare(`UPDATE scan_quota_periods SET used_count = (
+        SELECT COUNT(*) FROM scan_quota_ledger q WHERE q.user_id = scan_quota_periods.user_id
+          AND q.period_start = scan_quota_periods.period_start AND q.status != 'released'
+      ), updated_at = datetime('now') WHERE user_id = ?`).bind(userId),
+  ];
 }
 
 export interface ScanReservationReconciliation {

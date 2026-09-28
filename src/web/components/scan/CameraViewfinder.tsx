@@ -194,7 +194,7 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
               ? 'Căn chỉnh toàn bộ hóa đơn vào khung'
               : scanType === 'fridge'
               ? 'Hướng vào tủ lạnh để nhận diện thực phẩm'
-              : 'Đặt thực phẩm vào giữa khung hình'}
+              : 'Đặt nguyên liệu vào giữa khung hình'}
           </div>
 
           <button

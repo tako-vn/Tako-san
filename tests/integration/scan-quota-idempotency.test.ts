@@ -290,7 +290,7 @@ describe('D1 scan quota and request idempotency', () => {
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual(messages[1]);
     expect(usage()).toBe(1);
-    expect(db.query('SELECT status FROM scan_quota_ledger')).toEqual([{ status: 'consumed' }]);
+    expect(db.query('SELECT status FROM scan_quota_ledger')).toEqual([{ status: 'reserved' }]);
   });
 
   it('does not turn a failed synchronous replay into a success response', async () => {
