@@ -1,4 +1,16 @@
-# Task board — Scan/OCR/AI quota remediation (2026-09-28)
+# Scan/OCR continuation board — 2026-09-29
+
+- [x] PR #22 independent exact-head review and normal merge: head `439451afeb81aee732c3e7d13acaf0a194b1e70e`, main `94056d29ed00a1000e65eb8e1348384638bc02af`.
+- [x] Exact-main CI `36476834182` / `109112533990`: lint, typecheck, 216 files / 4,804 tests, migration smoke, build PASS.
+- [x] Official staging deploy `36477693577`: served exact merge SHA; DB/Queue ready, AI mock, recipe canary 1%, T20 true. Production job skipped.
+- [x] Staging quota API: five scans reached ready and quota 5/5; sixth returned 429 `SCAN_QUOTA_EXCEEDED`; same-key replay, mismatched bytes/MIME 409, and guest tenancy checked. [ ] Direct D1 ledger and safe staging fault injection remain unverified.
+- [x] Synthetic fixture generator, source-first manifest, 16 preprocessing variants, scorer and tests. Local Apple Vision baseline 16/16 variants at 100% names, quantity/unit, prices and totals; 194-512 ms. [ ] Real Qwen non-production certification blocked by configuration; do not infer provider metrics from Apple Vision.
+- [x] Follow-up local focused tests 28/28 and full `pnpm check` PASS; canonical alias and trusted CORS request ID regressions added. [ ] Obtain follow-up PR exact-head hosted CI and independent review before merging.
+- [ ] Original four QA images and independent `qa/ocr/expected.json` remain unavailable: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. Paths/schema: `qa/ocr/README.md`. Production: `NOT_READY_FOR_PRODUCTION`; do not deploy.
+
+---
+
+# Historical task board — Scan/OCR/AI quota remediation (2026-09-28)
 
 - [x] Reproduce guest five-scan quota and frontend error masking; implement fenced async consume/release, idempotency, queue retry/reconciliation, tenant isolation, support IDs, server quota snapshot, Vietnamese canonical matching, and private OCR harness.
 - [x] Review PR #22; fix replay after queue-intent persistence fails before a job exists. Verify replay gives `SCAN_FAILED`/503, quota stays released, and no second message is sent.

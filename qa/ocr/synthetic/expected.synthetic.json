@@ -1,0 +1,460 @@
+{
+  "version": 1,
+  "classification": "SYNTHETIC_OCR_CERTIFICATION",
+  "generator": "scripts/generate-synthetic-ocr.mjs",
+  "seed": 20260929,
+  "receipts": {
+    "synthetic_easy": {
+      "items": [
+        {
+          "name": "CÀ CHUA",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 42000
+        },
+        {
+          "name": "THỊT BÒ",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 119000
+        },
+        {
+          "name": "TRỨNG GÀ",
+          "quantity": 10,
+          "unit": "piece",
+          "totalPriceVnd": 36000
+        },
+        {
+          "name": "SỮA TƯƠI",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 32000
+        },
+        {
+          "name": "RAU CẢI",
+          "quantity": 2,
+          "unit": "bunch",
+          "totalPriceVnd": 26000
+        },
+        {
+          "name": "HÀNH TÂY",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 18000
+        },
+        {
+          "name": "KHOAI TÂY",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 39000
+        },
+        {
+          "name": "ĐẬU PHỤ",
+          "quantity": 3,
+          "unit": "piece",
+          "totalPriceVnd": 21000
+        }
+      ],
+      "totalAmountVnd": 333000
+    },
+    "synthetic_medium": {
+      "items": [
+        {
+          "name": "CÀ CHUA",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 42000
+        },
+        {
+          "name": "THỊT BÒ",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 119000
+        },
+        {
+          "name": "TRỨNG GÀ",
+          "quantity": 10,
+          "unit": "piece",
+          "totalPriceVnd": 36000
+        },
+        {
+          "name": "SỮA TƯƠI",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 32000
+        },
+        {
+          "name": "RAU CẢI",
+          "quantity": 2,
+          "unit": "bunch",
+          "totalPriceVnd": 26000
+        },
+        {
+          "name": "HÀNH TÂY",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 18000
+        },
+        {
+          "name": "KHOAI TÂY",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 39000
+        },
+        {
+          "name": "ĐẬU PHỤ",
+          "quantity": 3,
+          "unit": "piece",
+          "totalPriceVnd": 21000
+        },
+        {
+          "name": "CÁ HỒI",
+          "quantity": 350,
+          "unit": "g",
+          "totalPriceVnd": 98000
+        },
+        {
+          "name": "TÔM TƯƠI",
+          "quantity": 400,
+          "unit": "g",
+          "totalPriceVnd": 76000
+        },
+        {
+          "name": "NẤM RƠM",
+          "quantity": 250,
+          "unit": "g",
+          "totalPriceVnd": 29000
+        },
+        {
+          "name": "GẠO TẺ",
+          "quantity": 2,
+          "unit": "kg",
+          "totalPriceVnd": 56000
+        },
+        {
+          "name": "DẦU ĂN",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 49000
+        },
+        {
+          "name": "NƯỚC MẮM",
+          "quantity": 500,
+          "unit": "ml",
+          "totalPriceVnd": 37000
+        }
+      ],
+      "totalAmountVnd": 678000
+    },
+    "synthetic_hard": {
+      "items": [
+        {
+          "name": "CÀ CHUA",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 42000
+        },
+        {
+          "name": "THỊT BÒ",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 119000
+        },
+        {
+          "name": "TRỨNG GÀ",
+          "quantity": 10,
+          "unit": "piece",
+          "totalPriceVnd": 36000
+        },
+        {
+          "name": "SỮA TƯƠI",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 32000
+        },
+        {
+          "name": "RAU CẢI",
+          "quantity": 2,
+          "unit": "bunch",
+          "totalPriceVnd": 26000
+        },
+        {
+          "name": "HÀNH TÂY",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 18000
+        },
+        {
+          "name": "KHOAI TÂY",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 39000
+        },
+        {
+          "name": "ĐẬU PHỤ",
+          "quantity": 3,
+          "unit": "piece",
+          "totalPriceVnd": 21000
+        },
+        {
+          "name": "CÁ HỒI",
+          "quantity": 350,
+          "unit": "g",
+          "totalPriceVnd": 98000
+        },
+        {
+          "name": "TÔM TƯƠI",
+          "quantity": 400,
+          "unit": "g",
+          "totalPriceVnd": 76000
+        },
+        {
+          "name": "NẤM RƠM",
+          "quantity": 250,
+          "unit": "g",
+          "totalPriceVnd": 29000
+        },
+        {
+          "name": "GẠO TẺ",
+          "quantity": 2,
+          "unit": "kg",
+          "totalPriceVnd": 56000
+        },
+        {
+          "name": "DẦU ĂN",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 49000
+        },
+        {
+          "name": "NƯỚC MẮM",
+          "quantity": 500,
+          "unit": "ml",
+          "totalPriceVnd": 37000
+        },
+        {
+          "name": "CHUỐI",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 28000
+        },
+        {
+          "name": "TÁO ĐỎ",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 65000
+        },
+        {
+          "name": "CAM SÀNH",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 34000
+        },
+        {
+          "name": "SỮA CHUA",
+          "quantity": 4,
+          "unit": "piece",
+          "totalPriceVnd": 28000
+        },
+        {
+          "name": "PHÔ MAI",
+          "quantity": 200,
+          "unit": "g",
+          "totalPriceVnd": 59000
+        },
+        {
+          "name": "CÀ CHUA BI",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 34000
+        },
+        {
+          "name": "THỊT HEO",
+          "quantity": 600,
+          "unit": "g",
+          "totalPriceVnd": 78000
+        }
+      ],
+      "totalAmountVnd": 1004000
+    },
+    "synthetic_veryhard": {
+      "items": [
+        {
+          "name": "CÀ CHUA",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 42000
+        },
+        {
+          "name": "THỊT BÒ",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 119000
+        },
+        {
+          "name": "TRỨNG GÀ",
+          "quantity": 10,
+          "unit": "piece",
+          "totalPriceVnd": 36000
+        },
+        {
+          "name": "SỮA TƯƠI",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 32000
+        },
+        {
+          "name": "RAU CẢI",
+          "quantity": 2,
+          "unit": "bunch",
+          "totalPriceVnd": 26000
+        },
+        {
+          "name": "HÀNH TÂY",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 18000
+        },
+        {
+          "name": "KHOAI TÂY",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 39000
+        },
+        {
+          "name": "ĐẬU PHỤ",
+          "quantity": 3,
+          "unit": "piece",
+          "totalPriceVnd": 21000
+        },
+        {
+          "name": "CÁ HỒI",
+          "quantity": 350,
+          "unit": "g",
+          "totalPriceVnd": 98000
+        },
+        {
+          "name": "TÔM TƯƠI",
+          "quantity": 400,
+          "unit": "g",
+          "totalPriceVnd": 76000
+        },
+        {
+          "name": "NẤM RƠM",
+          "quantity": 250,
+          "unit": "g",
+          "totalPriceVnd": 29000
+        },
+        {
+          "name": "GẠO TẺ",
+          "quantity": 2,
+          "unit": "kg",
+          "totalPriceVnd": 56000
+        },
+        {
+          "name": "DẦU ĂN",
+          "quantity": 1,
+          "unit": "l",
+          "totalPriceVnd": 49000
+        },
+        {
+          "name": "NƯỚC MẮM",
+          "quantity": 500,
+          "unit": "ml",
+          "totalPriceVnd": 37000
+        },
+        {
+          "name": "CHUỐI",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 28000
+        },
+        {
+          "name": "TÁO ĐỎ",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 65000
+        },
+        {
+          "name": "CAM SÀNH",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 34000
+        },
+        {
+          "name": "SỮA CHUA",
+          "quantity": 4,
+          "unit": "piece",
+          "totalPriceVnd": 28000
+        },
+        {
+          "name": "PHÔ MAI",
+          "quantity": 200,
+          "unit": "g",
+          "totalPriceVnd": 59000
+        },
+        {
+          "name": "CÀ CHUA BI",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 34000
+        },
+        {
+          "name": "THỊT HEO",
+          "quantity": 600,
+          "unit": "g",
+          "totalPriceVnd": 78000
+        },
+        {
+          "name": "RAU MUỐNG",
+          "quantity": 2,
+          "unit": "bunch",
+          "totalPriceVnd": 24000
+        },
+        {
+          "name": "NẤM KIM CHÂM",
+          "quantity": 200,
+          "unit": "g",
+          "totalPriceVnd": 25000
+        },
+        {
+          "name": "BẮP CẢI",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 33000
+        },
+        {
+          "name": "CA CHUA",
+          "quantity": 500,
+          "unit": "g",
+          "totalPriceVnd": 19000
+        },
+        {
+          "name": "HÀNH LÁ",
+          "quantity": 100,
+          "unit": "g",
+          "totalPriceVnd": 11000
+        },
+        {
+          "name": "CÁ THU",
+          "quantity": 450,
+          "unit": "g",
+          "totalPriceVnd": 87000
+        },
+        {
+          "name": "TOM TƯƠI",
+          "quantity": 200,
+          "unit": "g",
+          "totalPriceVnd": 41000
+        },
+        {
+          "name": "KHOAI LANG",
+          "quantity": 1,
+          "unit": "kg",
+          "totalPriceVnd": 31000
+        }
+      ],
+      "totalAmountVnd": 1275000
+    }
+  }
+}

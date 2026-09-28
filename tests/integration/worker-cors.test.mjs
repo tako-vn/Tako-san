@@ -53,6 +53,15 @@ it.each([
   expect(hasTrustedOrigin({ env, req: { header: (name) => name === 'origin' ? origin : undefined } })).toBe(allowed);
 });
 
+it('exposes the request ID to the trusted separate frontend', async () => {
+  const response = await worker.fetch(new Request('https://api.example.com/api/v1/health', {
+    headers: { Origin: 'https://app.example.com', 'X-Request-Id': 'frontend_test_123' },
+  }), production);
+  expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+  expect(response.headers.get('Access-Control-Expose-Headers')).toBe('X-Request-Id');
+  expect(response.headers.get('X-Request-Id')).toBe('frontend_test_123');
+});
+
 it('does not emit a wildcard when the request has no Origin', async () => {
   const response = await worker.fetch(new Request('https://app.example.com/api/v1/health'), production);
   expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();

@@ -1,4 +1,14 @@
-# Current state — Scan/OCR/AI quota remediation (2026-09-28)
+# Current scan/OCR release state — 2026-09-29
+
+- PR #22 exact reviewed head `439451afeb81aee732c3e7d13acaf0a194b1e70e` merged normally as main `94056d29ed00a1000e65eb8e1348384638bc02af`. Exact-main CI `36476834182` / `109112533990` passed lint, typecheck, 216 files / 4,804 tests, migration smoke and build.
+- Official staging deploy `36477693577` succeeded on that SHA; production job skipped. Worker readiness confirmed DB/Queue ok, AI mock, recipe canary 1%, T20 true. Guest quota API reached five ready scans and returned `SCAN_QUOTA_EXCEEDED` on sixth; replay/conflict/tenant checks passed. Direct D1 ledger and staging failure injection were not observed: `STAGING_QUOTA_API_PARTIAL`.
+- Follow-up branch `codex/scan-synthetic-ocr-certification` adds deterministic 4-case/16-variant synthetic receipts, local Apple Vision measurement, conservative alias corrections, and trusted CORS exposure of `X-Request-Id`. Local focused 28/28 and `pnpm check` passed. These changes are not yet part of the deployed main SHA.
+- `SYNTHETIC_OCR_LOCAL_BASELINE_COMPLETE`: Apple Vision read all 16 variants with 100% normalized names, quantity/unit, line prices and totals, 0 name character errors, 194-512 ms per run. This is not a Qwen result. `REAL_QWEN_STAGING_CERTIFICATION_BLOCKED_CONFIGURATION` because staging AI is mocked and no dedicated non-production Qwen configuration is available.
+- `ORIGINAL_QA_DATASET_UNAVAILABLE` and `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE` remain independent gates. Original receipt images and independently transcribed ground truth are missing. Details and exact operator paths are in `docs/ai/scan/SCAN_OCR_REMEDIATION_CERTIFICATION.md` and `qa/ocr/README.md`. Production status: `NOT_READY_FOR_PRODUCTION`; no production deploy.
+
+---
+
+# Historical snapshot — Scan/OCR/AI quota remediation (2026-09-28)
 
 **Status: `SCAN_REMEDIATION_CODE_CERTIFIED_LOCAL`; live gate `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.** PR #22 is open on `fix/scan-ai-quota-ocr-reliability`. Review found that an async queue-intent write failure left a failed scan and released quota but replaying the same key could reserve again. The fix keeps that command terminal even without a queue job, returns `SCAN_FAILED`/503, and requires a new key for a new attempt. Sync replay behavior remains covered by its existing tests.
 

@@ -16,6 +16,14 @@ describe('conservative Vietnamese OCR canonicalization', () => {
     expect(findCanonicalIngredient('NOT_IN_CATALOG')).toBeNull();
   });
 
+  it('does not label generic eggs as chicken eggs or mozzarella as cheddar', () => {
+    for (const label of ['trứng', 'trứng 10 quả', 'mozzarella', 'Mozzarella 200 g']) {
+      expect(findCanonicalIngredient(label)).toBeNull();
+    }
+    expect(findCanonicalIngredient('trứng gà')?.id).toBe('CHICKEN_EGG');
+    expect(findCanonicalIngredient('cheddar')?.id).toBe('CHEDDAR_CHEESE');
+  });
+
   it('has no cross-ID normalized alias collision', () => {
     const owners = new Map<string, string>();
     for (const ingredient of CANONICAL_INGREDIENTS) {
