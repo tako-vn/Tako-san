@@ -1,3 +1,26 @@
+# Current state — T19 cooking hard-restriction hotfix (2026-09-28)
+
+**Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch
+`fix/t19-cooking-hard-restriction-bypass` from exact main `85660fa497f3da7110a07ec2189309fbef81d701`.
+`POST /api/v1/recipes/:id/cook/start` and `/cook/complete` previously skipped
+household hard restrictions entirely; the fix enforces the canonical T03
+`evaluateHardRestrictions` (fail-closed) at both boundaries via new
+`src/worker/services/cooking-hard-restrictions.ts`, reusing
+`candidateRestrictionFacts` + the canonical nutrition evidence provider over a
+minimal candidate shim. Contract matches T20: 422 `HARD_CONSTRAINT_CONFLICT`.
+Idempotent successful replay preserved (restriction check runs after the replay
+lookup on both legacy and adopted-lot paths). No D1 catalog change, no
+migration, no secret/config change, no deploy. Staging stays canary 1%.
+
+Proven locally: regression `tests/integration/t19-cooking-hard-restrictions.test.ts`
+15/15 PASS (bug reproduced 9-fail before fix); nearby suites
+`t19-recipe-authority-split` + `recipe-authority-routing` 19/19,
+`t20-legacy-family-and-safety` + `t20-meal-composition-flows` 31/31;
+`tsc -p tsconfig.worker.json` clean; eslint clean on touched files.
+Next: push branch, open PR, await review/merge. Do NOT promote canary.
+
+---
+
 # Current state — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.**
