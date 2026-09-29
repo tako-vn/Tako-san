@@ -1,6 +1,6 @@
 # Production catalog ingredient-line lineage diagnostic
 
-Status: `READ_ONLY_TOOLING_READY_FOR_REVIEW`; no production recovery is authorized.
+Status: `READ_ONLY_TOOLING_ON_MAIN`; first production run blocked (`PRODUCTION_DIAGNOSTIC_FAILED`, workflow_dispatch HTTP 403). No production recovery is authorized. See `PRODUCTION_CATALOG_LINEAGE_INVESTIGATION.md`.
 
 ## Why this comparison exists
 

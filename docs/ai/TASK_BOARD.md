@@ -1,3 +1,17 @@
+# Production catalog lineage investigation STOP — 2026-09-29
+
+- [x] Verify canonical repo `vn-tako4/Tako-san` (id 1385308553), `origin/main=252096cccf602d07d6e33067024c5df2d6ba8a3e`, exact-main CI `36640577701` SUCCESS.
+- [x] Confirm staging→main delta is diagnostics/docs/tests only (no application runtime surfaces).
+- [x] Refresh public production/staging `/api/v1/health/ready`: production still `CATALOG_DIAGNOSTICS` / static fallback; staging still D1 with no fallback.
+- [x] Confirm last protected D1 receipt `36577380500` (6720/0/0 hydrated) did not include PR #28 lineage comparison.
+- [x] Replay immutable 0038 locally: 500 recipes, 2702 lines, 2702 positions (lineage unit tests 15/15).
+- [x] Assess Content Refresh V2: 6766 canonical ≠ 6720 live; `productionReleaseReady=false`; `researchV2LineageProven=false`.
+- [x] Attempt required read-only diagnostic dispatch on current main: HTTP 403, no mutation.
+- [ ] Operator (Actions write + production Environment) must dispatch `Production D1 Read-Only Diagnostics` on main with `ref=252096cccf602d07d6e33067024c5df2d6ba8a3e`, `hardened_sha=136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, `confirm_read_only_diagnostics=true`.
+- [ ] Inspect the sanitized lineage artifact before any recovery design. Keep 0039, restore, replay, and position invention STOPPED.
+
+---
+
 # Production catalog lineage diagnostic — 2026-09-30
 
 - [x] Derive historical 0038 baseline locally: 500 recipes, 2,702 ingredient lines and 2,702 explicit positions; compare against protected production aggregate 6,720/0 without assuming why they differ.

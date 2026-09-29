@@ -1,3 +1,15 @@
+# Production catalog lineage investigation handoff — 2026-09-29
+
+Main `252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) passed exact-main CI `36640577701`. No application runtime delta vs certified staging `8072e0fea9f8f3588426969007dda06cadbbfbb7`. Fresh public production readiness: Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, D1/0/cutover true, global static, `CATALOG_DIAGNOSTICS`. Staging public readiness: Worker `8072e0fea9f8f3588426969007dda06cadbbfbb7`, global D1, fallback null, 500 recipes.
+
+First required action failed: `gh workflow run "Production D1 Read-Only Diagnostics"` returned HTTP 403 `Resource not accessible by integration`. Cloudflare tokens MISSING locally. Last production D1 counts remain run `36577380500` on `d0c670289534c33187181b2eb7192c05a2962e22` (6720 ingredient rows, 0 order rows, 0/500 hydrated) without a lineage artifact. Local 0038 source is 2702/2702. V2 canonical is 6766 lines and not release-ready. Do not treat 6720 as V1 or V2.
+
+`FINAL_STATUS=PRODUCTION_DIAGNOSTIC_FAILED`. Lineage `CATALOG_LINEAGE_UNRESOLVED`. `researchV2LineageProven=false`. `positionAuthority=NONE`. Recovery design not possible. `production_mutations=[]`. Do not apply 0039. PR #20 is obsolete.
+
+Next: a human with Actions write and production Environment approval dispatches the read-only diagnostic on exact current main using `ref=252096cccf602d07d6e33067024c5df2d6ba8a3e`, `hardened_sha=136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, `confirm_read_only_diagnostics=true`, then reviews `production-catalog-lineage-<run>-<attempt>`. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_INVESTIGATION.md`. `FINAL_RELEASE_SHA=UNSET`.
+
+---
+
 # Production catalog lineage diagnostic handoff — 2026-09-30
 
 Starting main `d0c670289534c33187181b2eb7192c05a2962e22` passed CI `36576510231`. Verified implementation commit `cd25370` adds the diagnostic; this documentation checkpoint follows it. The last protected production receipt `36577380500` reports 6,720 ingredient rows, zero order rows and 0/500 hydrated; it is not release certification. Local immutable 0038 replay gives 2,702 ingredient lines and 2,702 positions. This branch adds a runner-local V1 line comparison to the existing read-only production diagnostic, with sanitized aggregate/digest artifact and no additional remote query or secret exposure. `researchV2LineageProven=false`, `positionAuthority=NONE_GRANTED_BY_THIS_DIAGNOSTIC`, `FINAL_RELEASE_SHA=UNSET`. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_DIAGNOSTIC.md`.
