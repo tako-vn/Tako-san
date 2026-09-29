@@ -93,7 +93,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
-          pnpm wrangler whoami > /dev/null
+          node --input-type=module -e 'if (!process.env.CLOUDFLARE_API_TOKEN || !/^[a-f0-9]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID || "")) throw new Error("Production Cloudflare access required")'
+          pnpm wrangler whoami > cloudflare-identity.txt
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; if (!readFileSync("cloudflare-identity.txt", "utf8").includes(process.env.CLOUDFLARE_ACCOUNT_ID)) throw new Error("Configured Cloudflare account not proven by whoami")'
           pnpm wrangler d1 list --json > d1-list.json
           if pnpm wrangler d1 info frigo-db --json > d1-info.json 2> d1-info.err; then
             node scripts/d1-migration-check.mjs identity release-manifest.json d1-list.json d1-info.json

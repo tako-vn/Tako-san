@@ -12,7 +12,7 @@ const reviewedCommands = {
   'gate: Require immutable current main and exact-SHA CI': 'bb59f159a35e7931871600cbc25d6e9a1ef97703d1c416bf5a9617bd2e5d8cc3',
   'diagnose: Install pinned diagnostic tooling': 'f733afb2da73a36bd48778fd7502436e384741ad191367d97182afc4909130a5',
   'diagnose: Recheck exact main and production config': 'aa81ef73b471de6553f8479ec179a3534902e91dbd0e24374184626b80ecda5f',
-  'diagnose: Prove production Cloudflare and D1 identity': 'a41c21c36a43ed19309d182eb3e60713b8aa9b33230d7d66279e7a30bdd2b527',
+  'diagnose: Prove production Cloudflare and D1 identity': '85138173f0ce3c2bdc434d4793e6c0507bb987edd6c45b199fab58afdf3ef9be',
   'diagnose: Generate and guard five reviewed SELECTs': 'db57117329c68de539a7f51075d92a4cf6794ce55f088dc58e3ff252c4d11d62',
   'diagnose: Read production ledger and runtime catalog without mutation': 'fd63c230813d382d7b51499e6126a5dd2ea6128f1efa32e366c875bc7e9f9512',
   'diagnose: Reject main change during diagnosis': 'aeff76d12b6bb0d47fe50f41a1c3f44116874d40a5e3d5975781f32e86078d69',
@@ -115,4 +115,19 @@ describe('production read-only D1 diagnostics', () => {
     candidate.jobs.diagnose.steps.find((step) => step.run?.includes('runtime-catalog')).run += '\npnpm wrangler d1 migrations apply frigo-db --remote';
     expect(() => assertReviewedWorkflow(candidate)).toThrow();
   });
+});
+
+it('verifies the configured Cloudflare account before the first production D1 query', () => {
+  const steps = workflow.jobs.diagnose.steps;
+  const identity = steps.find((step) => step.name === 'Prove production Cloudflare and D1 identity');
+  expect(identity.env).toEqual({
+    CLOUDFLARE_API_TOKEN: '${{ secrets.CLOUDFLARE_API_TOKEN }}',
+    CLOUDFLARE_ACCOUNT_ID: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}',
+    WRANGLER_SEND_METRICS: 'false',
+  });
+  const commands = identity.run.trim().split('\n').map((line) => line.trim());
+  expect(commands[0]).toContain('if (!process.env.CLOUDFLARE_API_TOKEN || !/^[a-f0-9]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID');
+  expect(commands[1]).toBe('pnpm wrangler whoami > cloudflare-identity.txt');
+  expect(commands[2]).toContain('readFileSync("cloudflare-identity.txt", "utf8").includes(process.env.CLOUDFLARE_ACCOUNT_ID)');
+  expect(commands[3]).toBe('pnpm wrangler d1 list --json > d1-list.json');
 });

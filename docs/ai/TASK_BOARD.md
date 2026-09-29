@@ -1,3 +1,21 @@
+# Production D1 identity gate verification — 2026-09-29
+
+- [x] Account-identity repair: focused 6/6 and full local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build PASS; diff check PASS.
+- [ ] Push PR #25 updated head, await hosted CI and independent review before protected merge.
+- [ ] After merge/exact-main CI, dispatch only the read-only diagnostic via production Environment approval. Migration and deploy remain stopped.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+- [x] Recheck PR #25 at `d2e481e`: hosted CI `36567679646` PASS; no review and no merge.
+- [x] Fresh public readiness: production still degraded with `CATALOG_DIAGNOSTICS` fallback; staging still D1/500 with no fallback.
+- [x] Match Cloudflare `whoami` account to configured account before the new workflow's first D1 read; focused tests 6/6 PASS.
+- [ ] Run full local gates and hosted CI on the updated PR head; obtain independent GitHub review before protected merge.
+- [ ] After merge, exact-main CI and production Environment approval precede read-only diagnosis. Migration and deployment stay stopped at the independent ledger/fallback blockers.
+
+---
+
 # Production D1 diagnostic PR checkpoint — 2026-09-29
 
 - [x] PR #25 opened from implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98`; hosted CI run `36566901147` PASS on that head.

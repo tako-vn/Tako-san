@@ -1,3 +1,15 @@
+# Production D1 identity gate verification — 2026-09-29
+
+PR #25's account-identity repair passed focused 6/6 and final local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build. Diff check passed. Hosted CI and independent review are pending on the updated PR head. Production remains degraded with `CATALOG_DIAGNOSTICS`; no production read, mutation or deployment was performed in this continuation. Next: push, obtain exact PR-head CI and independent review, protected merge and exact-main CI. The new diagnostic then needs production Environment approval; 0039 migration and rollout remain blocked.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+PR #25 final prior head `d2e481e75e652262310ac0db5cc3bf324397c08e` passed hosted CI run `36567679646`, with zero GitHub reviews. Main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`. Fresh public production readiness still shows old Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, D1/0/cutover true but global static and `CATALOG_DIAGNOSTICS`; staging serves main with global D1 and no fallback. This continuation changes only the unmerged diagnostic workflow and its test: it now checks the authenticated Cloudflare account from `whoami` before remote D1 access, matching the production certification workflow. Focused tests 6/6 PASS; full local and hosted final-head checks are pending. No production mutation, merge or deploy. Next: complete gates, secure independent GitHub review, merge through protected flow, exact-main CI, then dispatch read-only diagnostics via production Environment approval. 0039 migration and rollout remain stopped.
+
+---
+
 # Production D1 diagnostic PR checkpoint — 2026-09-29
 
 PR #25 is open from `codex/production-d1-diagnostics`. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` and local `pnpm check` (220 files / 4,813 tests, lint, typecheck, migration smoke, build). This follow-up changes documentation only; final-head CI and independent review remain required. Exact main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; `FINAL_RELEASE_SHA=UNSET`. Next: review/merge PR #25 through protected flow, obtain exact-main CI, then dispatch only the read-only D1 diagnostic with production Environment approval. Do not apply 0039 or deploy while D1 fallback and migration mismatch persist. No production mutation was performed.
