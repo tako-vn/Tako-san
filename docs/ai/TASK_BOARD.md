@@ -1,3 +1,16 @@
+# Production catalog lineage diagnostic — 2026-09-30
+
+- [x] Derive historical 0038 baseline locally: 500 recipes, 2,702 ingredient lines and 2,702 explicit positions; compare against protected production aggregate 6,720/0 without assuming why they differ.
+- [x] Add runner-local, sanitized V1 ingredient-line comparison to the existing read-only production workflow; leave its remote SELECTs, identity gate and Environment approval unchanged.
+- [x] Earlier head `fe1d2e5` passed local full check and hosted CI `36630071407` (221 files / 4,823 tests). Earlier Wrangler-startup timeout attempts and interrupted-worker attempt were not green.
+- [x] Open PR #28 from implementation `cd25370`; merge PR #27 into main `e7c74a0` and preserve its STOP packet in this branch.
+- [x] Add an actual CLI regression test: it failed before fixing the missing `writeFileSync` import, then focused tests passed 15/15.
+- [x] Updated local `WRANGLER_SEND_METRICS=false pnpm check` PASS (typecheck, lint, full Vitest, migration smoke, build); independent read-only diff review found no additional issue.
+- [ ] Push resolved merge and obtain new hosted CI and GitHub review for PR #28; only then merge it, obtain new exact-main CI and production Environment approval for a read-only run.
+- [ ] Use that receipt to identify V1 exact matches and unresolved rows; prove any V2 lineage and all required positions separately before designing a production repair. Migration 0039 remains STOPPED.
+
+---
+
 # Production ingredient-order recovery STOP — 2026-09-29
 
 - [x] PR #26 merged as `d0c6702`; exact-main CI `36576510231` SUCCESS; protected read-only run `36577380500` SUCCESS with sanitized diagnostic `BLOCKED`.
