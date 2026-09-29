@@ -1,3 +1,23 @@
+# Order-coverage implementation checkpoint — 2026-09-29
+
+Verified implementation commit: `c318b12` on `codex/production-d1-diagnostic-followup`, based on merged main `baf9a069f89f9544407c827448671ecea4c56b5a`. Final focused diagnostic/certification/read-only-query suite: 3 files / 72 tests PASS after workflow label cleanup. Documentation checkpoint follows this implementation commit; it does not certify or change production. Next: push PR, hosted CI, independent review, protected merge, new exact-main CI, then a separate Environment-approved read-only diagnosis.
+
+---
+
+# Production D1 order-coverage validation — 2026-09-29
+
+`WRANGLER_SEND_METRICS=false pnpm check` PASS on the local follow-up branch: typecheck, ESLint, 220 files / 4,816 tests, migration smoke and build. The first unfiltered full run failed one unrelated staging Wrangler test on its 5-second timeout; a focused metrics-disabled rerun passed, then the complete full run passed. `git diff --check` passed. Implementation remains local pending PR/hosted review. Next: protected merge and exact-main CI, then a new production Environment-approved read-only diagnostic. No production mutation or deploy; release remains blocked.
+
+---
+
+# Production D1 order-coverage handoff — 2026-09-29
+
+Merged PR #25 is main `baf9a069f89f9544407c827448671ecea4c56b5a`; exact-main CI `36571635467` passed. GitHub reports `reviews=[]`. Run `36572487026` passed the protected production Environment approval and read-only identity check. Its sanitized receipt found D1 ledger 38 through 0038 (0039 missing), 500 physical recipes and 500 `missing_ingredient_position` hydration failures, leaving zero hydrated. This differs from 2026-09-25 run `36150184637`, which reported 500 hydrated/zero failures. The receipt is not release certification; production still has `CATALOG_DIAGNOSTICS` fallback. No production migration, deployment, flag change or rollback occurred.
+
+Local branch `codex/production-d1-diagnostic-followup` adds one count-only aggregate query to distinguish missing order rows from failed joins, records only sanitized counts and checks count consistency. Focused `pnpm exec vitest run tests/unit/production-d1-diagnostics.test.mjs tests/unit/production-certify-workflow.test.mjs tests/unit/d1-readonly-query.test.mjs` passed 71 tests in 3 files. Full gates and hosted CI remain to run. Next: finish checks, independent review/PR merge and exact-main CI, then dispatch another Environment-approved read-only diagnostic. Use its counts to design a separate catalog recovery packet. Migration 0039 and production rollout remain stopped; `FINAL_RELEASE_SHA=UNSET`.
+
+---
+
 # Production D1 identity gate verification — 2026-09-29
 
 PR #25's account-identity repair passed focused 6/6 and final local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build. Diff check passed. Hosted CI and independent review are pending on the updated PR head. Production remains degraded with `CATALOG_DIAGNOSTICS`; no production read, mutation or deployment was performed in this continuation. Next: push, obtain exact PR-head CI and independent review, protected merge and exact-main CI. The new diagnostic then needs production Environment approval; 0039 migration and rollout remain blocked.

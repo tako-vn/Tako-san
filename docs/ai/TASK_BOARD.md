@@ -1,3 +1,21 @@
+# Production D1 order-coverage validation — 2026-09-29
+
+- [x] Final `WRANGLER_SEND_METRICS=false pnpm check` PASS: typecheck, lint, 220 files / 4,816 tests, migration smoke and build. Initial unfiltered run had one local Wrangler startup timeout; focused rerun and full rerun passed.
+- [ ] Push reviewable follow-up PR, obtain hosted CI and independent review, then protected merge/exact-main CI before another Environment-approved read-only diagnostic.
+- [ ] Keep migration 0039 and production rollout blocked until order coverage and fallback cause are proven and recovery is reviewed.
+
+---
+
+# Production D1 order-coverage follow-up — 2026-09-29
+
+- [x] PR #25 merged as `baf9a069f89f9544407c827448671ecea4c56b5a`; exact-main CI `36571635467` PASS. GitHub API shows no independent review record.
+- [x] Environment-approved read-only diagnostic `36572487026` PASS: ledger 38/38 through 0038, missing only 0039; 500 physical recipes, 0 hydrated, 500 `missing_ingredient_position` failures. No production mutation.
+- [x] Add count-only order-coverage query to the diagnostic and validate a sanitized aggregate; focused 3-file/71-test suite PASS.
+- [ ] Complete full local gates, hosted PR CI and independent review before merging the follow-up. A new main SHA needs new exact-main CI and production Environment approval for another read-only run.
+- [ ] Investigate order coverage from the new receipt; prepare a reviewed, recovery-safe catalog repair only after root cause proof. Treat 0039 as a separate migration blocker. No production rollout while fallback persists.
+
+---
+
 # Production D1 identity gate verification — 2026-09-29
 
 - [x] Account-identity repair: focused 6/6 and full local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build PASS; diff check PASS.
