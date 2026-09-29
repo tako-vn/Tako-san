@@ -1,3 +1,9 @@
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+PR #25 (`codex/production-d1-diagnostics`) is open for independent review. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` (lint, typecheck, Vitest, migration smoke, build). Final local `pnpm check` on that commit passed 220 files / 4,813 tests and all other gates. This documentation checkpoint does not change executable code; hosted CI on its final PR head remains required before merge. No production mutation or rollout occurred. Next: obtain independent review, protected merge, exact-main CI, then run the separate read-only diagnostic under production Environment approval. The production 0039 ledger gap and `CATALOG_DIAGNOSTICS` fallback remain release blockers.
+
+---
+
 # Unified production train D1 investigation — 2026-09-29
 
 Status: `BLOCKED_PRE_PRODUCTION`. Main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; exact-main CI run `36491414297` SUCCESS. Read-only production certification run `36563767379` passed the exact-main gate, production Environment approval, active Worker version/deployment and D1 binding identity, then failed because the production ledger lacks `0039_meal_composition_v2.sql`. Active Worker is `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`; public readiness is D1/0/cutover true but global static with `CATALOG_DIAGNOSTICS`. Missing migration and recipe hydration fallback are independent blockers. No production migration, deployment, flag change or rollback was performed.

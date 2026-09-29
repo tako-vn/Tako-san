@@ -1,3 +1,12 @@
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+- [x] PR #25 opened from implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98`; hosted CI run `36566901147` PASS on that head.
+- [x] Final local `pnpm check` PASS on implementation head: 220 files / 4,813 tests, migration smoke, lint, typecheck, build.
+- [ ] Verify hosted CI on the final documentation checkpoint head and obtain independent review before protected merge.
+- [ ] After merge, require exact-main CI and production Environment approval for read-only diagnosis. Keep 0039 migration and production rollout stopped while ledger and D1 fallback blockers remain.
+
+---
+
 # Unified production release train — 2026-09-29
 
 - [x] Fresh production Environment read-only run `36563767379`: Worker/deployment/DB identity verified; ledger lacks `0039_meal_composition_v2.sql`; certification stops before recipe rows.

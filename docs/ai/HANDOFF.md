@@ -1,3 +1,9 @@
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+PR #25 is open from `codex/production-d1-diagnostics`. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` and local `pnpm check` (220 files / 4,813 tests, lint, typecheck, migration smoke, build). This follow-up changes documentation only; final-head CI and independent review remain required. Exact main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; `FINAL_RELEASE_SHA=UNSET`. Next: review/merge PR #25 through protected flow, obtain exact-main CI, then dispatch only the read-only D1 diagnostic with production Environment approval. Do not apply 0039 or deploy while D1 fallback and migration mismatch persist. No production mutation was performed.
+
+---
+
 # Unified production release train handoff — 2026-09-29
 
 `codex/production-d1-diagnostics` starts from main `8072e0fea9f8f3588426969007dda06cadbbfbb7` in isolated checkout `/Users/tunbee27/Documents/Tako-san-release-checkout`. Production certification run `36563767379` passed Worker version/deployment and D1 binding proof under production Environment approval, but stopped at the missing `0039_meal_composition_v2.sql` ledger entry. Public readiness independently reports `CATALOG_DIAGNOSTICS` fallback while configured D1/0/cutover true. No production mutation was made.
