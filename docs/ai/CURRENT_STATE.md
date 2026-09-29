@@ -1,3 +1,17 @@
+# Production D1 order-coverage validation — 2026-09-29
+
+The count-only follow-up passed `WRANGLER_SEND_METRICS=false pnpm check`: typecheck, ESLint, 220 test files / 4,816 tests, migration smoke and build. Focused SQLite query and diagnostic tests passed 7/7; `git diff --check` passed. The first unfiltered `pnpm check` failed one unrelated local Wrangler staging catch-up test by its 5-second timeout; focused rerun with metrics disabled passed, followed by the complete green run. Follow-up PR review, hosted CI, exact-main CI and protected production Environment approval remain pending. No production mutation or deployment occurred.
+
+---
+
+# Production D1 order-coverage follow-up — 2026-09-29
+
+PR #25 merged to protected main as `baf9a069f89f9544407c827448671ecea4c56b5a`; exact-main CI run `36571635467` passed. GitHub PR API reports zero reviews, so the merge does not establish independent review. Production Environment-approved read-only diagnostic run `36572487026` passed its gate and identity checks. Its sanitized receipt reports the production D1 ledger at 38 through 0038, missing only 0039; 500 physical recipes, zero hydrated, with all 500 failures coded `missing_ingredient_position`. This receipt is diagnostic only. The 2026-09-25 production certification run `36150184637` previously reported 500 hydrated and zero failures. Public production readiness still reports `CATALOG_DIAGNOSTICS` fallback. No production mutation occurred.
+
+A local follow-up branch from the merge SHA adds a second count-only SELECT to the protected diagnostic, reporting recipe ingredient rows, order rows, missing join rows, affected recipe count and orphan order rows. It validates the aggregate against the runtime read before saving a sanitized artifact. Focused tests: `pnpm exec vitest run tests/unit/production-d1-diagnostics.test.mjs tests/unit/production-certify-workflow.test.mjs tests/unit/d1-readonly-query.test.mjs` — 3 files / 71 tests PASS. Hosted CI, independent review and a new Environment-approved run remain pending. The 0039 migration cannot repair ingredient order; `FINAL_RELEASE_SHA=UNSET`, production rollout remains blocked.
+
+---
+
 # Production D1 identity gate verification — 2026-09-29
 
 The PR #25 account-identity repair passed final local `pnpm check`: lint, typecheck, 220 files / 4,814 tests, migration smoke and build. `git diff --check` passed. Hosted CI is pending on this new head; there is still no independent GitHub review. No merge, production read, D1 mutation or deployment occurred in this continuation. Next: push the reviewed gate repair, wait for exact PR-head CI and independent review; only then protected merge, exact-main CI and production Environment-gated read-only diagnosis.

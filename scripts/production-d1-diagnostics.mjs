@@ -5,6 +5,22 @@ const SHA = /^[a-f0-9]{40}$/;
 const PRODUCTION_D1 = { name: 'frigo-db', id: 'f975ec39-b2c8-4a2a-80e1-0366054599d3' };
 const CATALOG_RELEASE = 'packages/recipes/src/import/catalog-release.current.json';
 
+export function orderCoverageQuery() {
+  return `SELECT
+    (SELECT COUNT(*) FROM recipe_ingredients) AS ingredient_rows,
+    (SELECT COUNT(*) FROM recipe_runtime_ingredient_order) AS order_rows,
+    (SELECT COUNT(*) FROM recipe_ingredients i LEFT JOIN recipe_runtime_ingredient_order o
+      ON o.recipe_ingredient_id = i.id AND o.recipe_id = i.recipe_id
+      WHERE o.recipe_ingredient_id IS NULL) AS ingredients_without_matching_order,
+    (SELECT COUNT(DISTINCT i.recipe_id) FROM recipe_ingredients i
+      LEFT JOIN recipe_runtime_ingredient_order o
+      ON o.recipe_ingredient_id = i.id AND o.recipe_id = i.recipe_id
+      WHERE o.recipe_ingredient_id IS NULL) AS recipes_with_missing_order,
+    (SELECT COUNT(*) FROM recipe_runtime_ingredient_order o LEFT JOIN recipe_ingredients i
+      ON i.id = o.recipe_ingredient_id AND i.recipe_id = o.recipe_id
+      WHERE i.id IS NULL) AS orders_without_matching_ingredient`;
+}
+
 function ledgerNames(statements) {
   if (!Array.isArray(statements) || statements.length !== 1 || statements[0]?.success !== true ||
       !Array.isArray(statements[0].results)) {
@@ -17,7 +33,25 @@ function ledgerNames(statements) {
   return names;
 }
 
-export function summarizeProductionD1({ manifest, release, before, after, runtime, pipeline, checkedAt = new Date().toISOString() }) {
+function summarizeOrderCoverage(statements, requirementCount) {
+  if (!Array.isArray(statements) || statements.length !== 1 || statements[0]?.success !== true ||
+      !Array.isArray(statements[0].results) || statements[0].results.length !== 1) {
+    throw new Error('Production ingredient order coverage proof is incomplete');
+  }
+  const row = statements[0].results[0];
+  const keys = ['ingredient_rows', 'order_rows', 'ingredients_without_matching_order',
+    'recipes_with_missing_order', 'orders_without_matching_ingredient'];
+  if (!row || keys.some((key) => !Number.isSafeInteger(row[key]) || row[key] < 0) ||
+      row.ingredient_rows !== requirementCount ||
+      row.ingredients_without_matching_order > row.ingredient_rows ||
+      row.recipes_with_missing_order > row.ingredient_rows ||
+      row.orders_without_matching_ingredient > row.order_rows) {
+    throw new Error('Production ingredient order coverage counts are inconsistent');
+  }
+  return Object.fromEntries(keys.map((key) => [key, row[key]]));
+}
+
+export function summarizeProductionD1({ manifest, release, before, after, runtime, orderCoverage, pipeline, checkedAt = new Date().toISOString() }) {
   if (manifest?.environment !== 'production' || !SHA.test(manifest.sha || '') ||
       manifest.mainSha !== manifest.sha || manifest.cloudflare?.databaseId !== PRODUCTION_D1.id ||
       manifest.cloudflare?.databaseName !== PRODUCTION_D1.name ||
@@ -42,9 +76,11 @@ export function summarizeProductionD1({ manifest, release, before, after, runtim
   const expectedSet = new Set(expectedNames);
   const content = pipeline.mapRecipeContentRead(runtime);
   const hydration = pipeline.hydrateRuntimeRecipes(content);
-  if (!Array.isArray(content.recipes) || !Array.isArray(hydration?.recipes) || !Array.isArray(hydration.failures)) {
+  if (!Array.isArray(content.recipes) || !Array.isArray(content.requirements) ||
+      !Array.isArray(hydration?.recipes) || !Array.isArray(hydration.failures)) {
     throw new Error('Runtime hydration proof is incomplete');
   }
+  const coverage = summarizeOrderCoverage(orderCoverage, content.requirements.length);
   const codeCounts = {};
   for (const failure of hydration.failures) {
     if (typeof failure?.code !== 'string' || !/^[a-z_]+$/.test(failure.code)) {
@@ -57,8 +93,9 @@ export function summarizeProductionD1({ manifest, release, before, after, runtim
   const countMatchesRelease = content.recipes.length === release.expectedRecipeCount &&
     hydration.recipes.length === release.expectedRecipeCount;
   return {
-    schemaVersion: 1,
-    status: missing.length || unexpected.length || hydration.failures.length || !countMatchesRelease ? 'BLOCKED' : 'DIAGNOSTIC_OK',
+    schemaVersion: 2,
+    status: missing.length || unexpected.length || hydration.failures.length || !countMatchesRelease ||
+      coverage.ingredients_without_matching_order || coverage.orders_without_matching_ingredient ? 'BLOCKED' : 'DIAGNOSTIC_OK',
     certification: 'NOT_A_RELEASE_CERTIFICATION',
     readOnly: true,
     productionMutations: [],
@@ -67,6 +104,7 @@ export function summarizeProductionD1({ manifest, release, before, after, runtim
     checkedAt,
     database: PRODUCTION_D1,
     ledger: { count: preNames.length, tip: preNames.at(-1) ?? null, missing, unexpected },
+    orderCoverage: coverage,
     runtimeCatalog: {
       expectedRecipes: release.expectedRecipeCount,
       physicalRows: content.recipes.length,
@@ -79,8 +117,13 @@ export function summarizeProductionD1({ manifest, release, before, after, runtim
 }
 
 async function main() {
-  const [manifestPath, beforePath, runtimePath, afterPath, receiptPath] = process.argv.slice(2);
-  if (!receiptPath) throw new Error('Expected manifest, pre-ledger, runtime, post-ledger and receipt paths');
+  if (process.argv[2] === 'order-query') {
+    if (process.argv.length !== 3) throw new Error('Order query accepts no arguments');
+    console.log(orderCoverageQuery());
+    return;
+  }
+  const [manifestPath, beforePath, runtimePath, orderPath, afterPath, receiptPath] = process.argv.slice(2);
+  if (!receiptPath) throw new Error('Expected manifest, pre-ledger, runtime, order coverage, post-ledger and receipt paths');
   const { loadRuntimeCatalogPipeline } = await import('./d1-migration-check.mjs');
   const pipeline = await loadRuntimeCatalogPipeline();
   try {
@@ -89,6 +132,7 @@ async function main() {
       release: JSON.parse(readFileSync(CATALOG_RELEASE, 'utf8')),
       before: JSON.parse(readFileSync(beforePath, 'utf8')),
       runtime: JSON.parse(readFileSync(runtimePath, 'utf8')),
+      orderCoverage: JSON.parse(readFileSync(orderPath, 'utf8')),
       after: JSON.parse(readFileSync(afterPath, 'utf8')),
       pipeline,
     });

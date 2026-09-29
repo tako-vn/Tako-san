@@ -26,3 +26,7 @@ Status: PREPARED, NOT AUTHORIZED TO APPLY. Production D1 and Worker are unchange
 - Run a fresh read-only production certification and protected authority check after migration and any independent catalog repair. No production shadow/canary promotion while fallback, count, fingerprint, Worker identity, or rollback proof fails.
 
 No production migration or deployment was dispatched while preparing this packet.
+
+## 2026-09-29 read-only diagnostic update
+
+Protected run `36572487026` at merged main `baf9a069f89f9544407c827448671ecea4c56b5a` confirmed the production ledger has exactly 38 entries through 0038, with only 0039 missing. It also found 500 physical recipes but zero hydrated: all 500 fail with `missing_ingredient_position`. The 2026-09-25 certification run `36150184637` previously reported 500 hydrated and zero failures. Do not infer why positions are missing from the failure category alone. A separately reviewed read-only order-coverage aggregate must distinguish absent mapping rows, join mismatch and other drift before a catalog recovery plan is proposed. The 0039 migration remains STOPPED, even though its ledger precondition appears to match, because the independent catalog fallback precondition fails. This diagnostic is not release certification and grants no permission for migration, restore, flag change or deployment.
