@@ -1,3 +1,14 @@
+# Production catalog lineage diagnostic — 2026-09-30
+
+- [x] Derive historical 0038 baseline locally: 500 recipes, 2,702 ingredient lines and 2,702 explicit positions; compare against protected production aggregate 6,720/0 without assuming why they differ.
+- [x] Add runner-local, sanitized V1 ingredient-line comparison to the existing read-only production workflow; leave its remote SELECTs, identity gate and Environment approval unchanged.
+- [x] Focused diagnostic tests 14/14 PASS; controlled full Vitest 221 files / 4,823 tests PASS; final `WRANGLER_SEND_METRICS=false pnpm check` PASS (types, lint, tests, migration smoke, build). The earlier Wrangler-startup timeout attempts and interrupted-worker attempt were not green.
+- [x] Commit/push implementation `cd25370` and open separate diagnostic PR #28. PR #27 remains a separate documentation STOP packet.
+- [ ] Require exact-head hosted CI and independent review for PR #28; only then review/merge it, obtain new exact-main CI and production Environment approval for a read-only run.
+- [ ] Use that receipt to identify V1 exact matches and unresolved rows; prove any V2 lineage and all required positions separately before designing a production repair. Migration 0039 remains STOPPED.
+
+---
+
 # Production D1 order-coverage validation — 2026-09-29
 
 - [x] Final `WRANGLER_SEND_METRICS=false pnpm check` PASS: typecheck, lint, 220 files / 4,816 tests, migration smoke and build. Initial unfiltered run had one local Wrangler startup timeout; focused rerun and full rerun passed.

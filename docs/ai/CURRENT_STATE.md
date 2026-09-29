@@ -1,3 +1,11 @@
+# Production catalog lineage diagnostic tooling — 2026-09-30
+
+Local migration replay through immutable 0038 has 500 recipes and 2,702 ingredient lines with 2,702 explicit positions, versus the last protected production receipt `36577380500` (6,720 lines / zero positions / zero hydrated). PR #28 is the separate read-only lineage diagnostic; it reuses the production diagnostic's existing exact-main, CI, Environment and identity gates and its already-read raw catalog data, uploading only sanitized V1 line/position comparison counts and digests. It neither proves V2 lineage nor grants position/release authority. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_DIAGNOSTIC.md`. PR #27 remains a separate STOP packet. No production run of the new tooling, mutation, migration, deploy or T20 enablement has occurred. Next: review/merge PR #28 only after exact-head hosted CI, require new exact-main CI and production Environment approval, then inspect its read-only receipt before proposing any repair.
+
+Local focused diagnostic tests passed 14/14; controlled full Vitest passed 221 files / 4,823 tests. Final `WRANGLER_SEND_METRICS=false pnpm check` passed typecheck, lint, full Vitest, migration smoke and build. Earlier default-concurrency runs failed the unrelated staging Wrangler startup test's five-second timeout; a separate long-running attempt under machine interruption also failed and is not counted as green. The successful final full gate supersedes those attempts, not their recorded evidence. Hosted CI and independent review remain pending.
+
+---
+
 # Production D1 order-coverage validation — 2026-09-29
 
 The count-only follow-up passed `WRANGLER_SEND_METRICS=false pnpm check`: typecheck, ESLint, 220 test files / 4,816 tests, migration smoke and build. Focused SQLite query and diagnostic tests passed 7/7; `git diff --check` passed. The first unfiltered `pnpm check` failed one unrelated local Wrangler staging catch-up test by its 5-second timeout; focused rerun with metrics disabled passed, followed by the complete green run. Follow-up PR review, hosted CI, exact-main CI and protected production Environment approval remain pending. No production mutation or deployment occurred.
