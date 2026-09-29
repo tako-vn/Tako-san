@@ -1,3 +1,13 @@
+# Production ingredient-order recovery STOP — 2026-09-29
+
+- [x] PR #26 merged as `d0c6702`; exact-main CI `36576510231` SUCCESS; protected read-only run `36577380500` SUCCESS with sanitized diagnostic `BLOCKED`.
+- [x] Confirmed 6,720 ingredient rows, zero position rows, 500 affected recipes and 0/500 hydrated; production ledger remains 38/0038.
+- [x] Prepared documentation-only STOP packet and passed local `WRANGLER_SEND_METRICS=false pnpm check` (types, lint, tests, migration smoke, build).
+- [ ] Prove exact live ingredient identity and reviewed position source per row through a separate read-only gate; determine V1/enrichment/mixed state and investigate regression provenance.
+- [ ] Review a separate preflighted, recoverable catalog repair only after all positions are evidenced; then recertify authority. Migration 0039 and rollout remain STOPPED. See `recipe-catalog/PRODUCTION_INGREDIENT_ORDER_RECOVERY_PACKET.md`.
+
+---
+
 # Production D1 order-coverage validation — 2026-09-29
 
 - [x] Final `WRANGLER_SEND_METRICS=false pnpm check` PASS: typecheck, lint, 220 files / 4,816 tests, migration smoke and build. Initial unfiltered run had one local Wrangler startup timeout; focused rerun and full rerun passed.

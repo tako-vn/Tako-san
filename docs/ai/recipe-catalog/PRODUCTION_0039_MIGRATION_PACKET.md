@@ -1,5 +1,9 @@
 # Production D1 0038 to 0039 migration packet
 
+## 2026-09-29 catalog order STOP (newer evidence)
+
+PR #26 merged as `d0c670289534c33187181b2eb7192c05a2962e22`; exact-main CI `36576510231` passed. The protected read-only run `36577380500` succeeded, but its sanitized diagnosis remains `BLOCKED`: 6,720 recipe ingredient rows, zero ingredient-order rows, 500/500 recipes missing positions and 0/500 hydrated. The ledger still has 38 entries through 0038. See `PRODUCTION_INGREDIENT_ORDER_RECOVERY_PACKET.md` for the evidence boundary and required recovery design. **Do not dispatch 0039** while catalog hydration and authority fail; this migration does not rebuild ingredient order. No production migration, restore, deployment or flag change was performed.
+
 Status: PREPARED, NOT AUTHORIZED TO APPLY. Production D1 and Worker are unchanged by this packet.
 
 ## Evidence and scope
