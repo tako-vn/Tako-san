@@ -13,29 +13,8 @@ import { invalidateInventoryDependents } from '../lib/query-invalidation';
 import { presentConfidence, presentDomainError, presentPrice, presentPurchaseDate, presentRefetchOutcome } from '../lib/inventory-truth';
 import { ApiError } from '../services/http';
 import { ScanProcessingState } from '../components/scan/ScanProcessingState';
+import { scanErrorMessage } from '../lib/scan-errors';
 
-function receiptErrorText(code?: string, _detail?: string): string {
-  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
-    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
-  }
-  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
-    return 'Dịch vụ đọc hóa đơn phản hồi quá lâu. Hãy thử lại với ảnh gọn và rõ hơn.';
-  }
-  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
-    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
-    return 'Dịch vụ đọc hóa đơn đang tạm thời không khả dụng. Bạn có thể nhập thủ công.';
-  }
-  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
-    return 'Dịch vụ đọc hóa đơn đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
-  }
-  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
-    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
-  }
-  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
-    return 'Ảnh hóa đơn không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
-  }
-  return 'Không thể đọc hóa đơn. Hãy thử lại với ảnh rõ hơn.';
-}
 
 interface ReceiptItemState {
   id: string;
@@ -69,6 +48,7 @@ interface ReceiptState {
   invoiceNumber?: string;
   totalAmountVnd?: number;
   errorCode?: string;
+  supportId?: string;
   errorMessage?: string;
 }
 
@@ -164,7 +144,7 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
           if (attempts < 90) timer = window.setTimeout(poll, 1000);
           else setPollError('Hóa đơn đang xử lý lâu hơn dự kiến. Bạn có thể kiểm tra lại hoặc chọn ảnh mới.');
         } else if (next.status === 'failed') {
-          setPollError(receiptErrorText(next.errorCode, next.errorMessage));
+          setPollError(scanErrorMessage(next.errorCode, 'receipt', { requestId: next.supportId }));
         }
       } catch {
         if (cancelled || !isCurrent()) return;

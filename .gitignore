@@ -10,3 +10,7 @@ dist/
 .hoplite/artifacts/
 test-results/
 playwright-report/
+# Private OCR certification inputs and outputs
+qa/ocr/receipt_*
+qa/ocr/expected.json
+qa/ocr/results.json

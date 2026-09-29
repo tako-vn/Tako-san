@@ -1,3 +1,83 @@
+# Production D1 identity gate verification — 2026-09-29
+
+PR #25's account-identity repair passed focused 6/6 and final local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build. Diff check passed. Hosted CI and independent review are pending on the updated PR head. Production remains degraded with `CATALOG_DIAGNOSTICS`; no production read, mutation or deployment was performed in this continuation. Next: push, obtain exact PR-head CI and independent review, protected merge and exact-main CI. The new diagnostic then needs production Environment approval; 0039 migration and rollout remain blocked.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+PR #25 final prior head `d2e481e75e652262310ac0db5cc3bf324397c08e` passed hosted CI run `36567679646`, with zero GitHub reviews. Main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`. Fresh public production readiness still shows old Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, D1/0/cutover true but global static and `CATALOG_DIAGNOSTICS`; staging serves main with global D1 and no fallback. This continuation changes only the unmerged diagnostic workflow and its test: it now checks the authenticated Cloudflare account from `whoami` before remote D1 access, matching the production certification workflow. Focused tests 6/6 PASS; full local and hosted final-head checks are pending. No production mutation, merge or deploy. Next: complete gates, secure independent GitHub review, merge through protected flow, exact-main CI, then dispatch read-only diagnostics via production Environment approval. 0039 migration and rollout remain stopped.
+
+---
+
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+PR #25 is open from `codex/production-d1-diagnostics`. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` and local `pnpm check` (220 files / 4,813 tests, lint, typecheck, migration smoke, build). This follow-up changes documentation only; final-head CI and independent review remain required. Exact main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; `FINAL_RELEASE_SHA=UNSET`. Next: review/merge PR #25 through protected flow, obtain exact-main CI, then dispatch only the read-only D1 diagnostic with production Environment approval. Do not apply 0039 or deploy while D1 fallback and migration mismatch persist. No production mutation was performed.
+
+---
+
+# Unified production release train handoff — 2026-09-29
+
+`codex/production-d1-diagnostics` starts from main `8072e0fea9f8f3588426969007dda06cadbbfbb7` in isolated checkout `/Users/tunbee27/Documents/Tako-san-release-checkout`. Production certification run `36563767379` passed Worker version/deployment and D1 binding proof under production Environment approval, but stopped at the missing `0039_meal_composition_v2.sql` ledger entry. Public readiness independently reports `CATALOG_DIAGNOSTICS` fallback while configured D1/0/cutover true. No production mutation was made.
+
+The branch proposes `.github/workflows/production-d1-diagnostics.yml`, `scripts/production-d1-diagnostics.mjs`, two unit tests, a one-line post-apply proof repair in `.github/workflows/production-d1-migrate.yml`, and `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md`. The diagnostic runs five guarded SELECTs after exact-main, production Environment and D1 identity checks and uploads counts/code categories only. It is diagnostic, not release certification. The packet is prepared, not authorization to apply.
+
+Executed local checks: `pnpm lint` PASS; `pnpm typecheck` PASS; five-file focused Vitest 305/305 PASS; `pnpm check:migrations` PASS; `pnpm build` PASS; `NODE_OPTIONS=--no-experimental-webstorage pnpm test` 220 files/4,812 tests PASS; `git diff --check` PASS. First typecheck failed on missing sparse source folders; first full test attempt had 17 fixture/timeout failures. After expanding sparse paths, targeted 48/48 and final full suite passed. No hosted CI on this branch yet.
+
+Next action: push reviewable PR, get independent review and hosted CI, merge through protected main. Then rerun exact-main gates and request production Environment approval for the new read-only diagnostic. Use failure codes to address catalog hydration; recheck ledger and migration packet before any 0039 apply. Do not dispatch production mutation or deploy while either blocker persists. `FINAL_RELEASE_SHA=UNSET`.
+
+---
+
+# Scan/OCR handoff — 2026-09-29
+
+PR #22 was reviewed at `439451afeb81aee732c3e7d13acaf0a194b1e70e`, merged as `94056d29ed00a1000e65eb8e1348384638bc02af`, and passed exact-main CI run `36476834182` / job `109112533990` (216 files / 4,804 tests, lint, typecheck, migration smoke, build). Official staging deploy run `36477693577` succeeded on that SHA; production job was skipped. Staging serves AI mock with DB/Queue ready, recipe canary 1%, T20 true. Guest quota API covered 5 ready scans, 6th quota rejection, replay and tenancy. Direct D1 ledger, provider failure, retry exhaustion and no-job fault injection remain unverified on staging.
+
+This follow-up branch `codex/scan-synthetic-ocr-certification` is based on the merge SHA and has local focused 28/28 plus full `pnpm check` PASS. It adds 4 deterministic fictitious receipts/16 variants and a source-first manifest. Apple Vision local baseline achieved 100% normalized names, quantity/unit, line prices and totals with 194-512 ms per image; Qwen OCR was not run. The branch also removes `trứng` and `mozzarella` as incorrect canonical aliases and exposes `X-Request-Id` to trusted CORS origins. Follow-up changes are not in the staging deploy above.
+
+Next: obtain hosted CI and independent review for the follow-up PR before any merge. A dedicated non-production Qwen environment with isolated data resources and approved secret/configuration is needed for real OCR certification. The four original QA images and independently transcribed `qa/ocr/expected.json` are still unavailable; do not infer them from the old incident report. See `docs/ai/scan/SCAN_OCR_REMEDIATION_CERTIFICATION.md`, `qa/ocr/synthetic/README.md`, and `qa/ocr/README.md`. Status: `REAL_QWEN_STAGING_CERTIFICATION_BLOCKED_CONFIGURATION`, `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`, production `NOT_READY_FOR_PRODUCTION`. No production deployment or data mutation.
+
+---
+
+# Historical handoff — Scan/OCR/AI quota remediation (2026-09-28)
+
+PR #22 (`takovn2/Tako-san`) contains the async quota, UI taxonomy, support ID, canonical ingredient, queue fencing/retry, and OCR harness changes. A follow-up review fixed replay of a terminal failed scan after queue-intent persistence fails before a job row exists. The same key now returns `SCAN_FAILED`/503 without reserving quota or sending work; a new key explicitly starts a new attempt. Regression is in `tests/integration/scan-async-quota-lifecycle.test.ts`. No migration or production configuration change.
+
+Final unfiltered `pnpm check` PASS: 216 files / 4,804 tests, typecheck, ESLint, migration smoke, build. First full run timed out one unrelated AI provider test at five seconds; focused 23/23 and second full 4,804/4,804 passed. `git diff --check` and `node --check scripts/ocr-benchmark.mjs` passed. Staging read-only health/ready returned 200 and reported SHA `12348efd015ae72337fbeb08651150a7d28ee638`, database/queue ok, AI mock. Deploy workflow permits reviewed main SHAs only; this PR was not deployed. No live staging scan certification is claimed.
+
+Private dataset requirements and runnable fixture tests: `qa/ocr/README.md`; schema: `qa/ocr/expected.schema.json`. The four originals and independent ground truth are missing. `node scripts/ocr-benchmark.mjs prepare --dataset qa/ocr` returns `DATASET_UNAVAILABLE`; live gate remains `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. No production receipt, PII, synthetic QA image, or invented ground truth was used.
+
+Implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a` passed hosted CI run `36437178487` / job `108977987256`: ESLint, typecheck, Vitest (216 files), migration smoke, and build. Next: verify the current PR head remains green and obtain independent review. A later release owner can stage a reviewed main release under the existing gate, but staging's AI mock cannot certify actual Qwen OCR. The operator must provide the private four-image dataset and ground truth before live OCR scoring. Do not merge or deploy production in this task. Recommendation: `NOT_READY_FOR_PRODUCTION`.
+
+---
+
+# Handoff — T19 cooking hard-restriction hotfix (2026-09-28)
+
+**Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch
+`fix/t19-cooking-hard-restriction-bypass` from exact main
+`85660fa497f3da7110a07ec2189309fbef81d701` (not yet pushed at handoff time).
+
+Problem: `cook/start` and `cook/complete` could be called directly to bypass
+household hard restrictions already enforced by the planner and T20
+Manual/Assisted/Auto. Fix: new `src/worker/services/cooking-hard-restrictions.ts`
+evaluates the canonical `evaluateHardRestrictions` (fail-closed) before any
+success response (`cook/start`) or durable mutation (`cook/complete`, after the
+idempotent-replay lookup on both legacy and adopted-lot paths). Facts reuse
+`candidateRestrictionFacts` over the served authority recipe: static authority
+uses the recipe only (no D1 planner enrichment); D1 adds `prep_time_minutes`,
+`recipe_classifications`, and the canonical nutrition evidence provider.
+Response contract matches T20: 422 `HARD_CONSTRAINT_CONFLICT`.
+
+Local gates: regression 15/15 PASS (9 failed before fix, proving the bug);
+nearby authority/T20 suites 50/50 PASS; worker typecheck clean; eslint clean.
+No D1 catalog mutation, no migration, no secret/config/rollout change, no
+staging or production deploy. Staging remains canary 1% — do NOT promote.
+
+Next: push branch, open PR `fix(t19): enforce hard restrictions at cooking
+boundary`, await review and merge. After merge, the T19 rollout restarts from
+shadow on the new main SHA (fresh D1 proof required; old evidence stale).
+
+---
+
 # Handoff — T19 staging canary-1 observation / canary-5 attempt (2026-09-28)
 
 **Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Main

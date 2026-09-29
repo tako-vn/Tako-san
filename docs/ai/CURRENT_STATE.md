@@ -1,3 +1,78 @@
+# Production D1 identity gate verification — 2026-09-29
+
+The PR #25 account-identity repair passed final local `pnpm check`: lint, typecheck, 220 files / 4,814 tests, migration smoke and build. `git diff --check` passed. Hosted CI is pending on this new head; there is still no independent GitHub review. No merge, production read, D1 mutation or deployment occurred in this continuation. Next: push the reviewed gate repair, wait for exact PR-head CI and independent review; only then protected merge, exact-main CI and production Environment-gated read-only diagnosis.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+PR #25 had green CI at `d2e481e75e652262310ac0db5cc3bf324397c08e` (run `36567679646`) but no GitHub review, so no merge. Fresh public readiness: production Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, configured D1/0/cutover true, global static, `CATALOG_DIAGNOSTICS`, degraded; staging Worker/main `8072e0fea9f8f3588426969007dda06cadbbfbb7`, D1/0/cutover true, global D1, no fallback, OK. This does not prove private production hydration codes.
+
+Review found the new diagnostic's `whoami` result was discarded before matching the configured Cloudflare account. The workflow now validates credential presence/account ID shape and checks the `whoami` output contains that account before any D1 query, matching the existing production certification gate. Focused tests after the repair: 6/6 PASS. Full local and hosted final-head checks are pending. No production mutation, merge, or deploy occurred. Next: finish checks, obtain independent GitHub review, protected merge and exact-main CI before a production Environment-gated read-only diagnostic. Migration 0039 and the D1 fallback remain independent release blockers.
+
+---
+
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+PR #25 (`codex/production-d1-diagnostics`) is open for independent review. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` (lint, typecheck, Vitest, migration smoke, build). Final local `pnpm check` on that commit passed 220 files / 4,813 tests and all other gates. This documentation checkpoint does not change executable code; hosted CI on its final PR head remains required before merge. No production mutation or rollout occurred. Next: obtain independent review, protected merge, exact-main CI, then run the separate read-only diagnostic under production Environment approval. The production 0039 ledger gap and `CATALOG_DIAGNOSTICS` fallback remain release blockers.
+
+---
+
+# Unified production train D1 investigation — 2026-09-29
+
+Status: `BLOCKED_PRE_PRODUCTION`. Main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; exact-main CI run `36491414297` SUCCESS. Read-only production certification run `36563767379` passed the exact-main gate, production Environment approval, active Worker version/deployment and D1 binding identity, then failed because the production ledger lacks `0039_meal_composition_v2.sql`. Active Worker is `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`; public readiness is D1/0/cutover true but global static with `CATALOG_DIAGNOSTICS`. Missing migration and recipe hydration fallback are independent blockers. No production migration, deployment, flag change or rollback was performed.
+
+Branch `codex/production-d1-diagnostics` adds a manual, production Environment gated, exact-main read-only diagnostic workflow. Its artifact contains only ledger names/counts and recipe hydration code counts, never recipe rows or IDs. It also corrects the production migration workflow's post-apply runtime catalog proof to execute five guarded SELECTs via `d1-readonly-query.mjs` rather than Wrangler's `--file` import API. The reviewed 0038 to 0039 plan, recovery and STOP gates are in `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md`.
+
+Local verification: `pnpm lint` PASS; `pnpm typecheck` PASS after expanding the sparse checkout; focused five-file Vitest run 305/305 PASS; `pnpm check:migrations` PASS; `pnpm build` PASS; final `NODE_OPTIONS=--no-experimental-webstorage pnpm test` 220 files / 4,812 tests PASS; `git diff --check` PASS. Initial typecheck failed because sparse checkout lacked `src/web` and `src/shared`; initial full test run had 17 failures from missing `data/recipe-refresh`/`artifacts` fixtures plus one overloaded Wrangler timeout. Those paths were added; focused rerun 48/48 and final full rerun passed. These are local checks, not hosted or production certification.
+
+Next: obtain independent review and hosted PR CI, merge only through protected main, then rerun exact-main CI. After that, dispatch the read-only diagnostic through production Environment approval, identify hydration failure codes, and resolve the fallback separately. The migration packet remains unexecuted pending its listed preconditions and an exact production ledger/plan proof. `FINAL_RELEASE_SHA` remains unset.
+
+---
+
+# Current scan/OCR release state — 2026-09-29
+
+- PR #22 exact reviewed head `439451afeb81aee732c3e7d13acaf0a194b1e70e` merged normally as main `94056d29ed00a1000e65eb8e1348384638bc02af`. Exact-main CI `36476834182` / `109112533990` passed lint, typecheck, 216 files / 4,804 tests, migration smoke and build.
+- Official staging deploy `36477693577` succeeded on that SHA; production job skipped. Worker readiness confirmed DB/Queue ok, AI mock, recipe canary 1%, T20 true. Guest quota API reached five ready scans and returned `SCAN_QUOTA_EXCEEDED` on sixth; replay/conflict/tenant checks passed. Direct D1 ledger and staging failure injection were not observed: `STAGING_QUOTA_API_PARTIAL`.
+- Follow-up branch `codex/scan-synthetic-ocr-certification` adds deterministic 4-case/16-variant synthetic receipts, local Apple Vision measurement, conservative alias corrections, and trusted CORS exposure of `X-Request-Id`. Local focused 28/28 and `pnpm check` passed. These changes are not yet part of the deployed main SHA.
+- `SYNTHETIC_OCR_LOCAL_BASELINE_COMPLETE`: Apple Vision read all 16 variants with 100% normalized names, quantity/unit, line prices and totals, 0 name character errors, 194-512 ms per run. This is not a Qwen result. `REAL_QWEN_STAGING_CERTIFICATION_BLOCKED_CONFIGURATION` because staging AI is mocked and no dedicated non-production Qwen configuration is available.
+- `ORIGINAL_QA_DATASET_UNAVAILABLE` and `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE` remain independent gates. Original receipt images and independently transcribed ground truth are missing. Details and exact operator paths are in `docs/ai/scan/SCAN_OCR_REMEDIATION_CERTIFICATION.md` and `qa/ocr/README.md`. Production status: `NOT_READY_FOR_PRODUCTION`; no production deploy.
+
+---
+
+# Historical snapshot — Scan/OCR/AI quota remediation (2026-09-28)
+
+**Status: `SCAN_REMEDIATION_CODE_CERTIFIED_LOCAL`; live gate `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.** PR #22 is open on `fix/scan-ai-quota-ocr-reliability`. Review found that an async queue-intent write failure left a failed scan and released quota but replaying the same key could reserve again. The fix keeps that command terminal even without a queue job, returns `SCAN_FAILED`/503, and requires a new key for a new attempt. Sync replay behavior remains covered by its existing tests.
+
+The final unfiltered local `pnpm check` passed: 216 files / 4,804 tests, typecheck, ESLint, migration smoke, and build. The first run had one unrelated 5-second AI provider test timeout (4,803/4,804); its focused rerun and the second full run passed. Implementation head `45b6115f5b8bbf54f44182ae8bd9e28d49fa3e8a` passed hosted CI run `36437178487` (ESLint, typecheck, 216 test files, migration smoke, build). Verify the final PR head has a green check before any release decision. Staging read-only health and readiness returned 200 at `12348efd015ae72337fbeb08651150a7d28ee638`, with DB/queue ok and AI `mock`. The staging release workflow accepts reviewed main releases, so PR #22 was not deployed; staging does not certify the PR or live OCR.
+
+The private four-receipt dataset is absent. `qa/ocr/README.md` identifies runnable repository fixture tests and the exact operator paths/schema. The benchmark correctly returns `DATASET_UNAVAILABLE`. No QA data was invented; no merge or production deploy occurred. Production recommendation: `NOT_READY_FOR_PRODUCTION`.
+
+---
+
+# Current state — T19 cooking hard-restriction hotfix (2026-09-28)
+
+**Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch
+`fix/t19-cooking-hard-restriction-bypass` from exact main `85660fa497f3da7110a07ec2189309fbef81d701`.
+`POST /api/v1/recipes/:id/cook/start` and `/cook/complete` previously skipped
+household hard restrictions entirely; the fix enforces the canonical T03
+`evaluateHardRestrictions` (fail-closed) at both boundaries via new
+`src/worker/services/cooking-hard-restrictions.ts`, reusing
+`candidateRestrictionFacts` + the canonical nutrition evidence provider over a
+minimal candidate shim. Contract matches T20: 422 `HARD_CONSTRAINT_CONFLICT`.
+Idempotent successful replay preserved (restriction check runs after the replay
+lookup on both legacy and adopted-lot paths). No D1 catalog change, no
+migration, no secret/config change, no deploy. Staging stays canary 1%.
+
+Proven locally: regression `tests/integration/t19-cooking-hard-restrictions.test.ts`
+15/15 PASS (bug reproduced 9-fail before fix); nearby suites
+`t19-recipe-authority-split` + `recipe-authority-routing` 19/19,
+`t20-legacy-family-and-safety` + `t20-meal-composition-flows` 31/31;
+`tsc -p tsconfig.worker.json` clean; eslint clean on touched files.
+Next: push branch, open PR, await review/merge. Do NOT promote canary.
+
+---
+
 # Current state — T19 staging canary-1 observation / canary-5 attempt (2026-09-28)
 
 **Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Main `85660fa497f3`

@@ -1,3 +1,66 @@
+# Production D1 identity gate verification — 2026-09-29
+
+- [x] Account-identity repair: focused 6/6 and full local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build PASS; diff check PASS.
+- [ ] Push PR #25 updated head, await hosted CI and independent review before protected merge.
+- [ ] After merge/exact-main CI, dispatch only the read-only diagnostic via production Environment approval. Migration and deploy remain stopped.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+- [x] Recheck PR #25 at `d2e481e`: hosted CI `36567679646` PASS; no review and no merge.
+- [x] Fresh public readiness: production still degraded with `CATALOG_DIAGNOSTICS` fallback; staging still D1/500 with no fallback.
+- [x] Match Cloudflare `whoami` account to configured account before the new workflow's first D1 read; focused tests 6/6 PASS.
+- [ ] Run full local gates and hosted CI on the updated PR head; obtain independent GitHub review before protected merge.
+- [ ] After merge, exact-main CI and production Environment approval precede read-only diagnosis. Migration and deployment stay stopped at the independent ledger/fallback blockers.
+
+---
+
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+- [x] PR #25 opened from implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98`; hosted CI run `36566901147` PASS on that head.
+- [x] Final local `pnpm check` PASS on implementation head: 220 files / 4,813 tests, migration smoke, lint, typecheck, build.
+- [ ] Verify hosted CI on the final documentation checkpoint head and obtain independent review before protected merge.
+- [ ] After merge, require exact-main CI and production Environment approval for read-only diagnosis. Keep 0039 migration and production rollout stopped while ledger and D1 fallback blockers remain.
+
+---
+
+# Unified production release train — 2026-09-29
+
+- [x] Fresh production Environment read-only run `36563767379`: Worker/deployment/DB identity verified; ledger lacks `0039_meal_composition_v2.sql`; certification stops before recipe rows.
+- [x] Create isolated checkout and read-only diagnostic workflow plus sanitized failure-code receipt; correct migration post-apply runtime proof to use guarded SELECTs.
+- [x] Prepare `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md` with exact plan, Time Travel recovery and compatibility/rollback boundaries; no migration dispatched.
+- [x] Local gates: lint, typecheck, 305 focused tests, migration smoke, build, final full 220-file/4,812-test suite and diff check PASS. Initial sparse-fixture/typecheck failures and a parallel Wrangler timeout cleared after expanding checkout and rerunning.
+- [ ] Review the workflow and packet independently; obtain hosted PR CI and normal protected merge. Any new main SHA invalidates old exact-SHA certification.
+- [ ] Dispatch the diagnostic only after merge/exact-main CI and production Environment approval; determine hydration code counts and repair the independent D1 fallback.
+- [ ] Recheck the full production ledger and exact Wrangler plan; satisfy every packet precondition before considering 0039 migration. Keep production rollout stopped while fallback or migration mismatch remains.
+
+---
+
+# Scan/OCR continuation board — 2026-09-29
+
+- [x] PR #22 independent exact-head review and normal merge: head `439451afeb81aee732c3e7d13acaf0a194b1e70e`, main `94056d29ed00a1000e65eb8e1348384638bc02af`.
+- [x] Exact-main CI `36476834182` / `109112533990`: lint, typecheck, 216 files / 4,804 tests, migration smoke, build PASS.
+- [x] Official staging deploy `36477693577`: served exact merge SHA; DB/Queue ready, AI mock, recipe canary 1%, T20 true. Production job skipped.
+- [x] Staging quota API: five scans reached ready and quota 5/5; sixth returned 429 `SCAN_QUOTA_EXCEEDED`; same-key replay, mismatched bytes/MIME 409, and guest tenancy checked. [ ] Direct D1 ledger and safe staging fault injection remain unverified.
+- [x] Synthetic fixture generator, source-first manifest, 16 preprocessing variants, scorer and tests. Local Apple Vision baseline 16/16 variants at 100% names, quantity/unit, prices and totals; 194-512 ms. [ ] Real Qwen non-production certification blocked by configuration; do not infer provider metrics from Apple Vision.
+- [x] Follow-up local focused tests 28/28 and full `pnpm check` PASS; canonical alias and trusted CORS request ID regressions added. [ ] Obtain follow-up PR exact-head hosted CI and independent review before merging.
+- [ ] Original four QA images and independent `qa/ocr/expected.json` remain unavailable: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`. Paths/schema: `qa/ocr/README.md`. Production: `NOT_READY_FOR_PRODUCTION`; do not deploy.
+
+---
+
+# Historical task board — Scan/OCR/AI quota remediation (2026-09-28)
+
+- [x] Reproduce guest five-scan quota and frontend error masking; implement fenced async consume/release, idempotency, queue retry/reconciliation, tenant isolation, support IDs, server quota snapshot, Vietnamese canonical matching, and private OCR harness.
+- [x] Review PR #22; fix replay after queue-intent persistence fails before a job exists. Verify replay gives `SCAN_FAILED`/503, quota stays released, and no second message is sent.
+- [x] Final local `pnpm check`: 216 files / 4,804 tests, typecheck, lint, migration smoke, build. Initial unrelated timeout passed focused rerun and full rerun.
+- [x] Read-only staging health/ready 200 at main SHA `12348efd...`, DB and Queue ok, AI mock. Record that main-only release gating prevents deploying PR #22 to staging.
+- [x] Implementation head `45b6115` passed hosted CI run `36437178487`; final PR head CI must stay green.
+- [ ] Obtain independent review and operator-led staging certification after a valid main release. Do not merge or deploy production in this task.
+- [ ] Operator supplies four original PII-safe QA images and independent `qa/ocr/expected.json`; run private live OCR and preprocessing certification. Until then: `LIVE_OCR_CERTIFICATION_BLOCKED_DATASET_UNAVAILABLE`.
+
+---
+
 # Task board — T19 staging canary-1 observation / canary-5 (2026-09-28)
 
 **Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Remote mutation: NO.

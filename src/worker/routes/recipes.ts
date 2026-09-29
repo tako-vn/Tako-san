@@ -6,13 +6,14 @@ import { compareFefoLots } from '../../../packages/domain/src/inventory-fefo';
 import { toLotQuantity } from '../../../packages/domain/src/inventory-truth';
 import { inventoryAuthorityFailure } from '../utils/inventory-authority';
 import { Env, AuthContext } from '../types';
-import { rankRecipes, evaluateRecipeMatch, CuisineType } from '@frigo/recipes';
+import { rankRecipes, evaluateRecipeMatch, CuisineType, type Recipe, type RecipeAuthoritySource } from '@frigo/recipes';
 import { areUnitsCompatible, convertUnit, findCanonicalIngredient, StandardUnit } from '@frigo/domain';
 import { SQL } from '@frigo/db';
 import { fetchHouseholdInventoryFromDb } from './inventory';
 import { tenancyGuard } from '../middleware/tenancy';
 import { CookingCompleteSchema } from '../validation/schemas';
 import { backgroundExecutorOf, resolveRecipeAuthority } from '../services/recipe-authority';
+import { evaluateCookingHardRestrictions } from '../services/cooking-hard-restrictions';
 import { enrichRecipesWithMedia } from '../services/recipe-media';
 
 export const recipeRoutes = new Hono<{ Bindings: Env; Variables: { auth: AuthContext } }>();
@@ -279,13 +280,38 @@ recipeRoutes.get('/recommendations', async (c) => {
 });
 
 // POST /api/v1/recipes/:id/cook/start
-recipeRoutes.post('/recipes/:id/cook/start', async (c) => {
+// T19: cook/start is a state-changing boundary (it mints the cooking session the
+// client completes), so it carries the tenancy guard and enforces the same
+// canonical hard restrictions the planner and T20 Manual/Assisted/Auto enforce.
+recipeRoutes.post('/recipes/:id/cook/start', tenancyGuard, async (c) => {
+  const auth = c.get('auth');
+  const db = c.env.DB;
   const recipeId = c.req.param('id');
+  if (!recipeId) {
+    return c.json({ error: 'Recipe not found' }, 404);
+  }
   const { snapshot } = await recipeAuthority(c);
   const recipe = snapshot.findByIdOrSlug(recipeId);
 
   if (!recipe) {
     return c.json({ error: 'Recipe not found' }, 404);
+  }
+  if (!db) {
+    // The hard-restriction check below is fail-closed; never claim a cooking
+    // session is safe when there is no authoritative persistence layer.
+    return c.json({ error: 'Database service unavailable', code: 'DATABASE_UNAVAILABLE' }, 503);
+  }
+
+  const restriction = await evaluateCookingHardRestrictions(db, auth, snapshot.source, recipe);
+  if (restriction.blocked) {
+    console.warn('[cooking] cook/start blocked by hard restriction', { recipeId: recipe.id, reasons: restriction.reasons });
+    return c.json(
+      {
+        error: 'This dish conflicts with a household restriction',
+        code: 'HARD_CONSTRAINT_CONFLICT',
+      },
+      422
+    );
   }
 
   return c.json({
@@ -372,6 +398,7 @@ recipeRoutes.post('/recipes/:id/cook/complete', tenancyGuard, async (c) => {
   if (await readInventoryAuthorityMode(db, auth.householdId) === 'native') {
     return completeAdoptedCooking(c, db, kv, auth, {
       cookId, recipe, servings, deductions, requestFingerprint,
+      authoritySource: snapshot.source,
     });
   }
 
@@ -410,6 +437,20 @@ recipeRoutes.post('/recipes/:id/cook/complete', tenancyGuard, async (c) => {
         remainingInventoryCount: inventory.length,
         inventory,
       });
+    }
+
+    // T19: enforce the canonical hard restrictions before any inventory
+    // mutation. The idempotent replay above stays untouched.
+    const restriction = await evaluateCookingHardRestrictions(db, auth, snapshot.source, recipe);
+    if (restriction.blocked) {
+      console.warn('[cooking] cook/complete blocked by hard restriction', { recipeId: recipe.id, reasons: restriction.reasons });
+      return c.json(
+        {
+          error: 'This dish conflicts with a household restriction',
+          code: 'HARD_CONSTRAINT_CONFLICT',
+        },
+        422
+      );
     }
 
     for (const deduction of deductions) {
@@ -640,10 +681,11 @@ recipeRoutes.post('/recipes/:id/cook/complete', tenancyGuard, async (c) => {
 // the cook receipt or the per-lot command receipts.
 async function completeAdoptedCooking(c: any, db: any, kv: any, auth: AuthContext, plan: {
   cookId: string;
-  recipe: { id: string; slug: string; title: string; cuisine: string; cookTimeMinutes: number; servings: number; difficulty: string; steps: unknown[] };
+  recipe: Recipe;
   servings: number;
   deductions: Array<{ ingredientId: string; name?: string; quantityDeducted: number; unit: StandardUnit }>;
   requestFingerprint: string;
+  authoritySource: RecipeAuthoritySource;
 }) {
   const scope = { householdId: auth.householdId, actorId: auth.userId };
   try {
@@ -666,6 +708,19 @@ async function completeAdoptedCooking(c: any, db: any, kv: any, auth: AuthContex
         recipeId: plan.recipe.id, deductionsApplied: plan.deductions,
         remainingInventoryCount: inventory.length, inventory,
       });
+    }
+    // T19: enforce the canonical hard restrictions before any lot/inventory
+    // mutation. The idempotent replay above stays untouched.
+    const adoptedRestriction = await evaluateCookingHardRestrictions(db, auth, plan.authoritySource, plan.recipe);
+    if (adoptedRestriction.blocked) {
+      console.warn('[cooking] cook/complete blocked by hard restriction', { recipeId: plan.recipe.id, reasons: adoptedRestriction.reasons });
+      return c.json(
+        {
+          error: 'This dish conflicts with a household restriction',
+          code: 'HARD_CONSTRAINT_CONFLICT',
+        },
+        422
+      );
     }
     const snapshot = await readAdoptedLotSnapshot(db, scope);
     const now = new Date().toISOString();

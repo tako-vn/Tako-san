@@ -216,7 +216,7 @@ jobs:
           node scripts/d1-migration-check.mjs catalog migration-manifest.json catalog.json
           if [ "$(node -p 'require("./migration-manifest.json").catalog.releaseComplete')" = true ]; then
             node scripts/d1-migration-check.mjs runtime-catalog-query > runtime-catalog.sql
-            pnpm wrangler d1 execute frigo-db --remote --yes --json --file runtime-catalog.sql > runtime-catalog.json
+            node scripts/d1-readonly-query.mjs runtime-catalog
             node scripts/d1-migration-check.mjs runtime-catalog migration-manifest.json runtime-catalog.json
           fi
 

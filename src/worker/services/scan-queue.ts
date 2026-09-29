@@ -3,6 +3,7 @@ import { findCanonicalIngredient, findCanonicalIngredientById, StandardUnit } fr
 import { Env } from '../types';
 import { sha256Hex } from '../utils/session';
 import { aiConfigFromEnv, logAIUsage } from '../config/ai';
+import { queueQuotaSettlementStatements } from './scan-quota';
 
 // scan_items.confidence is NOT NULL with a historical 0.9 default and cannot
 // express "the provider reported none". Like the synchronous route, the queue
@@ -107,6 +108,15 @@ type ProviderFailureShape = {
   retryable: boolean;
 };
 
+const PERMANENT_SCAN_CODES = new Set([
+  'MODEL_NOT_FOUND', 'AUTHENTICATION_FAILED', 'PERMISSION_DENIED', 'LICENSE_REQUIRED',
+  'UNSUPPORTED_REQUEST_OPTION', 'INVALID_RESPONSE', 'SCHEMA_VALIDATION',
+  'AI_SCAN_NO_USABLE_ITEMS', 'AI_IMAGE_TOO_LARGE', 'AI_BUDGET_EXCEEDED',
+]);
+const TRANSIENT_SCAN_CODES = new Set([
+  'REQUEST_TIMEOUT', 'AI_SCAN_TIMEOUT', 'NETWORK_ERROR', 'RATE_LIMITED', 'UPSTREAM_ERROR', 'UPSTREAM_BUSY',
+]);
+
 export type ScanFailureClassification = {
   code: string;
   retryable: boolean;
@@ -185,10 +195,12 @@ async function runScanAI<T>(operation: Promise<T>, timeoutMs = SCAN_AI_TIMEOUT_M
  */
 export function classifyScanError(error: unknown): ScanFailureClassification {
   if (error instanceof ScanQueueError) {
-    return { code: error.code, retryable: error.retryable };
+    return { code: error.code, retryable: PERMANENT_SCAN_CODES.has(error.code) ? false
+      : TRANSIENT_SCAN_CODES.has(error.code) ? true : error.retryable };
   }
   if (isProviderFailureShape(error)) {
-    return { code: error.code, retryable: error.retryable };
+    return { code: error.code, retryable: PERMANENT_SCAN_CODES.has(error.code) ? false
+      : TRANSIENT_SCAN_CODES.has(error.code) ? true : error.retryable };
   }
 
   const message = error instanceof Error ? error.message : String(error);
@@ -352,6 +364,9 @@ async function claimScanJobWithLease(env: Env, message: ScanQueueMessage): Promi
       WHERE id = ? AND user_id = ? AND household_id = ? AND status IN ('pending', 'processing')
         AND EXISTS (SELECT 1 FROM scan_queue_jobs WHERE id = ? AND status = 'failed' AND claim_token = ?)`)
       .bind(message.scanId, message.userId, message.householdId, jobId, exhaustedToken),
+    ...quotaCommitStatements(env, message,
+      `EXISTS (SELECT 1 FROM scan_queue_jobs WHERE id = ? AND status = 'failed' AND claim_token = ?)`,
+      [jobId, exhaustedToken], 'released'),
     env.DB.prepare(`UPDATE scan_queue_jobs
        SET status = 'processing', attempts = attempts + 1,
            locked_at = datetime('now'), updated_at = datetime('now'),
@@ -367,7 +382,7 @@ async function claimScanJobWithLease(env: Env, message: ScanQueueMessage): Promi
       .bind(message.scanId, jobId, claimToken),
   ]);
   if (results.some((result) => !result.success)) throw new ScanQueueError('Scan claim failed', 'CLAIM_FAILED', true);
-  if (results[2].meta?.changes === 1) return { status: 'claimed', jobId, claimToken };
+  if (results[4].meta?.changes === 1) return { status: 'claimed', jobId, claimToken };
   const current = await env.DB.prepare(`SELECT scans.status AS scan_status, scan_queue_jobs.status AS job_status
     FROM scans LEFT JOIN scan_queue_jobs ON scan_queue_jobs.id = ? WHERE scans.id = ?`)
     .bind(jobId, message.scanId).first<{ scan_status: string; job_status: string | null }>();
@@ -393,6 +408,10 @@ function commitFence(env: Env, message: ScanQueueMessage, jobId: string, claimTo
   return { acquire, guard, bindings };
 }
 
+function quotaCommitStatements(env: Env, message: ScanQueueMessage, guard: string, bindings: readonly string[], outcome: 'consumed' | 'released') {
+  return queueQuotaSettlementStatements(env.DB, message.scanId, message.userId, message.householdId, guard, bindings, outcome);
+}
+
 function assertFencedCommit(results: { success: boolean; meta: Record<string, unknown> }[]): void {
   if (results.some((result) => !result.success)) throw new ScanQueueError('Scan persistence failed', 'DATABASE_ERROR', true);
   if (results[0].meta?.changes !== 1 || results[results.length - 1].meta?.changes !== 1) {
@@ -406,6 +425,20 @@ export async function claimScanJob(env: Env, message: ScanQueueMessage): Promise
   return claim.status;
 }
 
+async function logScanTerminal(env: Env, message: ScanQueueMessage, state: 'ready' | 'failed', errorCode: string | null, retryable: boolean, startedAt: number): Promise<void> {
+  const jobId = message.jobId || `scan_job_${message.scanId}`;
+  const job = await env.DB.prepare('SELECT attempts, max_attempts FROM scan_queue_jobs WHERE id = ?')
+    .bind(jobId).first<{ attempts: number; max_attempts: number }>().catch(() => null);
+  const receipt = message.scanType === 'receipt';
+  console.log(JSON.stringify({ event: 'scan_terminal', supportId: (await sha256Hex(message.scanId)).slice(0, 12),
+    scanType: message.scanType || 'fridge', state, errorCode, retryable,
+    attempt: job?.attempts ?? null, maxAttempts: job?.max_attempts ?? null,
+    logicalModel: receipt ? 'QWEN_OCR' : 'QWEN_MULTIMODAL',
+    // The actual model can escalate; ai_usage logs carry its verified identity.
+    configuredPrimaryModel: receipt ? (env.AI_MODEL_OCR || 'qwen-vl-ocr') : (env.AI_MODEL_MULTIMODAL || 'qwen3.8-flash'),
+    latencyMs: Date.now() - startedAt }));
+}
+
 export async function processScanJob(env: Env, messageBody: unknown): Promise<void> {
   const message = parseMessage(messageBody);
   const claim = await claimScanJobWithLease(env, message);
@@ -415,6 +448,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
   if (claim.status !== 'claimed') return;
 
   const { jobId, claimToken } = claim;
+  const startedAt = Date.now();
   try {
     const image = await loadImage(env, message);
     await verifyScanRequestIdentity(env, message, image);
@@ -468,6 +502,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
              total_amount_vnd = ?, updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND ${fence.guard}`,
         ).bind(receipt.merchant_name ?? null, receipt.invoice_number ?? null, receipt.purchase_date ?? null, receipt.total_amount_vnd ?? null, message.scanId, ...fence.bindings),
+        ...quotaCommitStatements(env, message, fence.guard, fence.bindings, 'consumed'),
         env.DB.prepare(
           `UPDATE scan_queue_jobs SET status = 'ready', completed_at = datetime('now'), updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND claim_token = ?`,
@@ -519,6 +554,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
         ...statements,
         env.DB.prepare(`UPDATE scans SET status = 'ready', updated_at = datetime('now') WHERE id = ? AND status = 'processing' AND ${fence.guard}`)
           .bind(message.scanId, ...fence.bindings),
+        ...quotaCommitStatements(env, message, fence.guard, fence.bindings, 'consumed'),
         env.DB.prepare(
           `UPDATE scan_queue_jobs SET status = 'ready', completed_at = datetime('now'), updated_at = datetime('now')
            WHERE id = ? AND status = 'processing' AND claim_token = ?`,
@@ -527,6 +563,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       const commitResults = await env.DB.batch(commitStatements);
       assertFencedCommit(commitResults);
     }
+    await logScanTerminal(env, message, 'ready', null, false, startedAt).catch(() => {});
   } catch (error) {
     const classification = classifyScanError(error);
     const code = classification.code;
@@ -542,6 +579,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       env.DB.prepare(`UPDATE scans SET status = ?, updated_at = datetime('now')
         WHERE id = ? AND status = 'processing' AND ${fence.guard}`)
         .bind(retryable ? 'pending' : 'failed', message.scanId, ...fence.bindings),
+      ...(retryable ? [] : quotaCommitStatements(env, message, fence.guard, fence.bindings, 'released')),
       env.DB.prepare(`UPDATE scan_queue_jobs SET status = ?, error_code = ?, error_message = ?,
         completed_at = CASE WHEN ? = 'failed' THEN datetime('now') ELSE NULL END, updated_at = datetime('now')
         WHERE id = ? AND status = 'processing' AND claim_token = ?`)
@@ -549,6 +587,7 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
           retryable ? 'pending' : 'failed', ...fence.bindings),
     ]);
     assertFencedCommit(failureResults);
+    if (!retryable) await logScanTerminal(env, message, 'failed', code, false, startedAt).catch(() => {});
     throw new ScanQueueError(sanitizedScanErrorMessage(code), code, retryable);
   }
 }
