@@ -1,3 +1,35 @@
+# Production D1 identity gate verification — 2026-09-29
+
+The PR #25 account-identity repair passed final local `pnpm check`: lint, typecheck, 220 files / 4,814 tests, migration smoke and build. `git diff --check` passed. Hosted CI is pending on this new head; there is still no independent GitHub review. No merge, production read, D1 mutation or deployment occurred in this continuation. Next: push the reviewed gate repair, wait for exact PR-head CI and independent review; only then protected merge, exact-main CI and production Environment-gated read-only diagnosis.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+PR #25 had green CI at `d2e481e75e652262310ac0db5cc3bf324397c08e` (run `36567679646`) but no GitHub review, so no merge. Fresh public readiness: production Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, configured D1/0/cutover true, global static, `CATALOG_DIAGNOSTICS`, degraded; staging Worker/main `8072e0fea9f8f3588426969007dda06cadbbfbb7`, D1/0/cutover true, global D1, no fallback, OK. This does not prove private production hydration codes.
+
+Review found the new diagnostic's `whoami` result was discarded before matching the configured Cloudflare account. The workflow now validates credential presence/account ID shape and checks the `whoami` output contains that account before any D1 query, matching the existing production certification gate. Focused tests after the repair: 6/6 PASS. Full local and hosted final-head checks are pending. No production mutation, merge, or deploy occurred. Next: finish checks, obtain independent GitHub review, protected merge and exact-main CI before a production Environment-gated read-only diagnostic. Migration 0039 and the D1 fallback remain independent release blockers.
+
+---
+
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+PR #25 (`codex/production-d1-diagnostics`) is open for independent review. Implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98` passed hosted PR CI run `36566901147` (lint, typecheck, Vitest, migration smoke, build). Final local `pnpm check` on that commit passed 220 files / 4,813 tests and all other gates. This documentation checkpoint does not change executable code; hosted CI on its final PR head remains required before merge. No production mutation or rollout occurred. Next: obtain independent review, protected merge, exact-main CI, then run the separate read-only diagnostic under production Environment approval. The production 0039 ledger gap and `CATALOG_DIAGNOSTICS` fallback remain release blockers.
+
+---
+
+# Unified production train D1 investigation — 2026-09-29
+
+Status: `BLOCKED_PRE_PRODUCTION`. Main remains `8072e0fea9f8f3588426969007dda06cadbbfbb7`; exact-main CI run `36491414297` SUCCESS. Read-only production certification run `36563767379` passed the exact-main gate, production Environment approval, active Worker version/deployment and D1 binding identity, then failed because the production ledger lacks `0039_meal_composition_v2.sql`. Active Worker is `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`; public readiness is D1/0/cutover true but global static with `CATALOG_DIAGNOSTICS`. Missing migration and recipe hydration fallback are independent blockers. No production migration, deployment, flag change or rollback was performed.
+
+Branch `codex/production-d1-diagnostics` adds a manual, production Environment gated, exact-main read-only diagnostic workflow. Its artifact contains only ledger names/counts and recipe hydration code counts, never recipe rows or IDs. It also corrects the production migration workflow's post-apply runtime catalog proof to execute five guarded SELECTs via `d1-readonly-query.mjs` rather than Wrangler's `--file` import API. The reviewed 0038 to 0039 plan, recovery and STOP gates are in `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md`.
+
+Local verification: `pnpm lint` PASS; `pnpm typecheck` PASS after expanding the sparse checkout; focused five-file Vitest run 305/305 PASS; `pnpm check:migrations` PASS; `pnpm build` PASS; final `NODE_OPTIONS=--no-experimental-webstorage pnpm test` 220 files / 4,812 tests PASS; `git diff --check` PASS. Initial typecheck failed because sparse checkout lacked `src/web` and `src/shared`; initial full test run had 17 failures from missing `data/recipe-refresh`/`artifacts` fixtures plus one overloaded Wrangler timeout. Those paths were added; focused rerun 48/48 and final full rerun passed. These are local checks, not hosted or production certification.
+
+Next: obtain independent review and hosted PR CI, merge only through protected main, then rerun exact-main CI. After that, dispatch the read-only diagnostic through production Environment approval, identify hydration failure codes, and resolve the fallback separately. The migration packet remains unexecuted pending its listed preconditions and an exact production ledger/plan proof. `FINAL_RELEASE_SHA` remains unset.
+
+---
+
 # Current scan/OCR release state — 2026-09-29
 
 - PR #22 exact reviewed head `439451afeb81aee732c3e7d13acaf0a194b1e70e` merged normally as main `94056d29ed00a1000e65eb8e1348384638bc02af`. Exact-main CI `36476834182` / `109112533990` passed lint, typecheck, 216 files / 4,804 tests, migration smoke and build.

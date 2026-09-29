@@ -1,3 +1,42 @@
+# Production D1 identity gate verification — 2026-09-29
+
+- [x] Account-identity repair: focused 6/6 and full local `pnpm check` 220 files / 4,814 tests, lint, typecheck, migration smoke and build PASS; diff check PASS.
+- [ ] Push PR #25 updated head, await hosted CI and independent review before protected merge.
+- [ ] After merge/exact-main CI, dispatch only the read-only diagnostic via production Environment approval. Migration and deploy remain stopped.
+
+---
+
+# Production D1 diagnostic continuation — 2026-09-29
+
+- [x] Recheck PR #25 at `d2e481e`: hosted CI `36567679646` PASS; no review and no merge.
+- [x] Fresh public readiness: production still degraded with `CATALOG_DIAGNOSTICS` fallback; staging still D1/500 with no fallback.
+- [x] Match Cloudflare `whoami` account to configured account before the new workflow's first D1 read; focused tests 6/6 PASS.
+- [ ] Run full local gates and hosted CI on the updated PR head; obtain independent GitHub review before protected merge.
+- [ ] After merge, exact-main CI and production Environment approval precede read-only diagnosis. Migration and deployment stay stopped at the independent ledger/fallback blockers.
+
+---
+
+# Production D1 diagnostic PR checkpoint — 2026-09-29
+
+- [x] PR #25 opened from implementation commit `ad30b7efeac7a4db71665a318fb4869396e4ce98`; hosted CI run `36566901147` PASS on that head.
+- [x] Final local `pnpm check` PASS on implementation head: 220 files / 4,813 tests, migration smoke, lint, typecheck, build.
+- [ ] Verify hosted CI on the final documentation checkpoint head and obtain independent review before protected merge.
+- [ ] After merge, require exact-main CI and production Environment approval for read-only diagnosis. Keep 0039 migration and production rollout stopped while ledger and D1 fallback blockers remain.
+
+---
+
+# Unified production release train — 2026-09-29
+
+- [x] Fresh production Environment read-only run `36563767379`: Worker/deployment/DB identity verified; ledger lacks `0039_meal_composition_v2.sql`; certification stops before recipe rows.
+- [x] Create isolated checkout and read-only diagnostic workflow plus sanitized failure-code receipt; correct migration post-apply runtime proof to use guarded SELECTs.
+- [x] Prepare `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md` with exact plan, Time Travel recovery and compatibility/rollback boundaries; no migration dispatched.
+- [x] Local gates: lint, typecheck, 305 focused tests, migration smoke, build, final full 220-file/4,812-test suite and diff check PASS. Initial sparse-fixture/typecheck failures and a parallel Wrangler timeout cleared after expanding checkout and rerunning.
+- [ ] Review the workflow and packet independently; obtain hosted PR CI and normal protected merge. Any new main SHA invalidates old exact-SHA certification.
+- [ ] Dispatch the diagnostic only after merge/exact-main CI and production Environment approval; determine hydration code counts and repair the independent D1 fallback.
+- [ ] Recheck the full production ledger and exact Wrangler plan; satisfy every packet precondition before considering 0039 migration. Keep production rollout stopped while fallback or migration mismatch remains.
+
+---
+
 # Scan/OCR continuation board — 2026-09-29
 
 - [x] PR #22 independent exact-head review and normal merge: head `439451afeb81aee732c3e7d13acaf0a194b1e70e`, main `94056d29ed00a1000e65eb8e1348384638bc02af`.
