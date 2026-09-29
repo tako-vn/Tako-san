@@ -1,0 +1,127 @@
+# Manual read-only D1 diagnosis. Raw recipe rows stay on the runner; only counts are uploaded.
+name: Production D1 Read-Only Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full immutable current-main SHA with exact-main CI
+        type: string
+        required: true
+      hardened_sha:
+        description: Exact reviewed hardening SHA contained in the candidate
+        type: string
+        required: true
+      confirm_read_only_diagnostics:
+        description: Confirm read-only production D1 diagnosis
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: frigo-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_read_only_diagnostics == true
+    runs-on: ubuntu-latest
+    outputs:
+      candidate_sha: ${{ steps.gate.outputs.deploy_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require immutable current main and exact-SHA CI
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ inputs.ref }}
+          HARDENED_SHA: ${{ inputs.hardened_sha }}
+          RELEASE_ENVIRONMENT: production
+          RECIPE_CATALOG_MODE: static
+          RECIPE_CATALOG_D1_CANARY_PERCENT: '0'
+        run: node scripts/release-check.mjs gate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-d1-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90
+
+  diagnose:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-d1-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install pinned diagnostic tooling
+        run: pnpm install --frozen-lockfile
+      - name: Recheck exact main and production config
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$(node -p 'require("./release-manifest.json").sha')"
+          node scripts/release-check.mjs recheck
+          node scripts/d1-migration-check.mjs config
+      - name: Prove production Cloudflare and D1 identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          pnpm wrangler whoami > /dev/null
+          pnpm wrangler d1 list --json > d1-list.json
+          if pnpm wrangler d1 info frigo-db --json > d1-info.json 2> d1-info.err; then
+            node scripts/d1-migration-check.mjs identity release-manifest.json d1-list.json d1-info.json
+          else
+            node scripts/d1-migration-check.mjs identity release-manifest.json d1-list.json
+          fi
+      - name: Generate and guard five reviewed SELECTs
+        run: |
+          node scripts/d1-migration-check.mjs runtime-catalog-query > runtime-catalog.sql
+      - name: Read production ledger and runtime catalog without mutation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          pnpm wrangler d1 execute frigo-db --remote --yes --json --command "SELECT name FROM d1_migrations ORDER BY name" > pre-ledger.json
+          node scripts/d1-readonly-query.mjs runtime-catalog
+          pnpm wrangler d1 execute frigo-db --remote --yes --json --command "SELECT name FROM d1_migrations ORDER BY name" > post-ledger.json
+          node scripts/production-d1-diagnostics.mjs release-manifest.json pre-ledger.json runtime-catalog.json post-ledger.json production-d1-diagnostics.json
+      - name: Reject main change during diagnosis
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$(node -p 'require("./production-d1-diagnostics.json").candidateSha')"
+      - name: Save sanitized counts only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-d1-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: production-d1-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 90

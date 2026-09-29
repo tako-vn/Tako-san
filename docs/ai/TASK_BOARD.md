@@ -1,3 +1,15 @@
+# Unified production release train — 2026-09-29
+
+- [x] Fresh production Environment read-only run `36563767379`: Worker/deployment/DB identity verified; ledger lacks `0039_meal_composition_v2.sql`; certification stops before recipe rows.
+- [x] Create isolated checkout and read-only diagnostic workflow plus sanitized failure-code receipt; correct migration post-apply runtime proof to use guarded SELECTs.
+- [x] Prepare `docs/ai/recipe-catalog/PRODUCTION_0039_MIGRATION_PACKET.md` with exact plan, Time Travel recovery and compatibility/rollback boundaries; no migration dispatched.
+- [x] Local gates: lint, typecheck, 305 focused tests, migration smoke, build, final full 220-file/4,812-test suite and diff check PASS. Initial sparse-fixture/typecheck failures and a parallel Wrangler timeout cleared after expanding checkout and rerunning.
+- [ ] Review the workflow and packet independently; obtain hosted PR CI and normal protected merge. Any new main SHA invalidates old exact-SHA certification.
+- [ ] Dispatch the diagnostic only after merge/exact-main CI and production Environment approval; determine hydration code counts and repair the independent D1 fallback.
+- [ ] Recheck the full production ledger and exact Wrangler plan; satisfy every packet precondition before considering 0039 migration. Keep production rollout stopped while fallback or migration mismatch remains.
+
+---
+
 # Scan/OCR continuation board — 2026-09-29
 
 - [x] PR #22 independent exact-head review and normal merge: head `439451afeb81aee732c3e7d13acaf0a194b1e70e`, main `94056d29ed00a1000e65eb8e1348384638bc02af`.
