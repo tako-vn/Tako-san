@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { replayHistoricalIngredientSource, summarizeCatalogLineage } from '../../scripts/production-catalog-lineage.mjs';
 
@@ -27,6 +30,34 @@ const summarize = (overrides = {}) => summarizeCatalogLineage({
 });
 
 describe('production catalog lineage read-only diagnosis', () => {
+  it('runs the actual CLI and writes only the sanitized lineage receipt', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'production-lineage-cli-'));
+    try {
+      const inputs = [manifest, ledger, runtime, coverage(2702, 2702, 0, 0), ledger];
+      const inputPaths = inputs.map((input, index) => {
+        const file = path.join(directory, `input-${index}.json`);
+        writeFileSync(file, JSON.stringify(input));
+        return file;
+      });
+      const receiptPath = path.join(directory, 'receipt.json');
+      const output = execFileSync(process.execPath, [
+        path.resolve('scripts/production-catalog-lineage.mjs'), ...inputPaths, receiptPath,
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const serialized = readFileSync(receiptPath, 'utf8');
+      const receipt = JSON.parse(serialized);
+      expect(output).toContain('HISTORICAL_V1_INGREDIENT_LINES_AND_ORDER_MATCH');
+      expect(receipt.comparison.exactHistoricalLines).toBe(2702);
+      expect(receipt.certification).toBe('NOT_A_RELEASE_CERTIFICATION');
+      expect(receipt.productionMutations).toEqual([]);
+      expect(receipt.researchV2LineageProven).toBe(false);
+      expect(receipt.positionAuthority).toBe('NONE_GRANTED_BY_THIS_DIAGNOSTIC');
+      expect(serialized).not.toContain(expectedRows[0].id);
+      expect(serialized).not.toContain(expectedRows[0].name);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('replays and hashes the exact immutable 0038 recipe-line source', () => {
     expect(historical.recipeCount).toBe(500);
     expect(historical.lines).toHaveLength(2702);
