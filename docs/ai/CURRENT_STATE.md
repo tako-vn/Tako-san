@@ -1,3 +1,9 @@
+# Production ingredient-order diagnosis — 2026-09-29
+
+PR #26 merged to main `d0c670289534c33187181b2eb7192c05a2962e22` and exact-main CI `36576510231` passed. Production Environment-approved read-only run `36577380500` passed its workflow gates; its sanitized receipt is `BLOCKED`, not release certification. D1 `frigo-db` / `f975ec39-b2c8-4a2a-80e1-0366054599d3` remains at ledger 38/0038. It has 500 physical recipes, 6,720 ingredient lines, zero ingredient-order rows, and 500 `missing_ingredient_position` hydration failures (0/500 hydrated). Cause/timing and live-content identity remain unproven. The recovery STOP packet is `recipe-catalog/PRODUCTION_INGREDIENT_ORDER_RECOVERY_PACKET.md`. Documentation-only follow-up `WRANGLER_SEND_METRICS=false pnpm check` passed locally (typecheck, lint, Vitest, migration smoke, build). No production mutation, migration, restore, deploy or T20 enablement occurred. Next: reviewed read-only per-line identity/position provenance; do not apply 0039 or rebuild positions from counts.
+
+---
+
 # Production D1 order-coverage validation — 2026-09-29
 
 The count-only follow-up passed `WRANGLER_SEND_METRICS=false pnpm check`: typecheck, ESLint, 220 test files / 4,816 tests, migration smoke and build. Focused SQLite query and diagnostic tests passed 7/7; `git diff --check` passed. The first unfiltered `pnpm check` failed one unrelated local Wrangler staging catch-up test by its 5-second timeout; focused rerun with metrics disabled passed, followed by the complete green run. Follow-up PR review, hosted CI, exact-main CI and protected production Environment approval remain pending. No production mutation or deployment occurred.

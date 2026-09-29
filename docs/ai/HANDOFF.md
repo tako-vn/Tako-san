@@ -1,3 +1,11 @@
+# Production ingredient-order diagnostic handoff — 2026-09-29
+
+Main `d0c670289534c33187181b2eb7192c05a2962e22` (PR #26) passed exact-main CI `36576510231`. Production Environment-approved read-only run `36577380500` passed all workflow steps and emitted sanitized artifact `production-d1-diagnostics-36577380500-1` with diagnostic status `BLOCKED`: `frigo-db` / `f975ec39-b2c8-4a2a-80e1-0366054599d3`, ledger 38 through 0038, 500 recipes, 6,720 ingredient lines, zero order rows, 500 missing-order recipes and 0 hydrated. Earlier hydration success does not establish the deletion cause or live-line identity. No production write, migration, restore, deploy or T20 flag change occurred. `FINAL_RELEASE_SHA=UNSET`.
+
+The read-only STOP and recovery evidence requirements are in `recipe-catalog/PRODUCTION_INGREDIENT_ORDER_RECOVERY_PACKET.md`. On the documentation-only follow-up branch, `pnpm install --frozen-lockfile`, `WRANGLER_SEND_METRICS=false pnpm check` (typecheck, ESLint, Vitest, migration smoke, build), and `git diff --check` passed locally. Next: review a separate read-only per-line identity/position-provenance gate; only after exact source matching design a separately authorized, bookmarked recovery and recertify authority. Do not apply 0039 to try to fix catalog order.
+
+---
+
 # Order-coverage implementation checkpoint — 2026-09-29
 
 Verified implementation commit: `c318b12` on `codex/production-d1-diagnostic-followup`, based on merged main `baf9a069f89f9544407c827448671ecea4c56b5a`. Final focused diagnostic/certification/read-only-query suite: 3 files / 72 tests PASS after workflow label cleanup. Documentation checkpoint follows this implementation commit; it does not certify or change production. Next: push PR, hosted CI, independent review, protected merge, new exact-main CI, then a separate Environment-approved read-only diagnosis.
