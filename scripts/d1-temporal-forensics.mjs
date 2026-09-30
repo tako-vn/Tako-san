@@ -85,21 +85,15 @@ export function normalizeV1Pagination(resultInfo, resultLength, requestedPage, r
   const { page, per_page: perPage, count, total_count: totalCount, total_pages: reportedTotalPages } = resultInfo;
   if (!Number.isSafeInteger(page) || page !== requestedPage
     || !Number.isSafeInteger(perPage) || perPage < 1 || perPage > requestedPerPage
-    || !Number.isSafeInteger(totalCount) || totalCount < 0
     || resultLength > perPage
     || (count !== undefined && (!Number.isSafeInteger(count) || count < 0
-      || count > perPage || count !== resultLength))) return invalid;
-
-  const totalPages = Math.ceil(totalCount / perPage);
-  if (!Number.isSafeInteger(totalPages)
+      || count > perPage || count !== resultLength))
+    || (totalCount !== undefined && (!Number.isSafeInteger(totalCount) || totalCount < 0))
     || (reportedTotalPages !== undefined
-      && (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages !== totalPages))
-    || page > Math.max(1, totalPages)) return invalid;
+      && (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages < 0))) return invalid;
 
-  const expectedCount = totalCount === 0 ? 0
-    : Math.min(perPage, totalCount - (page - 1) * perPage);
-  if (resultLength !== expectedCount) return invalid;
-  return { valid: true, page, perPage, count: resultLength, totalCount, totalPages };
+  return { valid: true, page, perPage, count: resultLength,
+    totalCount: totalCount ?? null, totalPages: reportedTotalPages ?? null };
 }
 
 export async function refineTransitionIntervals({ leftTimestamp, leftDigest, rightTimestamp, rightDigest,
@@ -249,40 +243,50 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
 
   const relevantEvents = [];
   let auditAvailable = true;
-  let auditComplete = true;
+  let auditComplete = false;
   let auditHttpStatus = 200;
   let pagesRead = 0;
-  let pagination = null;
   let eventsRead = 0;
+  let terminalEmptyPageObserved = false;
+  let observedPerPage = null;
+  let observedTotalCount = null;
+  let observedTotalPages = null;
   for (let page = 1; page <= MAX_AUDIT_PAGES; page++) {
     const response = await get('audit_logs', {
       since: WINDOW_START, before: WINDOW_END, direction: 'asc', per_page: String(AUDIT_PER_PAGE), page: String(page),
     });
     if (!response.ok || !Array.isArray(response.result)) {
-      auditAvailable = false;
-      auditComplete = false;
-      auditHttpStatus = response.status ?? null;
+      auditAvailable = pagesRead > 0;
+      auditHttpStatus = response.ok ? 200 : response.status ?? null;
       break;
     }
     pagesRead++;
     const current = normalizeV1Pagination(response.resultInfo, response.result.length, page, AUDIT_PER_PAGE);
-    if (!current.valid || (pagination !== null && (current.perPage !== pagination.perPage
-      || current.totalCount !== pagination.totalCount || current.totalPages !== pagination.totalPages))) {
-      auditComplete = false;
+    if (!current.valid
+      || (observedPerPage !== null && current.perPage !== observedPerPage)
+      || (current.totalCount !== null && observedTotalCount !== null
+        && current.totalCount !== observedTotalCount)
+      || (current.totalPages !== null && observedTotalPages !== null
+        && current.totalPages !== observedTotalPages)) {
       break;
     }
-    pagination = current;
+    observedPerPage = current.perPage;
+    if (current.totalCount !== null) observedTotalCount = current.totalCount;
+    if (current.totalPages !== null) observedTotalPages = current.totalPages;
     eventsRead += current.count;
+    if ((observedTotalCount !== null && eventsRead > observedTotalCount)
+      || (current.count > 0 && observedTotalPages !== null && page > observedTotalPages)) break;
     for (const event of response.result) {
       if (event?.resource?.type === 'd1.database' && event?.resource?.id === DB_ID) {
         relevantEvents.push(sanitizeAuditEvent(event));
       }
     }
-    if (page >= Math.max(1, current.totalPages)) {
-      if (eventsRead !== current.totalCount) auditComplete = false;
+    if (current.count === 0) {
+      terminalEmptyPageObserved = true;
+      auditComplete = (observedTotalCount === null || eventsRead === observedTotalCount)
+        && (observedTotalPages === null || page === observedTotalPages + 1);
       break;
     }
-    if (page === MAX_AUDIT_PAGES) auditComplete = false;
   }
   const operationIdentityComplete = auditAvailable && auditComplete && relevantEvents.every(
     (event) => typeof event.actionInfo === 'string' && event.actionInfo.trim().length > 0,
@@ -301,8 +305,9 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
     refinement,
     auditLogs: { available: auditAvailable, complete: auditComplete, operationIdentityComplete,
       httpStatus: auditHttpStatus, pagesRead, d1Events: relevantEvents.length,
-      pagination: auditComplete && pagination ? { mode: 'v1-page', perPage: pagination.perPage,
-        totalCount: pagination.totalCount, totalPages: pagination.totalPages } : null,
+      pagination: { mode: 'v1-terminal-empty-page', perPage: observedPerPage,
+        pagesRead, terminalEmptyPageObserved, totalCount: observedTotalCount,
+        totalPages: observedTotalPages },
       createDatabase: operationIdentityComplete ? operationCount('CreateDatabase') : null,
       deleteDatabase: operationIdentityComplete ? operationCount('DeleteDatabase') : null,
       timeTravelRestore: operationIdentityComplete ? operationCount('TimeTravel') : null,
