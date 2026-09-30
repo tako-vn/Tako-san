@@ -1,3 +1,27 @@
+# Production V2 existing_canonical_id review fail-closed — 2026-09-30
+
+PR #30 P1: `existing_canonical_id` now rejects any non-null `review` (including `{}`). Valid existing bridges still require distinct non-empty `sourceId` and `review=null`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 27/27, Vitest 222 files / 4,851 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` NOT_RUN. No workflow, extra SELECT, mutation, merge, or production diagnostic. Next: hosted CI on the new head and independent approval.
+
+---
+
+# Production V2 lineage reviewed-reconciliation contract — 2026-09-30
+
+PR #30 P1: `reviewed_new_canonical_id` now requires `ING_ENR_` plus `{ basis, evidenceReference }`; `existing_canonical_id` requires a non-empty distinct `sourceId`; null sourceId / empty or wrong review objects / provisional / duplicate_alias / ambiguous / invalid never bridge. Authoritative subset requires `recipeIdSetMatches`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 24/24, Vitest 222 files / 4,848 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). No workflow, extra SELECT, mutation, or production diagnostic. Next: hosted CI on the new head and independent approval. Keep 0039/restore/repair STOPPED.
+
+---
+
+# Production V2 catalog lineage diagnostic remediation — 2026-09-30
+
+Hardened PR #30 matcher: missing-line reasons are candidate metadata (`missingLinesCausallyExplained=false`); cross-ID content matches are informational unless reviewed/existing reconciliation; relative canonical order is separated from runtime position (`runtimePositionAuthority=false`). No extra D1 query, no mutation, no production diagnostic dispatch. Local gates: typecheck, ESLint, migration-smoke=ok, Vitest 222 files / 4,841 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). Hostile tests cover ID conflict, provisional reconciliation, classified-but-not-causal missing lines, and position holes. Next: hosted CI on the new head and independent review. Keep 0039/restore/repair STOPPED.
+
+---
+
+# Production V2 catalog lineage diagnostic tooling — 2026-09-30
+
+Verified `origin/main=252096cccf602d07d6e33067024c5df2d6ba8a3e` with exact-main CI `36640577701` SUCCESS and protected production diagnostic `36653466481` SUCCESS (Environment-approved, identity PASS, no mutations). Receipt: ledger 38/0038, 500 recipes all `version=2`, 6720 ingredient rows, 0 order rows, 0/500 hydrated; V1 lineage `CATALOG_LINEAGE_UNRESOLVED` with 0 exact historical lines. This branch adds a runner-local semantic comparison against canonical Recipe Refresh V2 (500/6766, hash-verified, `productionReleaseReady=false`) using already-read catalog rows. No extra production query, no Cloudflare secret on the new step, no application runtime change. `researchV2LineageProven=false`. Local gates: typecheck, ESLint, migration-smoke=ok, Vitest 222 files / 4,839 tests, `pnpm build` PASS. Combined `pnpm check` was killed at 600s while tests were still running; the same gates were executed separately. Focused V2 lineage 15/15 and diagnostics workflow tests included in the full suite. Next: review/merge, exact-main CI, then Environment-approved read-only rerun to inspect `production-catalog-v2-lineage-<run>-<attempt>` before any recovery design. Keep 0039/restore/repair STOPPED. See `recipe-catalog/PRODUCTION_CATALOG_V2_LINEAGE_DIAGNOSTIC.md`.
+
+---
+
 # Production catalog lineage diagnostic tooling — 2026-09-30
 
 Local migration replay through immutable 0038 has 500 recipes and 2,702 ingredient lines with 2,702 explicit positions, versus the last protected production receipt `36577380500` (6,720 lines / zero positions / zero hydrated). PR #27 merged as main `e7c74a0`; its order-recovery STOP packet is preserved below. PR #28 is the separate read-only lineage diagnostic; it reuses the production diagnostic's existing exact-main, CI, Environment and identity gates and its already-read raw catalog data, uploading only sanitized V1 line/position comparison counts and digests. It neither proves V2 lineage nor grants position/release authority. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_DIAGNOSTIC.md`. No production run of the new tooling, mutation, migration, deploy or T20 enablement has occurred. Next: review/merge PR #28 only after new CI and review, require new exact-main CI and production Environment approval, then inspect its read-only receipt before proposing any repair.

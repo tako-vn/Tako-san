@@ -119,10 +119,20 @@ jobs:
           node scripts/production-d1-diagnostics.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-d1-diagnostics.json
       - name: Compare live ingredient lines with immutable 0038 source
         run: node scripts/production-catalog-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-lineage.json
+      - name: Compare live ingredient lines with canonical Recipe Refresh V2
+        run: node scripts/production-catalog-v2-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-v2-lineage.json
       - name: Reject main change during diagnosis
         env:
           GH_TOKEN: ${{ github.token }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$(node -p 'require("./production-d1-diagnostics.json").candidateSha')"
+      - name: Save sanitized V2 lineage only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-catalog-v2-lineage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: production-catalog-v2-lineage.json
+          if-no-files-found: warn
+          retention-days: 90
       - name: Save sanitized lineage only
         if: always()
         uses: actions/upload-artifact@v4

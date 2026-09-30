@@ -1,3 +1,29 @@
+# Production V2 existing_canonical_id review fail-closed handoff — 2026-09-30
+
+Final P1 on PR #30: `existing_canonical_id` fails closed if `review` is present. Reviewed-new contract, recipe-id gate, and forensic flags unchanged. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
+
+---
+
+# Production V2 lineage reviewed-reconciliation handoff — 2026-09-30
+
+Final P1 on PR #30: reconciliation authority now matches the canonical review contract. `runtimePositionAuthority=false`, `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `missingLinesCausallyExplained=false`. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
+
+---
+
+# Production V2 catalog lineage diagnostic remediation handoff — 2026-09-30
+
+PR #30 remediates forensic overclaims on the additive read-only V2 diagnostic. Implementation still grants no production mutation, no extra SELECT, and no runtime position write. `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `runtimePositionAuthority=false`. Next: new-head hosted CI and independent review of false-positive lineage, cross-ID matching, provisional reconciliation, missing-line causality, relative vs runtime order, artifact privacy, and no mutation. Do not dispatch production diagnostics until merge + exact-main CI + operator approval.
+
+---
+
+# Production V2 catalog lineage diagnostic handoff — 2026-09-30
+
+Main `252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) remains current; exact-main CI `36640577701` SUCCESS. Protected run `36653466481` confirmed production D1 `frigo-db` ledger 38/0038, 6720 ingredient rows, zero positions, 0/500 hydrated, and complete V1 line-ID mismatch. This documentation checkpoint follows the additive V2 diagnostic implementation. No production mutation, migration, restore or deploy. `FINAL_RELEASE_SHA=UNSET`.
+
+Next: review/merge this PR, require new exact-main CI, then dispatch `Production D1 Read-Only Diagnostics` with production Environment approval. Use `production-catalog-v2-lineage-<run>-<attempt>` only as forensic evidence. Do not grant position writes from tooling alone. See `recipe-catalog/PRODUCTION_CATALOG_V2_LINEAGE_DIAGNOSTIC.md`.
+
+---
+
 # Production catalog lineage diagnostic handoff — 2026-09-30
 
 Starting main `d0c670289534c33187181b2eb7192c05a2962e22` passed CI `36576510231`. Verified implementation commit `cd25370` adds the diagnostic; this documentation checkpoint follows it. The last protected production receipt `36577380500` reports 6,720 ingredient rows, zero order rows and 0/500 hydrated; it is not release certification. Local immutable 0038 replay gives 2,702 ingredient lines and 2,702 positions. This branch adds a runner-local V1 line comparison to the existing read-only production diagnostic, with sanitized aggregate/digest artifact and no additional remote query or secret exposure. `researchV2LineageProven=false`, `positionAuthority=NONE_GRANTED_BY_THIS_DIAGNOSTIC`, `FINAL_RELEASE_SHA=UNSET`. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_DIAGNOSTIC.md`.
