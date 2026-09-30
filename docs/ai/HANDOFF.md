@@ -1,3 +1,9 @@
+# Production V2 existing_canonical_id review fail-closed handoff — 2026-09-30
+
+Final P1 on PR #30: `existing_canonical_id` fails closed if `review` is present. Reviewed-new contract, recipe-id gate, and forensic flags unchanged. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
+
+---
+
 # Production V2 lineage reviewed-reconciliation handoff — 2026-09-30
 
 Final P1 on PR #30: reconciliation authority now matches the canonical review contract. `runtimePositionAuthority=false`, `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `missingLinesCausallyExplained=false`. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.

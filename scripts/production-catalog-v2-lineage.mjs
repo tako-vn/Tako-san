@@ -160,7 +160,9 @@ export function isExistingCanonicalAuthority(row) {
   if (!row || typeof row !== "object" || Array.isArray(row)) return false;
   if (row.resolution !== "existing_canonical_id") return false;
   if (!isNonEmptyString(row.sourceId) || !isNonEmptyString(row.canonicalId)) return false;
-  return row.sourceId !== row.canonicalId;
+  if (row.sourceId === row.canonicalId) return false;
+  if (row.review !== null && row.review !== undefined) return false;
+  return true;
 }
 
 export function isReviewedNewCanonicalAuthority(row) {

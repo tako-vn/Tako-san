@@ -1,3 +1,12 @@
+# Production V2 existing_canonical_id review fail-closed — 2026-09-30
+
+- [x] existing_canonical_id + any review (object or `{}`) has no bridge authority.
+- [x] existing_canonical_id + review=null + distinct sourceId still bridges.
+- [x] Hostile tests for non-null review, empty review, same-id, null sourceId.
+- [ ] Hosted CI on new head; independent approval. Do not merge or dispatch production diagnostics.
+
+---
+
 # Production V2 lineage reviewed-reconciliation contract — 2026-09-30
 
 - [x] Strict reviewed reconciliation: basis + evidenceReference, ING_ENR_ only.

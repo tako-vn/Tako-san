@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  isExistingCanonicalAuthority,
   loadCanonicalV2Source,
   loadReconciliationAuthority,
   missingCanonicalReason,
@@ -393,6 +394,7 @@ describe("production catalog V2 semantic lineage", () => {
 
   it("bridges existing_canonical_id only with a distinct non-empty sourceId", () => {
     const row = { sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION", resolution: "existing_canonical_id", review: null };
+    expect(isExistingCanonicalAuthority(row)).toBe(true);
     expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(true);
     const receipt = summarize(
       [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
@@ -403,6 +405,50 @@ describe("production catalog V2 semantic lineage", () => {
     expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(1);
     expect(receipt.runtimePositionAuthority).toBe(false);
     assertCountInvariant(receipt, 1);
+  });
+
+  it("does not grant existing_canonical_id authority when review is present", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION",
+      resolution: "existing_canonical_id",
+      review: { basis: "fake", evidenceReference: "fake://1" },
+    };
+    expect(isExistingCanonicalAuthority(row)).toBe(false);
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "GREEN_ONION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+    expect(receipt.proof.semanticV2LineageProven).toBe(false);
+    expect(JSON.stringify(receipt)).not.toContain("fake://1");
+    expect(JSON.stringify(receipt)).not.toContain("fake");
+    assertCountInvariant(receipt, 1);
+  });
+
+  it("does not grant existing_canonical_id authority from an empty review object", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION",
+      resolution: "existing_canonical_id", review: {},
+    };
+    expect(isExistingCanonicalAuthority(row)).toBe(false);
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "GREEN_ONION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+    expect(receipt.proof.semanticV2LineageProven).toBe(false);
+    assertCountInvariant(receipt, 1);
+  });
+
+  it("does not treat same-id existing_canonical_id as a bridge", () => {
+    const row = { sourceId: "GREEN_ONION", canonicalId: "GREEN_ONION", resolution: "existing_canonical_id", review: null };
+    expect(isExistingCanonicalAuthority(row)).toBe(false);
   });
 
   it("does not grant bridge authority from duplicate_alias", () => {

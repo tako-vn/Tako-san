@@ -1,3 +1,9 @@
+# Production V2 existing_canonical_id review fail-closed — 2026-09-30
+
+PR #30 P1: `existing_canonical_id` now rejects any non-null `review` (including `{}`). Valid existing bridges still require distinct non-empty `sourceId` and `review=null`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 27/27, Vitest 222 files / 4,851 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` NOT_RUN. No workflow, extra SELECT, mutation, merge, or production diagnostic. Next: hosted CI on the new head and independent approval.
+
+---
+
 # Production V2 lineage reviewed-reconciliation contract — 2026-09-30
 
 PR #30 P1: `reviewed_new_canonical_id` now requires `ING_ENR_` plus `{ basis, evidenceReference }`; `existing_canonical_id` requires a non-empty distinct `sourceId`; null sourceId / empty or wrong review objects / provisional / duplicate_alias / ambiguous / invalid never bridge. Authoritative subset requires `recipeIdSetMatches`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 24/24, Vitest 222 files / 4,848 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). No workflow, extra SELECT, mutation, or production diagnostic. Next: hosted CI on the new head and independent approval. Keep 0039/restore/repair STOPPED.
