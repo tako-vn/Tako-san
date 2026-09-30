@@ -18,6 +18,7 @@ describe('D1 temporal metadata-only forensics', () => {
       expect(() => assertAllowedCloudflareRequest(`${base}/d1/database/${db}${suffix}`)).toThrow();
     }
     expect(() => assertAllowedCloudflareRequest(`${base}/audit_logs?export=true`)).toThrow();
+    expect(() => assertAllowedCloudflareRequest(`${base}/audit_logs?probe=%2Fquery`)).toThrow();
     expect(() => assertAllowedCloudflareRequest(`${base}/d1/database/${db}`, 'POST')).toThrow();
     expect(() => assertAllowedCloudflareRequest(`http://api.cloudflare.com/client/v4/accounts/${account}/audit_logs`)).toThrow();
     expect(() => assertAllowedCloudflareRequest(`https://evil.example/client/v4/accounts/${account}/audit_logs`)).toThrow();

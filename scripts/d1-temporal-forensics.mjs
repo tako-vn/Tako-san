@@ -20,7 +20,8 @@ export function assertAllowedCloudflareRequest(value, method = 'GET') {
   if (method !== 'GET' || url.origin !== 'https://api.cloudflare.com') {
     throw new Error('Metadata-only GET required');
   }
-  if (/(^|\/)\b(query|raw|export|import|restore)\b(?:\/|$)/i.test(url.pathname)) {
+  const decodedTarget = decodeURIComponent(url.pathname + url.search);
+  if (/\/(?:query|raw|export|import|restore)(?:\/|[?&=]|$)/i.test(decodedTarget)) {
     throw new Error('Forbidden D1 endpoint');
   }
   const account = '[a-f0-9]{32}';
