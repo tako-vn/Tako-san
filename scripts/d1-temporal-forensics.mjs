@@ -7,6 +7,14 @@ const DB_ID = 'f975ec39-b2c8-4a2a-80e1-0366054599d3';
 const DB_NAME = 'frigo-db';
 const WINDOW_START = '2026-09-25T20:00:00Z';
 const WINDOW_END = '2026-09-29T14:00:00Z';
+const AUDIT_PER_PAGE = 1000;
+const MAX_AUDIT_PAGES = 50;
+const MAX_REFINEMENT_BOOKMARK_REQUESTS = 96;
+const MINIMUM_RESOLUTION_SECONDS = 60;
+const REFINEMENT_WINDOWS = [
+  ['2026-09-26T12:00:00Z', '2026-09-26T13:00:00Z'],
+  ['2026-09-26T13:10:00Z', '2026-09-26T18:00:00Z'],
+];
 const CHECKPOINTS = [
   '2026-09-25T20:14:41Z', '2026-09-26T00:00:00Z',
   '2026-09-26T06:00:00Z', '2026-09-26T12:00:00Z',
@@ -67,6 +75,102 @@ export function sanitizeAuditEvent(event) {
   };
 }
 
+export function normalizeV1Pagination(resultInfo, resultLength, requestedPage, requestedPerPage) {
+  const invalid = { valid: false };
+  if (!resultInfo || typeof resultInfo !== 'object' || Array.isArray(resultInfo)
+    || !Number.isSafeInteger(resultLength) || resultLength < 0
+    || !Number.isSafeInteger(requestedPage) || requestedPage < 1
+    || !Number.isSafeInteger(requestedPerPage) || requestedPerPage < 1) return invalid;
+
+  const { page, per_page: perPage, count, total_count: totalCount, total_pages: reportedTotalPages } = resultInfo;
+  if (!Number.isSafeInteger(page) || page !== requestedPage
+    || !Number.isSafeInteger(perPage) || perPage < 1 || perPage > requestedPerPage
+    || !Number.isSafeInteger(totalCount) || totalCount < 0
+    || resultLength > perPage
+    || (count !== undefined && (!Number.isSafeInteger(count) || count < 0
+      || count > perPage || count !== resultLength))) return invalid;
+
+  const totalPages = Math.ceil(totalCount / perPage);
+  if (!Number.isSafeInteger(totalPages)
+    || (reportedTotalPages !== undefined
+      && (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages !== totalPages))
+    || page > Math.max(1, totalPages)) return invalid;
+
+  const expectedCount = totalCount === 0 ? 0
+    : Math.min(perPage, totalCount - (page - 1) * perPage);
+  if (resultLength !== expectedCount) return invalid;
+  return { valid: true, page, perPage, count: resultLength, totalCount, totalPages };
+}
+
+export async function refineTransitionIntervals({ leftTimestamp, leftDigest, rightTimestamp, rightDigest,
+  sample, minimumResolutionSeconds, requestBudget }) {
+  if (!Number.isSafeInteger(minimumResolutionSeconds) || minimumResolutionSeconds < 1
+    || !Number.isSafeInteger(requestBudget) || requestBudget < 0) {
+    throw new Error('Invalid refinement limits');
+  }
+  const start = Date.parse(leftTimestamp);
+  const end = Date.parse(rightTimestamp);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+    throw new Error('Invalid refinement interval');
+  }
+  const transitionIntervals = [];
+  const unresolvedIntervals = [];
+  const pending = [{ start: leftTimestamp, end: rightTimestamp,
+    leftDigest, rightDigest, startMs: start, endMs: end }];
+  let requestCount = 0;
+  let complete = true;
+  let budgetExhausted = false;
+
+  while (pending.length > 0) {
+    const interval = pending.pop();
+    const { startMs, endMs } = interval;
+    const durationSeconds = (endMs - startMs) / 1000;
+    const record = { start: interval.start, end: interval.end, durationSeconds,
+      leftDigest: interval.leftDigest, rightDigest: interval.rightDigest };
+    if (typeof interval.leftDigest !== 'string' || typeof interval.rightDigest !== 'string') {
+      complete = false;
+      unresolvedIntervals.push({ ...record, state: 'UNKNOWN' });
+      continue;
+    }
+    if (interval.leftDigest === interval.rightDigest) continue;
+    if (durationSeconds <= minimumResolutionSeconds) {
+      transitionIntervals.push({ ...record, state: 'STATE_ADVANCE_OBSERVED' });
+      continue;
+    }
+    if (requestCount >= requestBudget) {
+      complete = false;
+      budgetExhausted = true;
+      transitionIntervals.push({ ...record, state: 'STATE_ADVANCE_OBSERVED' });
+      continue;
+    }
+
+    let midpointMs = Math.floor((startMs + endMs) / 120000) * 60000;
+    if (midpointMs <= startMs || midpointMs >= endMs) midpointMs = Math.floor((startMs + endMs) / 2);
+    const midpoint = new Date(midpointMs).toISOString().replace('.000Z', 'Z');
+    requestCount++;
+    let sampled;
+    try {
+      sampled = await sample(midpoint);
+    } catch {
+      sampled = null;
+    }
+    if (sampled?.available !== true || typeof sampled.bookmarkDigest !== 'string') {
+      complete = false;
+      transitionIntervals.push({ ...record, state: 'STATE_ADVANCE_OBSERVED' });
+      unresolvedIntervals.push({ ...record, state: 'UNKNOWN' });
+      continue;
+    }
+    pending.push({ start: midpoint, end: interval.end, startMs: midpointMs, endMs,
+      leftDigest: sampled.bookmarkDigest, rightDigest: interval.rightDigest });
+    pending.push({ start: interval.start, end: midpoint, startMs, endMs: midpointMs,
+      leftDigest: interval.leftDigest, rightDigest: sampled.bookmarkDigest });
+  }
+
+  transitionIntervals.sort((a, b) => a.start.localeCompare(b.start));
+  unresolvedIntervals.sort((a, b) => a.start.localeCompare(b.start));
+  return { complete, budgetExhausted, requestCount, transitionIntervals, unresolvedIntervals };
+}
+
 function summarizeBookmarks(samples) {
   const ordered = [...samples].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const changes = [];
@@ -112,29 +216,47 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
     const response = await get(`d1/database/${DB_ID}/time_travel/bookmark`, { timestamp });
     const rawBookmark = response.ok && typeof response.result?.bookmark === 'string'
       ? response.result.bookmark : null;
-    samples.push({ timestamp, bookmarkDigest: rawBookmark === null
+    const sampled = { timestamp, bookmarkDigest: rawBookmark === null
       ? null : createHash('sha256').update(rawBookmark).digest('hex'),
       available: rawBookmark !== null,
-      httpStatus: response.ok ? 200 : response.status });
+      httpStatus: response.ok ? 200 : response.status };
+    samples.push(sampled);
+    return sampled;
   };
   for (const timestamp of CHECKPOINTS) await sample(timestamp);
   const initial = summarizeBookmarks(samples);
-  if (initial.candidateWindow.stateAdvance === true) {
-    for (let minute = 1; minute <= 9; minute++) {
-      if (minute === 5) continue;
-      await sample(`2026-09-26T13:${String(minute).padStart(2, '0')}:00Z`);
-    }
+  const historicalCandidateStateAdvance = initial.candidateWindow.beforeDigest === null
+    || initial.candidateWindow.atDigest === null ? null
+      : initial.candidateWindow.beforeDigest !== initial.candidateWindow.atDigest;
+  // A refined digest transition locates database-wide state change, not a specific writer.
+  const refinementWindows = [];
+  let refinementRequestCount = 0;
+  for (const [initialStart, initialEnd] of REFINEMENT_WINDOWS) {
+    const leftDigest = samples.find((entry) => entry.timestamp === initialStart)?.bookmarkDigest ?? null;
+    const rightDigest = samples.find((entry) => entry.timestamp === initialEnd)?.bookmarkDigest ?? null;
+    const refined = await refineTransitionIntervals({
+      leftTimestamp: initialStart, leftDigest, rightTimestamp: initialEnd, rightDigest,
+      sample, minimumResolutionSeconds: MINIMUM_RESOLUTION_SECONDS,
+      requestBudget: MAX_REFINEMENT_BOOKMARK_REQUESTS - refinementRequestCount,
+    });
+    refinementRequestCount += refined.requestCount;
+    refinementWindows.push({ initialStart, initialEnd, ...refined });
   }
+  const refinement = { attempted: true, complete: refinementWindows.every((window) => window.complete),
+    budgetExhausted: refinementWindows.some((window) => window.budgetExhausted),
+    requestCount: refinementRequestCount, requestBudget: MAX_REFINEMENT_BOOKMARK_REQUESTS,
+    minimumResolutionSeconds: MINIMUM_RESOLUTION_SECONDS, windows: refinementWindows };
 
   const relevantEvents = [];
   let auditAvailable = true;
   let auditComplete = true;
   let auditHttpStatus = 200;
   let pagesRead = 0;
-  let totalPages = null;
-  for (let page = 1; page <= 50; page++) {
+  let pagination = null;
+  let eventsRead = 0;
+  for (let page = 1; page <= MAX_AUDIT_PAGES; page++) {
     const response = await get('audit_logs', {
-      since: WINDOW_START, before: WINDOW_END, direction: 'asc', per_page: '1000', page: String(page),
+      since: WINDOW_START, before: WINDOW_END, direction: 'asc', per_page: String(AUDIT_PER_PAGE), page: String(page),
     });
     if (!response.ok || !Array.isArray(response.result)) {
       auditAvailable = false;
@@ -143,36 +265,44 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
       break;
     }
     pagesRead++;
+    const current = normalizeV1Pagination(response.resultInfo, response.result.length, page, AUDIT_PER_PAGE);
+    if (!current.valid || (pagination !== null && (current.perPage !== pagination.perPage
+      || current.totalCount !== pagination.totalCount || current.totalPages !== pagination.totalPages))) {
+      auditComplete = false;
+      break;
+    }
+    pagination = current;
+    eventsRead += current.count;
     for (const event of response.result) {
       if (event?.resource?.type === 'd1.database' && event?.resource?.id === DB_ID) {
         relevantEvents.push(sanitizeAuditEvent(event));
       }
     }
-    const reportedTotalPages = response.resultInfo?.total_pages;
-    if (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages < 0
-      || (totalPages !== null && reportedTotalPages !== totalPages)
-      || (reportedTotalPages === 0 && response.result.length > 0)) {
-      auditComplete = false;
+    if (page >= Math.max(1, current.totalPages)) {
+      if (eventsRead !== current.totalCount) auditComplete = false;
       break;
     }
-    totalPages = reportedTotalPages;
-    if (page >= Math.max(1, totalPages)) break;
-    if (page === 50) auditComplete = false;
+    if (page === MAX_AUDIT_PAGES) auditComplete = false;
   }
   const operationIdentityComplete = auditAvailable && auditComplete && relevantEvents.every(
     (event) => typeof event.actionInfo === 'string' && event.actionInfo.trim().length > 0,
   );
   const operationCount = (name) => relevantEvents.filter((event) => event.actionInfo === name).length;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     readOnly: true,
     productionMutations: [],
     database: { name: db.name, id: db.uuid, version: db.version ?? null, createdAt: db.created_at ?? null },
     timeWindow: { lastKnownGood: CHECKPOINTS[0], firstKnownBad: '2026-09-29T13:07:52Z',
-      historicalExternalWriteCandidate: '2026-09-26T13:05:00Z' },
+      historicalExternalWriteCandidate: '2026-09-26T13:05:00Z',
+      historicalCandidateStateAdvance,
+      historicalTimestampSupported: historicalCandidateStateAdvance },
     bookmarkForensics: summarizeBookmarks(samples),
+    refinement,
     auditLogs: { available: auditAvailable, complete: auditComplete, operationIdentityComplete,
       httpStatus: auditHttpStatus, pagesRead, d1Events: relevantEvents.length,
+      pagination: auditComplete && pagination ? { mode: 'v1-page', perPage: pagination.perPage,
+        totalCount: pagination.totalCount, totalPages: pagination.totalPages } : null,
       createDatabase: operationIdentityComplete ? operationCount('CreateDatabase') : null,
       deleteDatabase: operationIdentityComplete ? operationCount('DeleteDatabase') : null,
       timeTravelRestore: operationIdentityComplete ? operationCount('TimeTravel') : null,
