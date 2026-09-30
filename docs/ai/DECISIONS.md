@@ -1,5 +1,21 @@
 # Architecture Decisions
 
+## ADR-039 — Production V2 catalog lineage is a read-only semantic comparison, not position repair
+
+**Status:** Accepted 2026-09-30 for the additive diagnostic. No production mutation, migration, restore, deploy, recipe-authority change or T20 enablement is authorized.
+
+**Context:** Production D1 ingredient-line IDs do not match immutable 0038 V1 (6720 live-only vs 2702 historical). Recipe IDs still match. Canonical Recipe Refresh V2 is a reviewed research package (500/6766) that is not production-release-ready. Live row count 6720 is close to 6766 and is not proof.
+
+**Decision:**
+
+1. Extend `Production D1 Read-Only Diagnostics` with a runner-local V2 semantic comparison of already-read catalog rows. Do not add a production SELECT unless a later reviewed packet proves the five-statement snapshot lacks a required field.
+2. Match as a multiplicity-preserving multiset on documented fields only. Do not fuzzy-match names, drop quantity/unit, or use rowid/lexical order as authority.
+3. Upload only sanitized counts/digests. Keep `researchV2LineageProven=false` unless ingestion provenance is separately proven. Position authority from this diagnostic is at most a candidate.
+4. Keep historical V1 comparison unchanged. Keep 0039, Time Travel restore, migration replay and order-row writes stopped.
+
+**Consequences:** Operators can prove or reject V2 semantic lineage on exact-main after Environment approval without granting repair permission.
+
+
 
 ## ADR-038 — Project unplanned slot fields explicitly and share slot time policy with T20
 

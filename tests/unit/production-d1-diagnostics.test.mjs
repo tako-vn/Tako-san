@@ -16,6 +16,7 @@ const reviewedCommands = {
   'diagnose: Generate reviewed catalog and order-coverage SELECTs': 'b1f46d1c9337fcab20a31fd7657ca5b8ee755c8da5a2020af7c3c2cbe7b91a4a',
   'diagnose: Read production ledger and catalog coverage without mutation': '4fccd0debe034dd8c3dadfb63b85ccd9aa1b0441ed4b2ce939a98623bb791976',
   'diagnose: Compare live ingredient lines with immutable 0038 source': '60cb59c005e126a23092c0ed8f0013f9962e2ff0620db0fe9595830f8b988930',
+  'diagnose: Compare live ingredient lines with canonical Recipe Refresh V2': '6334f392ce12b0f6c5308cabaa655030ba565e776ce03f80e8525b486aba437c',
   'diagnose: Reject main change during diagnosis': 'aeff76d12b6bb0d47fe50f41a1c3f44116874d40a5e3d5975781f32e86078d69',
 };
 const sha = 'a'.repeat(40);
@@ -71,6 +72,7 @@ function assertReviewedWorkflow(candidate) {
     'diagnose: actions/setup-node@v4', 'diagnose: pnpm/action-setup@v4',
     'diagnose: actions/upload-artifact@v4',
     'diagnose: actions/upload-artifact@v4',
+    'diagnose: actions/upload-artifact@v4',
   ]);
   expect(candidate.jobs.gate.steps[0].with).toMatchObject({ ref: 'main', 'persist-credentials': false });
   expect(candidate.jobs.diagnose.steps[0].with).toMatchObject({ ref: '${{ needs.gate.outputs.candidate_sha }}', 'persist-credentials': false });
@@ -80,12 +82,16 @@ function assertReviewedWorkflow(candidate) {
   expect(candidate.jobs.diagnose.steps.at(-2)).toMatchObject({
     if: 'always()', with: { path: 'production-catalog-lineage.json', 'if-no-files-found': 'warn' },
   });
+  expect(candidate.jobs.diagnose.steps.at(-3)).toMatchObject({
+    if: 'always()', with: { path: 'production-catalog-v2-lineage.json', 'if-no-files-found': 'warn' },
+  });
   expect(candidate.jobs.diagnose.steps.find((step) => step.name === 'Compare live ingredient lines with immutable 0038 source').env).toBeUndefined();
   const scripts = candidate.jobs.diagnose.steps.map((step) => step.run ?? '').join('\n');
   expect(scripts).toContain('node scripts/release-check.mjs recheck');
   expect(scripts).toContain('node scripts/d1-migration-check.mjs identity');
   expect(scripts).toContain('node scripts/d1-readonly-query.mjs runtime-catalog');
   expect(scripts).toContain('node scripts/production-catalog-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-lineage.json');
+  expect(scripts).toContain('node scripts/production-catalog-v2-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-v2-lineage.json');
   expect(scripts).toContain('node scripts/production-d1-diagnostics.mjs order-query > order-coverage.sql');
   expect(scripts).toContain('SELECT name FROM d1_migrations ORDER BY name');
   expect(scripts).not.toMatch(/\b(?:migrations apply|wrangler deploy|secret put|--file runtime-catalog)\b/);

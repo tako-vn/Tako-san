@@ -1,3 +1,13 @@
+# Production V2 catalog lineage diagnostic — 2026-09-30
+
+- [x] Verify main `252096cccf602d07d6e33067024c5df2d6ba8a3e` and protected diagnostic `36653466481` (V1 lineage rejected; 6720/0/0 hydrated).
+- [x] Add runner-local V2 semantic comparison to the existing read-only production workflow; no extra D1 query.
+- [x] Cover exact match, 6720-style subset/missing, production-only, drift, duplicates, ambiguity, normalization, runtime quantity, recipe-id drift, malformed input, CLI privacy.
+- [ ] Obtain hosted PR CI and independent review; protected merge; new exact-main CI.
+- [ ] Dispatch Environment-approved read-only diagnostics on the new main SHA and inspect the V2 lineage artifact. Keep 0039 and repair STOPPED.
+
+---
+
 # Production catalog lineage diagnostic — 2026-09-30
 
 - [x] Derive historical 0038 baseline locally: 500 recipes, 2,702 ingredient lines and 2,702 explicit positions; compare against protected production aggregate 6,720/0 without assuming why they differ.
