@@ -1,0 +1,88 @@
+# Metadata-only D1 timeline. No SQL, export, import, or restore endpoint is called.
+name: Production D1 Temporal Forensics
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full immutable current-main SHA with exact-main CI
+        type: string
+        required: true
+      hardened_sha:
+        description: Exact reviewed hardening SHA contained in the candidate
+        type: string
+        required: true
+      confirm_metadata_only:
+        description: Confirm metadata-only production D1 forensics
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: frigo-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_metadata_only == true
+    runs-on: ubuntu-latest
+    outputs:
+      candidate_sha: ${{ steps.gate.outputs.deploy_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require immutable current main and exact-SHA CI
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ inputs.ref }}
+          HARDENED_SHA: ${{ inputs.hardened_sha }}
+          RELEASE_ENVIRONMENT: production
+          RECIPE_CATALOG_MODE: static
+          RECIPE_CATALOG_D1_CANARY_PERCENT: '0'
+        run: node scripts/release-check.mjs gate
+
+  metadata:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.candidate_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recheck main before metadata access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
+      - name: Read database metadata, bookmarks, and account audit logs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/d1-temporal-forensics.mjs d1-temporal-forensics.json
+      - name: Recheck main after metadata access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
+      - name: Upload sanitized metadata receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-d1-temporal-forensics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: d1-temporal-forensics.json
+          if-no-files-found: warn
+          retention-days: 90
