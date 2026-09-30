@@ -1,3 +1,13 @@
+# Production V2 lineage reviewed-reconciliation contract — 2026-09-30
+
+- [x] Strict reviewed reconciliation: basis + evidenceReference, ING_ENR_ only.
+- [x] existing_canonical_id requires non-empty distinct sourceId; null sourceId does not bridge.
+- [x] Recipe-id set match is required for authoritative subset.
+- [x] Hostile tests: empty/wrong review, wrong ID type, valid reviewed bridge, null sourceId, valid existing, provisional, duplicate_alias, ambiguous/invalid, recipe-id drift, privacy.
+- [ ] Hosted CI on new head; independent approval. Do not merge or dispatch production diagnostics.
+
+---
+
 # Production V2 catalog lineage diagnostic remediation — 2026-09-30
 
 - [x] Remove causal overclaim from missing-line metadata; use classified vs causally explained.

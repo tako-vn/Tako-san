@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   loadCanonicalV2Source,
+  loadReconciliationAuthority,
   missingCanonicalReason,
   summarizeV2CatalogLineage,
 } from "../../scripts/production-catalog-v2-lineage.mjs";
@@ -151,23 +152,21 @@ describe("production catalog V2 semantic lineage", () => {
     expect(receipt.proof.semanticV2LineageProven).toBe(false);
   });
 
-  it("treats reviewed reconciliation with review evidence as a distinct authoritative bridge", () => {
+  it("does not grant reviewed authority from wrong review fields", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "ING_ENR_REVIEWED1",
+      resolution: "reviewed_new_canonical_id", review: { reviewer: "fixture", evidence: "synthetic" },
+    };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "ING_ENR_REVIEWED1")).toBe(false);
     const receipt = summarize(
-      [prod({ ingredient_id: "ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
-      canonicalOf([v2Line({ ingredientId: "SCALLION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "ING_ENR_REVIEWED1", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
       [{ id: "r1", version: 2 }],
-      {
-        reconciliation: [{
-          sourceName: "Hanh la", sourceId: "ONION", canonicalId: "SCALLION",
-          resolution: "reviewed_new_canonical_id", review: { reviewer: "fixture", evidence: "synthetic" },
-        }],
-      },
+      { reconciliation: [row] },
     );
-    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(1);
-    expect(receipt.semanticComparison.idConflictContentMatches).toBe(0);
-    expect(receipt.proof.productionIsAuthoritativeV2Subset).toBe(true);
-    expect(receipt.status).toBe("V2_AUTHORITATIVE_SEMANTIC_LINEAGE_PROVEN");
-    expect(receipt.runtimePositionAuthority).toBe(false);
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+    expect(receipt.proof.semanticV2LineageProven).toBe(false);
+    expect(JSON.stringify(receipt)).not.toContain("fixture");
   });
 
   it("detects relative-order holes without granting runtime positions", () => {
@@ -268,6 +267,9 @@ describe("production catalog V2 semantic lineage", () => {
     );
     expect(receipt.recipes.liveRecipeIdsNotInCanonical).toBe(1);
     expect(receipt.proof.recipeIdSetMatches).toBe(false);
+    expect(receipt.proof.productionIsAuthoritativeV2Subset).toBe(false);
+    expect(receipt.proof.semanticV2LineageProven).toBe(false);
+    expect(receipt.status).not.toBe("V2_AUTHORITATIVE_SEMANTIC_LINEAGE_PROVEN");
     expect(JSON.stringify(receipt)).not.toContain("r2");
   });
 
@@ -327,4 +329,99 @@ describe("production catalog V2 semantic lineage", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+  it("does not grant reviewed authority from an empty review object", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "ING_ENR_REVIEWED1",
+      resolution: "reviewed_new_canonical_id", review: {},
+    };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "ING_ENR_REVIEWED1")).toBe(false);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "ING_ENR_REVIEWED1", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+    expect(receipt.proof.semanticV2LineageProven).toBe(false);
+  });
+
+  it("does not grant reviewed authority when canonicalId is not ING_ENR_", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION",
+      resolution: "reviewed_new_canonical_id",
+      review: { basis: "manual review", evidenceReference: "fixture://1" },
+    };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "GREEN_ONION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+    expect(JSON.stringify(receipt)).not.toContain("fixture://1");
+    expect(JSON.stringify(receipt)).not.toContain("manual review");
+  });
+
+  it("grants a reviewed ING_ENR_ bridge only with basis and evidenceReference", () => {
+    const row = {
+      sourceId: "SPRING_ONION", canonicalId: "ING_ENR_REVIEWED1",
+      resolution: "reviewed_new_canonical_id",
+      review: { basis: "manual reviewed identity", evidenceReference: "fixture://review/1" },
+    };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "ING_ENR_REVIEWED1")).toBe(true);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "ING_ENR_REVIEWED1", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(1);
+    expect(receipt.semanticComparison.authoritativeMatches).toBe(1);
+    expect(receipt.runtimePositionAuthority).toBe(false);
+    expect(receipt.proof.ingestionPipelineProven).toBe(false);
+    expect(receipt.researchV2LineageProven).toBe(false);
+    expect(JSON.stringify(receipt)).not.toContain("manual reviewed identity");
+    expect(JSON.stringify(receipt)).not.toContain("fixture://review/1");
+    assertCountInvariant(receipt, 1);
+  });
+
+  it("does not bridge existing_canonical_id rows with null sourceId", () => {
+    const row = { sourceId: null, canonicalId: "GREEN_ONION", resolution: "existing_canonical_id", review: null };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+  });
+
+  it("bridges existing_canonical_id only with a distinct non-empty sourceId", () => {
+    const row = { sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION", resolution: "existing_canonical_id", review: null };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(true);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "GREEN_ONION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(1);
+    expect(receipt.runtimePositionAuthority).toBe(false);
+    assertCountInvariant(receipt, 1);
+  });
+
+  it("does not grant bridge authority from duplicate_alias", () => {
+    const row = { sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION", resolution: "duplicate_alias", review: null };
+    expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+    const receipt = summarize(
+      [prod({ ingredient_id: "SPRING_ONION", name: "Hanh la", required_quantity: 1, unit: "bunch" })],
+      canonicalOf([v2Line({ ingredientId: "GREEN_ONION", name: "Hanh la", quantity: 1, unit: "bunch", runtimeQuantity: 1, runtimeUnit: "bunch" })]),
+      [{ id: "r1", version: 2 }],
+      { reconciliation: [row] },
+    );
+    expect(receipt.semanticComparison.reconciliationProvenMatches).toBe(0);
+  });
+
+  it("does not grant bridge authority from ambiguous or invalid resolutions", () => {
+    for (const resolution of ["ambiguous", "invalid"]) {
+      const row = { sourceId: "SPRING_ONION", canonicalId: "GREEN_ONION", resolution, review: null };
+      expect(loadReconciliationAuthority([row]).canBridge("SPRING_ONION", "GREEN_ONION")).toBe(false);
+    }
+  });
+
 });

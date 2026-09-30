@@ -1,3 +1,9 @@
+# Production V2 lineage reviewed-reconciliation contract — 2026-09-30
+
+PR #30 P1: `reviewed_new_canonical_id` now requires `ING_ENR_` plus `{ basis, evidenceReference }`; `existing_canonical_id` requires a non-empty distinct `sourceId`; null sourceId / empty or wrong review objects / provisional / duplicate_alias / ambiguous / invalid never bridge. Authoritative subset requires `recipeIdSetMatches`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 24/24, Vitest 222 files / 4,848 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). No workflow, extra SELECT, mutation, or production diagnostic. Next: hosted CI on the new head and independent approval. Keep 0039/restore/repair STOPPED.
+
+---
+
 # Production V2 catalog lineage diagnostic remediation — 2026-09-30
 
 Hardened PR #30 matcher: missing-line reasons are candidate metadata (`missingLinesCausallyExplained=false`); cross-ID content matches are informational unless reviewed/existing reconciliation; relative canonical order is separated from runtime position (`runtimePositionAuthority=false`). No extra D1 query, no mutation, no production diagnostic dispatch. Local gates: typecheck, ESLint, migration-smoke=ok, Vitest 222 files / 4,841 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). Hostile tests cover ID conflict, provisional reconciliation, classified-but-not-causal missing lines, and position holes. Next: hosted CI on the new head and independent review. Keep 0039/restore/repair STOPPED.

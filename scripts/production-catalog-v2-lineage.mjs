@@ -152,16 +152,36 @@ export function parseProductionIngredientLine(row) {
   };
 }
 
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function isExistingCanonicalAuthority(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return false;
+  if (row.resolution !== "existing_canonical_id") return false;
+  if (!isNonEmptyString(row.sourceId) || !isNonEmptyString(row.canonicalId)) return false;
+  return row.sourceId !== row.canonicalId;
+}
+
+export function isReviewedNewCanonicalAuthority(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return false;
+  if (row.resolution !== "reviewed_new_canonical_id") return false;
+  if (!isNonEmptyString(row.sourceId) || !isNonEmptyString(row.canonicalId)) return false;
+  if (!row.canonicalId.startsWith("ING_ENR_")) return false;
+  const review = row.review;
+  if (!review || typeof review !== "object" || Array.isArray(review)) return false;
+  const keys = Object.keys(review);
+  if (keys.some((key) => key !== "basis" && key !== "evidenceReference")) return false;
+  return isNonEmptyString(review.basis) && isNonEmptyString(review.evidenceReference);
+}
+
 export function loadReconciliationAuthority(rows = []) {
   const bridges = new Map();
   for (const row of rows) {
-    if (!row || typeof row !== "object" || typeof row.canonicalId !== "string" || !row.canonicalId) continue;
-    const existing = row.resolution === "existing_canonical_id";
-    const reviewed = row.resolution === "reviewed_new_canonical_id" && row.review && typeof row.review === "object";
+    const existing = isExistingCanonicalAuthority(row);
+    const reviewed = isReviewedNewCanonicalAuthority(row);
     if (!existing && !reviewed) continue;
-    if (typeof row.sourceId === "string" && row.sourceId && row.sourceId !== row.canonicalId) {
-      bridges.set(row.sourceId + "\0" + row.canonicalId, row.resolution);
-    }
+    bridges.set(row.sourceId + "\0" + row.canonicalId, row.resolution);
   }
   return {
     canBridge(fromId, toId) {
@@ -527,7 +547,8 @@ export function summarizeV2CatalogLineage({
 
   const recipeIdSetMatches = liveOnlyRecipes === 0 && absentCanonicalRecipes === 0 && recipeIds.size === canonical.recipeCount;
   const unresolvedIngredientIdentityConflicts = idConflictContentMatches + ambiguousMatches;
-  const productionIsAuthoritativeV2Subset = malformed === 0 && productionOnly === 0 && unresolvedIngredientIdentityConflicts === 0
+  const productionIsAuthoritativeV2Subset = recipeIdSetMatches
+    && malformed === 0 && productionOnly === 0 && unresolvedIngredientIdentityConflicts === 0
     && authoritativeMatches === production.length && production.length > 0;
   const missingLinesMetadataClassified = unclassified === 0;
   const missingLinesCausallyExplained = false;
@@ -567,7 +588,7 @@ export function summarizeV2CatalogLineage({
     semanticLineKey: {
       exactId: ["recipe_id", "ingredient_id", "name", "required_quantity", "unit", "is_optional"],
       normalizedId: ["NFKC", "trim", "collapse_whitespace", "casefold_name_and_unit", "ingredient_id_required"],
-      reconciliationBridge: ["existing_canonical_id", "reviewed_new_canonical_id_with_review"],
+      reconciliationBridge: ["existing_canonical_id_with_sourceId", "reviewed_new_canonical_id_ING_ENR_basis_evidenceReference"],
       informationalContent: ["name_quantity_unit_optional_without_id_authority"],
     },
     canonicalV2: {

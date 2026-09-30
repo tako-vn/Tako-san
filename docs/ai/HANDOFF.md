@@ -1,3 +1,9 @@
+# Production V2 lineage reviewed-reconciliation handoff — 2026-09-30
+
+Final P1 on PR #30: reconciliation authority now matches the canonical review contract. `runtimePositionAuthority=false`, `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `missingLinesCausallyExplained=false`. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
+
+---
+
 # Production V2 catalog lineage diagnostic remediation handoff — 2026-09-30
 
 PR #30 remediates forensic overclaims on the additive read-only V2 diagnostic. Implementation still grants no production mutation, no extra SELECT, and no runtime position write. `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `runtimePositionAuthority=false`. Next: new-head hosted CI and independent review of false-positive lineage, cross-ID matching, provisional reconciliation, missing-line causality, relative vs runtime order, artifact privacy, and no mutation. Do not dispatch production diagnostics until merge + exact-main CI + operator approval.

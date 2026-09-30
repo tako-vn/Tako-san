@@ -10,7 +10,7 @@ Protected production run `36653466481` on main `252096cccf602d07d6e33067024c5df2
 
 Authoritative identity requires `recipe_id` plus `ingredient_id` plus quantity/unit/optional. Names may be NFKC/trim/casefolded only when IDs still agree. Runtime quantity may match V2 `quantity.runtime` only with the same ID.
 
-Cross-ID content similarity is informational (`ID_CONFLICT_CONTENT_MATCH`). It never sets `semanticV2LineageProven`. A cross-ID bridge is allowed only from reconciliation `existing_canonical_id` or `reviewed_new_canonical_id` with a review object. `provisional_new_canonical_id`, `ambiguous`, `invalid`, and `duplicate_alias` never grant authority.
+Cross-ID content similarity is informational (`ID_CONFLICT_CONTENT_MATCH`). It never sets `semanticV2LineageProven`. A cross-ID bridge is allowed only from `existing_canonical_id` with a non-empty `sourceId` distinct from `canonicalId`, or `reviewed_new_canonical_id` whose `canonicalId` starts with `ING_ENR_` and whose `review` is exactly `{ basis, evidenceReference }` with non-empty trimmed strings. Empty/wrong review objects, null `sourceId`, `provisional_new_canonical_id`, `duplicate_alias`, `ambiguous`, and `invalid` never grant authority. Authoritative subset also requires `recipeIdSetMatches`.
 
 Missing canonical lines are metadata-classified (`candidateReasonCounts`). Classification is not causal proof: `missingLinesCausallyExplained=false` while `ingestionPipelineProven=false`. Recipe subset class is `V2_SUBSET_WITH_CLASSIFIED_MISSING_LINES`.
 
