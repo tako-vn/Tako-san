@@ -1,3 +1,13 @@
+# Production V2 catalog lineage diagnostic remediation — 2026-09-30
+
+- [x] Remove causal overclaim from missing-line metadata; use classified vs causally explained.
+- [x] Stop ID-omitting content matches from granting authoritative lineage; provisional reconciliation has no authority.
+- [x] Separate relative canonical order from runtime position; detect position holes; `runtimePositionAuthority=false`.
+- [x] Add hostile unit tests for the three boundaries and keep artifact privacy.
+- [ ] Hosted CI on the remediating head; independent review. Do not merge with unresolved P1. Do not dispatch production diagnostics from this PR.
+
+---
+
 # Production V2 catalog lineage diagnostic — 2026-09-30
 
 - [x] Verify main `252096cccf602d07d6e33067024c5df2d6ba8a3e` and protected diagnostic `36653466481` (V1 lineage rejected; 6720/0/0 hydrated).

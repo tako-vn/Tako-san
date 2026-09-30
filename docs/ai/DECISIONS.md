@@ -10,8 +10,9 @@
 
 1. Extend `Production D1 Read-Only Diagnostics` with a runner-local V2 semantic comparison of already-read catalog rows. Do not add a production SELECT unless a later reviewed packet proves the five-statement snapshot lacks a required field.
 2. Match as a multiplicity-preserving multiset on documented fields only. Do not fuzzy-match names, drop quantity/unit, or use rowid/lexical order as authority.
-3. Upload only sanitized counts/digests. Keep `researchV2LineageProven=false` unless ingestion provenance is separately proven. Position authority from this diagnostic is at most a candidate.
-4. Keep historical V1 comparison unchanged. Keep 0039, Time Travel restore, migration replay and order-row writes stopped.
+3. Upload only sanitized counts/digests. Keep `researchV2LineageProven=false` unless ingestion provenance is separately proven. Cross-ID content matches are informational unless reconciliation is `existing_canonical_id` or reviewed `reviewed_new_canonical_id`. Missing-line metadata is classification, not causal proof.
+4. Relative canonical source order is not runtime contiguous position authority. `runtimePositionAuthority` stays false. Allowed position labels are `NONE`, `PARTIAL`, `CANONICAL_V2_RELATIVE_ORDER_CANDIDATE`.
+5. Keep historical V1 comparison unchanged. Keep 0039, Time Travel restore, migration replay and order-row writes stopped.
 
 **Consequences:** Operators can prove or reject V2 semantic lineage on exact-main after Environment approval without granting repair permission.
 

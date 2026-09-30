@@ -1,3 +1,9 @@
+# Production V2 catalog lineage diagnostic remediation handoff — 2026-09-30
+
+PR #30 remediates forensic overclaims on the additive read-only V2 diagnostic. Implementation still grants no production mutation, no extra SELECT, and no runtime position write. `ingestionPipelineProven=false`, `researchV2LineageProven=false`, `runtimePositionAuthority=false`. Next: new-head hosted CI and independent review of false-positive lineage, cross-ID matching, provisional reconciliation, missing-line causality, relative vs runtime order, artifact privacy, and no mutation. Do not dispatch production diagnostics until merge + exact-main CI + operator approval.
+
+---
+
 # Production V2 catalog lineage diagnostic handoff — 2026-09-30
 
 Main `252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) remains current; exact-main CI `36640577701` SUCCESS. Protected run `36653466481` confirmed production D1 `frigo-db` ledger 38/0038, 6720 ingredient rows, zero positions, 0/500 hydrated, and complete V1 line-ID mismatch. This documentation checkpoint follows the additive V2 diagnostic implementation. No production mutation, migration, restore or deploy. `FINAL_RELEASE_SHA=UNSET`.

@@ -152,14 +152,46 @@ export function parseProductionIngredientLine(row) {
   };
 }
 
-function sourceExactKey(line) {
+export function loadReconciliationAuthority(rows = []) {
+  const bridges = new Map();
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || typeof row.canonicalId !== "string" || !row.canonicalId) continue;
+    const existing = row.resolution === "existing_canonical_id";
+    const reviewed = row.resolution === "reviewed_new_canonical_id" && row.review && typeof row.review === "object";
+    if (!existing && !reviewed) continue;
+    if (typeof row.sourceId === "string" && row.sourceId && row.sourceId !== row.canonicalId) {
+      bridges.set(row.sourceId + "\0" + row.canonicalId, row.resolution);
+    }
+  }
+  return {
+    canBridge(fromId, toId) {
+      if (fromId === toId) return true;
+      return bridges.has(fromId + "\0" + toId);
+    },
+  };
+}
+
+function identityExactKey(line) {
   return JSON.stringify([line.recipeId, line.ingredientId, line.name, line.quantity, line.unit, line.optional]);
 }
 
-function sourceNormalizedKey(line) {
+function identityNormalizedKey(line) {
   return JSON.stringify([
     line.recipeId, line.ingredientId, normalizeText(line.name).toLowerCase(),
     line.quantity, normalizeText(line.unit).toLowerCase(), line.optional,
+  ]);
+}
+
+function runtimeIdentityExactKey(line) {
+  return JSON.stringify([
+    line.recipeId, line.ingredientId, line.name, line.runtimeQuantity, line.runtimeUnit, line.optional,
+  ]);
+}
+
+function runtimeIdentityNormalizedKey(line) {
+  return JSON.stringify([
+    line.recipeId, line.ingredientId, normalizeText(line.name).toLowerCase(),
+    line.runtimeQuantity, normalizeText(line.runtimeUnit).toLowerCase(), line.optional,
   ]);
 }
 
@@ -170,13 +202,7 @@ function contentNormalizedKey(line) {
   ]);
 }
 
-function runtimeExactKey(line) {
-  return JSON.stringify([
-    line.recipeId, line.ingredientId, line.name, line.runtimeQuantity, line.runtimeUnit, line.optional,
-  ]);
-}
-
-function runtimeNormalizedKey(line) {
+function runtimeContentNormalizedKey(line) {
   return JSON.stringify([
     line.recipeId, normalizeText(line.name).toLowerCase(),
     line.runtimeQuantity, normalizeText(line.runtimeUnit).toLowerCase(), line.optional,
@@ -194,11 +220,7 @@ function bagBy(lines, keyFn) {
   return map;
 }
 
-function identitySet(lines) {
-  return new Set(lines.map(sourceExactKey)).size;
-}
-
-function assignBags(prodRemaining, v2Remaining, prodKeyFn, v2KeyFn, kind, { requireInterchangeable = false } = {}) {
+function assignBags(prodRemaining, v2Remaining, prodKeyFn, v2KeyFn, kind) {
   const prodBags = bagBy(prodRemaining, prodKeyFn);
   const v2Bags = bagBy(v2Remaining, v2KeyFn);
   const matched = [];
@@ -210,17 +232,80 @@ function assignBags(prodRemaining, v2Remaining, prodKeyFn, v2KeyFn, kind, { requ
   for (const [key, prods] of prodBags) {
     const v2s = v2Bags.get(key);
     if (!v2s) continue;
-    if (requireInterchangeable && identitySet(v2s) > 1) {
-      for (const line of prods) { ambiguousProd.push(line); usedProd.add(line); }
-      for (const line of v2s) { ambiguousV2.push(line); usedV2.add(line); }
-      continue;
-    }
     const n = Math.min(prods.length, v2s.length);
     const positionUnique = prods.length === 1 && v2s.length === 1;
     for (let index = 0; index < n; index += 1) {
-      matched.push({ production: prods[index], v2: v2s[index], kind, positionUnique });
+      matched.push({ production: prods[index], v2: v2s[index], kind, positionUnique, authoritative: true });
       usedProd.add(prods[index]);
       usedV2.add(v2s[index]);
+    }
+  }
+
+  return {
+    matched,
+    ambiguousProd,
+    ambiguousV2,
+    nextProd: prodRemaining.filter((line) => !usedProd.has(line)),
+    nextV2: v2Remaining.filter((line) => !usedV2.has(line)),
+  };
+}
+
+function assignBridgedContent(prodRemaining, v2Remaining, prodKeyFn, v2KeyFn, canBridge, kind) {
+  const prodBags = bagBy(prodRemaining, prodKeyFn);
+  const v2Bags = bagBy(v2Remaining, v2KeyFn);
+  const matched = [];
+  const usedProd = new Set();
+  const usedV2 = new Set();
+
+  for (const [key, prods] of prodBags) {
+    const v2s = (v2Bags.get(key) || []).filter((line) => !usedV2.has(line));
+    for (const prod of prods) {
+      const bridged = v2s.filter((line) => !usedV2.has(line) && canBridge(prod.ingredientId, line.ingredientId)
+        && prod.ingredientId !== line.ingredientId);
+      if (bridged.length === 1) {
+        matched.push({ production: prod, v2: bridged[0], kind, positionUnique: true, authoritative: true });
+        usedProd.add(prod);
+        usedV2.add(bridged[0]);
+      }
+    }
+  }
+
+  return {
+    matched,
+    nextProd: prodRemaining.filter((line) => !usedProd.has(line)),
+    nextV2: v2Remaining.filter((line) => !usedV2.has(line)),
+  };
+}
+
+function assignIdConflictContent(prodRemaining, v2Remaining, prodKeyFn, v2KeyFn, canBridge) {
+  const prodBags = bagBy(prodRemaining, prodKeyFn);
+  const v2Bags = bagBy(v2Remaining, v2KeyFn);
+  const matched = [];
+  const ambiguousProd = [];
+  const ambiguousV2 = [];
+  const usedProd = new Set();
+  const usedV2 = new Set();
+
+  for (const [key, prods] of prodBags) {
+    const v2s = v2Bags.get(key);
+    if (!v2s) continue;
+    const conflictV2 = v2s.filter((line) => prods.some((prod) => prod.ingredientId !== line.ingredientId
+      && !canBridge(prod.ingredientId, line.ingredientId)));
+    const conflictProd = prods.filter((prod) => v2s.some((line) => prod.ingredientId !== line.ingredientId
+      && !canBridge(prod.ingredientId, line.ingredientId)));
+    if (conflictProd.length === 1 && conflictV2.length === 1 && conflictProd[0].ingredientId !== conflictV2[0].ingredientId
+        && !canBridge(conflictProd[0].ingredientId, conflictV2[0].ingredientId)) {
+      matched.push({
+        production: conflictProd[0], v2: conflictV2[0], kind: "ID_CONFLICT_CONTENT_MATCH",
+        positionUnique: false, authoritative: false,
+      });
+      usedProd.add(conflictProd[0]);
+      usedV2.add(conflictV2[0]);
+      continue;
+    }
+    if (conflictProd.length || conflictV2.length) {
+      for (const line of conflictProd) { ambiguousProd.push(line); usedProd.add(line); }
+      for (const line of conflictV2) { ambiguousV2.push(line); usedV2.add(line); }
     }
   }
 
@@ -257,21 +342,29 @@ function countVersions(recipes) {
   return { ids, versions };
 }
 
+function hasPositionHoles(positions) {
+  if (positions.length < 2) return false;
+  const sorted = [...positions].sort((left, right) => left - right);
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index] !== sorted[index - 1] + 1) return true;
+  }
+  return false;
+}
+
 function classifyRecipe(stats) {
-  if (stats.productionLines > 0 && stats.exact + stats.normalized === 0) return "NO_MATCH";
-  if (stats.ambiguous > 0) return "AMBIGUOUS";
+  if (stats.productionLines > 0 && stats.authoritative === 0) return "NO_MATCH";
+  if (stats.ambiguous > 0 || stats.idConflict > 0) return "AMBIGUOUS";
   if (stats.productionOnly > 0) return "SEMANTIC_DRIFT";
   if (stats.missing > 0) {
-    return stats.unexplainedMissing > 0 ? "SEMANTIC_DRIFT" : "V2_SUBSET_WITH_PROVEN_MISSING_LINES";
+    return stats.unclassifiedMissing > 0 ? "SEMANTIC_DRIFT" : "V2_SUBSET_WITH_CLASSIFIED_MISSING_LINES";
   }
-  if (stats.exact + stats.normalized === stats.productionLines && stats.productionLines === stats.v2Lines) {
-    return "EXACT_V2_RECIPE";
-  }
+  if (stats.authoritative === stats.productionLines && stats.productionLines === stats.v2Lines) return "EXACT_V2_RECIPE";
   return "SEMANTIC_DRIFT";
 }
 
 export function summarizeV2CatalogLineage({
-  manifest, before, after, runtime, orderCoverage, canonical, checkedAt = new Date().toISOString(),
+  manifest, before, after, runtime, orderCoverage, canonical, reconciliation = [],
+  checkedAt = new Date().toISOString(),
 }) {
   if (manifest?.environment !== "production" || !SHA.test(manifest.sha || "")
       || manifest.mainSha !== manifest.sha || manifest.cloudflare?.databaseName !== DB.name
@@ -299,6 +392,7 @@ export function summarizeV2CatalogLineage({
   if (canonicalRecipeIds.size !== canonical.recipeCount) throw new Error("Canonical V2 recipe identity proof is invalid");
   const liveOnlyRecipes = [...recipeIds].filter((id) => !canonicalRecipeIds.has(id)).length;
   const absentCanonicalRecipes = [...canonicalRecipeIds].filter((id) => !recipeIds.has(id)).length;
+  const authority = loadReconciliationAuthority(reconciliation);
 
   const production = [];
   let malformed = 0;
@@ -323,105 +417,145 @@ export function summarizeV2CatalogLineage({
   const matched = [];
   const ambiguousProd = [];
   const ambiguousV2 = [];
-  const passes = [
-    { prodKey: sourceExactKey, v2Key: sourceExactKey, kind: "exact", requireInterchangeable: false },
-    { prodKey: sourceExactKey, v2Key: runtimeExactKey, kind: "exact-runtime", requireInterchangeable: false },
-    { prodKey: sourceNormalizedKey, v2Key: sourceNormalizedKey, kind: "normalized", requireInterchangeable: true },
-    { prodKey: contentNormalizedKey, v2Key: contentNormalizedKey, kind: "normalized", requireInterchangeable: true },
-    { prodKey: contentNormalizedKey, v2Key: runtimeNormalizedKey, kind: "normalized", requireInterchangeable: true },
+
+  const authPasses = [
+    { prodKey: identityExactKey, v2Key: identityExactKey, kind: "EXACT_ID_MATCH" },
+    { prodKey: identityExactKey, v2Key: runtimeIdentityExactKey, kind: "EXACT_ID_MATCH" },
+    { prodKey: identityNormalizedKey, v2Key: identityNormalizedKey, kind: "NORMALIZED_ID_CONSISTENT_MATCH" },
+    { prodKey: identityNormalizedKey, v2Key: runtimeIdentityNormalizedKey, kind: "NORMALIZED_ID_CONSISTENT_MATCH" },
   ];
-  for (const pass of passes) {
-    const result = assignBags(prodRemaining, v2Remaining, pass.prodKey, pass.v2Key, pass.kind, {
-      requireInterchangeable: pass.requireInterchangeable,
-    });
+  for (const pass of authPasses) {
+    const result = assignBags(prodRemaining, v2Remaining, pass.prodKey, pass.v2Key, pass.kind);
     matched.push(...result.matched);
-    ambiguousProd.push(...result.ambiguousProd);
-    ambiguousV2.push(...result.ambiguousV2);
     prodRemaining = result.nextProd;
     v2Remaining = result.nextV2;
   }
 
-  const exactMatches = matched.filter((row) => row.kind === "exact" || row.kind === "exact-runtime").length;
-  const exactSourceMatches = matched.filter((row) => row.kind === "exact").length;
-  const exactRuntimeMatches = matched.filter((row) => row.kind === "exact-runtime").length;
-  const normalizedMatches = matched.filter((row) => row.kind === "normalized").length;
-  const uniquelyMappedLines = matched.filter((row) => row.positionUnique).length;
-  const ambiguousPositionLines = matched.filter((row) => !row.positionUnique).length + ambiguousProd.length;
+  const reconSource = assignBridgedContent(
+    prodRemaining, v2Remaining, contentNormalizedKey, contentNormalizedKey, authority.canBridge, "RECONCILIATION_PROVEN_MATCH",
+  );
+  matched.push(...reconSource.matched);
+  prodRemaining = reconSource.nextProd;
+  v2Remaining = reconSource.nextV2;
+  const reconRuntime = assignBridgedContent(
+    prodRemaining, v2Remaining, contentNormalizedKey, runtimeContentNormalizedKey, authority.canBridge, "RECONCILIATION_PROVEN_MATCH",
+  );
+  matched.push(...reconRuntime.matched);
+  prodRemaining = reconRuntime.nextProd;
+  v2Remaining = reconRuntime.nextV2;
+
+  const conflicts = assignIdConflictContent(
+    prodRemaining, v2Remaining, contentNormalizedKey, contentNormalizedKey, authority.canBridge,
+  );
+  matched.push(...conflicts.matched);
+  ambiguousProd.push(...conflicts.ambiguousProd);
+  ambiguousV2.push(...conflicts.ambiguousV2);
+  prodRemaining = conflicts.nextProd;
+  v2Remaining = conflicts.nextV2;
+  const runtimeConflicts = assignIdConflictContent(
+    prodRemaining, v2Remaining, contentNormalizedKey, runtimeContentNormalizedKey, authority.canBridge,
+  );
+  matched.push(...runtimeConflicts.matched);
+  ambiguousProd.push(...runtimeConflicts.ambiguousProd);
+  ambiguousV2.push(...runtimeConflicts.ambiguousV2);
+  prodRemaining = runtimeConflicts.nextProd;
+  v2Remaining = runtimeConflicts.nextV2;
+
+  const authoritative = matched.filter((row) => row.authoritative);
+  const informational = matched.filter((row) => !row.authoritative);
+  const exactIdMatches = authoritative.filter((row) => row.kind === "EXACT_ID_MATCH").length;
+  const normalizedIdMatches = authoritative.filter((row) => row.kind === "NORMALIZED_ID_CONSISTENT_MATCH").length;
+  const reconciliationMatches = authoritative.filter((row) => row.kind === "RECONCILIATION_PROVEN_MATCH").length;
+  const idConflictContentMatches = informational.length;
+  const authoritativeMatches = authoritative.length;
+  const uniquelyMappedSourceLines = authoritative.filter((row) => row.positionUnique).length;
+  const sourceOrderAmbiguousLines = authoritative.filter((row) => !row.positionUnique).length;
   const productionOnly = prodRemaining.length;
   const missingV2 = v2Remaining;
   const ambiguousMatches = ambiguousProd.length;
 
-  const missingReasons = {};
-  let unexplainedMissing = 0;
+  const candidateReasonCounts = {};
+  let unclassified = 0;
   for (const line of missingV2) {
     const reason = missingCanonicalReason(line);
-    missingReasons[reason] = (missingReasons[reason] ?? 0) + 1;
-    if (reason === "unknown") unexplainedMissing += 1;
+    candidateReasonCounts[reason] = (candidateReasonCounts[reason] ?? 0) + 1;
+    if (reason === "unknown") unclassified += 1;
   }
+  const classified = missingV2.length - unclassified;
 
   const recipeStats = new Map();
   for (const id of new Set([...recipeIds, ...canonicalRecipeIds])) {
     recipeStats.set(id, {
-      productionLines: 0, v2Lines: 0, exact: 0, normalized: 0, ambiguous: 0,
-      productionOnly: 0, missing: 0, unexplainedMissing: 0, uniqueOrder: 0, orderAmbiguous: 0,
+      productionLines: 0, v2Lines: 0, authoritative: 0, idConflict: 0, ambiguous: 0,
+      productionOnly: 0, missing: 0, unclassifiedMissing: 0, uniqueOrder: 0, orderAmbiguous: 0,
+      matchedPositions: [],
     });
   }
   for (const line of production) recipeStats.get(line.recipeId).productionLines += 1;
   for (const line of v2Lines) recipeStats.get(line.recipeId).v2Lines += 1;
-  for (const row of matched) {
+  for (const row of authoritative) {
     const stats = recipeStats.get(row.production.recipeId);
-    if (row.kind === "normalized") stats.normalized += 1;
-    else stats.exact += 1;
-    if (row.positionUnique) stats.uniqueOrder += 1;
-    else stats.orderAmbiguous += 1;
+    stats.authoritative += 1;
+    if (row.positionUnique) {
+      stats.uniqueOrder += 1;
+      stats.matchedPositions.push(row.v2.position);
+    } else stats.orderAmbiguous += 1;
   }
+  for (const row of informational) recipeStats.get(row.production.recipeId).idConflict += 1;
   for (const line of ambiguousProd) recipeStats.get(line.recipeId).ambiguous += 1;
   for (const line of prodRemaining) recipeStats.get(line.recipeId).productionOnly += 1;
   for (const line of missingV2) {
     const stats = recipeStats.get(line.recipeId);
     stats.missing += 1;
-    if (missingCanonicalReason(line) === "unknown") stats.unexplainedMissing += 1;
+    if (missingCanonicalReason(line) === "unknown") stats.unclassifiedMissing += 1;
   }
 
-  const recipeClasses = { EXACT_V2_RECIPE: 0, V2_SUBSET_WITH_PROVEN_MISSING_LINES: 0, SEMANTIC_DRIFT: 0, AMBIGUOUS: 0, NO_MATCH: 0 };
-  let recipesWithUniqueOrderMapping = 0;
+  const recipeClasses = {
+    EXACT_V2_RECIPE: 0, V2_SUBSET_WITH_CLASSIFIED_MISSING_LINES: 0, SEMANTIC_DRIFT: 0, AMBIGUOUS: 0, NO_MATCH: 0,
+  };
+  let recipesWithUniqueRelativeOrder = 0;
   let recipesWithOrderAmbiguity = 0;
+  let recipesWithPositionHoles = 0;
   for (const stats of recipeStats.values()) {
     recipeClasses[classifyRecipe(stats)] += 1;
-    if (stats.productionLines > 0 && stats.uniqueOrder === stats.productionLines && stats.ambiguous === 0) {
-      recipesWithUniqueOrderMapping += 1;
+    if (stats.productionLines > 0 && stats.uniqueOrder === stats.productionLines && stats.ambiguous === 0 && stats.idConflict === 0) {
+      recipesWithUniqueRelativeOrder += 1;
+      if (hasPositionHoles(stats.matchedPositions)) recipesWithPositionHoles += 1;
     }
     if (stats.orderAmbiguous > 0 || stats.ambiguous > 0) recipesWithOrderAmbiguity += 1;
   }
 
   const recipeIdSetMatches = liveOnlyRecipes === 0 && absentCanonicalRecipes === 0 && recipeIds.size === canonical.recipeCount;
-  const productionIsExactCanonicalV2 = malformed === 0 && productionOnly === 0 && ambiguousMatches === 0
-    && missingV2.length === 0 && exactMatches + normalizedMatches === production.length
-    && production.length === canonical.lineCount;
-  const productionIsSemanticSubsetOfCanonicalV2 = malformed === 0 && productionOnly === 0 && ambiguousMatches === 0
-    && exactMatches + normalizedMatches === production.length && production.length > 0;
-  const missingLinesFullyExplained = unexplainedMissing === 0;
-  const uniquePositionAuthorityAvailable = productionIsSemanticSubsetOfCanonicalV2
-    && uniquelyMappedLines === production.length && recipesWithOrderAmbiguity === 0;
-  const semanticV2LineageProven = productionIsSemanticSubsetOfCanonicalV2;
+  const unresolvedIngredientIdentityConflicts = idConflictContentMatches + ambiguousMatches;
+  const productionIsAuthoritativeV2Subset = malformed === 0 && productionOnly === 0 && unresolvedIngredientIdentityConflicts === 0
+    && authoritativeMatches === production.length && production.length > 0;
+  const missingLinesMetadataClassified = unclassified === 0;
+  const missingLinesCausallyExplained = false;
+  const relativeOrderUnique = productionIsAuthoritativeV2Subset && uniquelyMappedSourceLines === production.length
+    && recipesWithOrderAmbiguity === 0;
+  const runtimePositionAuthority = false;
+  const semanticV2LineageProven = productionIsAuthoritativeV2Subset;
+  const ingestionPipelineProven = false;
 
   let status = "V2_LINEAGE_UNRESOLVED";
   if (productionOnly > 0) status = "PRODUCTION_LIVE_SOURCE_UNRESOLVED";
-  else if (ambiguousMatches > 0) status = "V2_LINEAGE_PARTIAL";
-  else if (semanticV2LineageProven) status = "V2_SEMANTIC_LINEAGE_PROVEN";
-  else if (exactMatches + normalizedMatches > 0) status = "V2_LINEAGE_PARTIAL";
+  else if (idConflictContentMatches > 0 && authoritativeMatches + idConflictContentMatches + ambiguousMatches + malformed === actualRows.length) {
+    status = "V2_CONTENT_LINEAGE_SUGGESTED_IDENTITY_UNRESOLVED";
+  } else if (ambiguousMatches > 0) status = "V2_LINEAGE_PARTIAL";
+  else if (semanticV2LineageProven) status = "V2_AUTHORITATIVE_SEMANTIC_LINEAGE_PROVEN";
+  else if (authoritativeMatches > 0) status = "V2_LINEAGE_PARTIAL";
 
   let positionAuthority = "NONE";
-  if (uniquePositionAuthorityAvailable) positionAuthority = "CANONICAL_V2_ORDER_CANDIDATE";
+  if (relativeOrderUnique) positionAuthority = "CANONICAL_V2_RELATIVE_ORDER_CANDIDATE";
   else if (semanticV2LineageProven) positionAuthority = "PARTIAL";
 
-  if (exactMatches + normalizedMatches + productionOnly + ambiguousMatches !== production.length
-      || exactMatches + normalizedMatches + missingV2.length + ambiguousV2.length !== v2Lines.length) {
+  if (authoritativeMatches + idConflictContentMatches + productionOnly + ambiguousMatches + malformed !== actualRows.length
+      || authoritativeMatches + idConflictContentMatches + missingV2.length + ambiguousV2.length !== v2Lines.length) {
     throw new Error("V2 ingredient comparison counts disagree");
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status,
     certification: "NOT_A_RELEASE_CERTIFICATION",
     readOnly: true,
@@ -431,10 +565,10 @@ export function summarizeV2CatalogLineage({
     database: DB,
     ledger: { count: pre.length, tip: pre.at(-1) },
     semanticLineKey: {
-      exact: ["recipe_id", "ingredient_id", "name", "required_quantity", "unit", "is_optional"],
-      canonicalExact: ["identity.id", "canonicalIngredientId", "sourceName", "quantity.amount", "quantity.unit", "optional"],
-      normalized: ["NFKC", "trim", "collapse_whitespace", "casefold_name_and_unit"],
-      runtimeExact: ["quantity.runtime.amount", "quantity.runtime.unit"],
+      exactId: ["recipe_id", "ingredient_id", "name", "required_quantity", "unit", "is_optional"],
+      normalizedId: ["NFKC", "trim", "collapse_whitespace", "casefold_name_and_unit", "ingredient_id_required"],
+      reconciliationBridge: ["existing_canonical_id", "reviewed_new_canonical_id_with_review"],
+      informationalContent: ["name_quantity_unit_optional_without_id_authority"],
     },
     canonicalV2: {
       artifactSha256: canonical.artifactSha256,
@@ -458,23 +592,27 @@ export function summarizeV2CatalogLineage({
       ]).sort()),
     },
     semanticComparison: {
-      exactMatches,
-      exactSourceMatches,
-      exactRuntimeMatches,
-      normalizedMatches,
+      exactIdMatches,
+      normalizedIdMatches,
+      reconciliationProvenMatches: reconciliationMatches,
+      authoritativeMatches,
+      idConflictContentMatches,
+      contentOnlyMatches: idConflictContentMatches,
+      informationalOnlyMatches: idConflictContentMatches,
       ambiguousMatches,
       productionOnly,
       malformed,
     },
     canonicalCoverage: {
-      matched: exactMatches + normalizedMatches,
+      matched: authoritativeMatches,
+      informational: idConflictContentMatches,
       missing: missingV2.length,
       ambiguous: ambiguousV2.length,
     },
     recipes: {
       total: recipeStats.size,
       exactV2Recipes: recipeClasses.EXACT_V2_RECIPE,
-      subsetRecipes: recipeClasses.V2_SUBSET_WITH_PROVEN_MISSING_LINES,
+      subsetRecipes: recipeClasses.V2_SUBSET_WITH_CLASSIFIED_MISSING_LINES,
       driftRecipes: recipeClasses.SEMANTIC_DRIFT,
       ambiguousRecipes: recipeClasses.AMBIGUOUS,
       noMatchRecipes: recipeClasses.NO_MATCH,
@@ -482,29 +620,48 @@ export function summarizeV2CatalogLineage({
       canonicalRecipeIdsAbsentFromLive: absentCanonicalRecipes,
     },
     ordering: {
-      uniquelyMappedLines,
-      ambiguousPositionLines,
-      recipesWithUniqueOrderMapping,
+      uniquelyMappedSourceLines,
+      sourceOrderAmbiguousLines,
+      recipesWithUniqueRelativeOrder,
       recipesWithOrderAmbiguity,
+      recipesWithPositionHoles,
+      requiresContiguousReindex: recipesWithPositionHoles > 0,
     },
     missingCanonicalLines: {
       total: missingV2.length,
-      unexplained: unexplainedMissing,
-      reasonCounts: missingReasons,
+      classified,
+      unclassified,
+      candidateReasonCounts,
     },
     proof: {
       canonicalArtifactVerified: HASH.test(canonical.artifactSha256 || ""),
       recipeIdSetMatches,
-      productionIsExactCanonicalV2,
-      productionIsSemanticSubsetOfCanonicalV2,
-      missingLinesFullyExplained,
-      uniquePositionAuthorityAvailable,
+      allProductionRowsMatchCanonicalByAuthoritativeIdentity: productionIsAuthoritativeV2Subset,
+      contentOnlyMatchesPresent: idConflictContentMatches > 0,
+      unresolvedIngredientIdentityConflicts: unresolvedIngredientIdentityConflicts > 0,
+      productionIsAuthoritativeV2Subset,
+      productionIsSemanticSubsetOfCanonicalV2: productionIsAuthoritativeV2Subset,
+      missingLinesMetadataClassified,
+      missingLinesCausallyExplained,
+      relativeOrderUnique,
+      runtimePositionAuthority,
       semanticV2LineageProven,
-      ingestionPipelineProven: false,
+      ingestionPipelineProven,
     },
     researchV2LineageProven: false,
     positionAuthority,
+    runtimePositionAuthority,
   };
+}
+
+function loadDefaultReconciliation(cwd = process.cwd()) {
+  const file = path.join(cwd, ...V2_ROOT, "ingredient-reconciliation.json");
+  try {
+    const rows = JSON.parse(readFileSync(file, "utf8"));
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
 }
 
 async function main() {
@@ -521,9 +678,10 @@ async function main() {
     orderCoverage: JSON.parse(readFileSync(coveragePath, "utf8")),
     after: JSON.parse(readFileSync(afterPath, "utf8")),
     canonical,
+    reconciliation: loadDefaultReconciliation(),
   });
   writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n");
-  console.log("Production catalog V2 lineage: " + receipt.status + "; exact=" + receipt.semanticComparison.exactMatches + " normalized=" + receipt.semanticComparison.normalizedMatches);
+  console.log("Production catalog V2 lineage: " + receipt.status + "; authoritative=" + receipt.semanticComparison.authoritativeMatches);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
