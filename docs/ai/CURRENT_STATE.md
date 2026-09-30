@@ -1,3 +1,33 @@
+# PR #29 merge with main after PR #30 — 2026-09-30
+
+Merged `origin/main=df857a8` (PR #30 read-only V2 catalog lineage diagnostic) into `hoplite/koroneia-982c5213`. Conflicts were documentation prepends in CURRENT_STATE, TASK_BOARD, and HANDOFF; both histories are kept. No application, workflow, or production change in this merge. Next remains operator-approved Production D1 Read-Only Diagnostics. Keep 0039, restore, and position writes STOPPED.
+
+---
+
+# Production V2 existing_canonical_id review fail-closed — 2026-09-30
+
+PR #30 P1: `existing_canonical_id` now rejects any non-null `review` (including `{}`). Valid existing bridges still require distinct non-empty `sourceId` and `review=null`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 27/27, Vitest 222 files / 4,851 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` NOT_RUN. No workflow, extra SELECT, mutation, merge, or production diagnostic. Next: hosted CI on the new head and independent approval.
+
+---
+
+# Production V2 lineage reviewed-reconciliation contract — 2026-09-30
+
+PR #30 P1: `reviewed_new_canonical_id` now requires `ING_ENR_` plus `{ basis, evidenceReference }`; `existing_canonical_id` requires a non-empty distinct `sourceId`; null sourceId / empty or wrong review objects / provisional / duplicate_alias / ambiguous / invalid never bridge. Authoritative subset requires `recipeIdSetMatches`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 24/24, Vitest 222 files / 4,848 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). No workflow, extra SELECT, mutation, or production diagnostic. Next: hosted CI on the new head and independent approval. Keep 0039/restore/repair STOPPED.
+
+---
+
+# Production V2 catalog lineage diagnostic remediation — 2026-09-30
+
+Hardened PR #30 matcher: missing-line reasons are candidate metadata (`missingLinesCausallyExplained=false`); cross-ID content matches are informational unless reviewed/existing reconciliation; relative canonical order is separated from runtime position (`runtimePositionAuthority=false`). No extra D1 query, no mutation, no production diagnostic dispatch. Local gates: typecheck, ESLint, migration-smoke=ok, Vitest 222 files / 4,841 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` not re-run (prior 600s cap). Hostile tests cover ID conflict, provisional reconciliation, classified-but-not-causal missing lines, and position holes. Next: hosted CI on the new head and independent review. Keep 0039/restore/repair STOPPED.
+
+---
+
+# Production V2 catalog lineage diagnostic tooling — 2026-09-30
+
+Verified `origin/main=252096cccf602d07d6e33067024c5df2d6ba8a3e` with exact-main CI `36640577701` SUCCESS and protected production diagnostic `36653466481` SUCCESS (Environment-approved, identity PASS, no mutations). Receipt: ledger 38/0038, 500 recipes all `version=2`, 6720 ingredient rows, 0 order rows, 0/500 hydrated; V1 lineage `CATALOG_LINEAGE_UNRESOLVED` with 0 exact historical lines. This branch adds a runner-local semantic comparison against canonical Recipe Refresh V2 (500/6766, hash-verified, `productionReleaseReady=false`) using already-read catalog rows. No extra production query, no Cloudflare secret on the new step, no application runtime change. `researchV2LineageProven=false`. Local gates: typecheck, ESLint, migration-smoke=ok, Vitest 222 files / 4,839 tests, `pnpm build` PASS. Combined `pnpm check` was killed at 600s while tests were still running; the same gates were executed separately. Focused V2 lineage 15/15 and diagnostics workflow tests included in the full suite. Next: review/merge, exact-main CI, then Environment-approved read-only rerun to inspect `production-catalog-v2-lineage-<run>-<attempt>` before any recovery design. Keep 0039/restore/repair STOPPED. See `recipe-catalog/PRODUCTION_CATALOG_V2_LINEAGE_DIAGNOSTIC.md`.
+
+---
+
 # Production catalog lineage investigation STOP — 2026-09-29
 
 Verified `origin/main=252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) with exact-main CI `36640577701` SUCCESS. Staging→main delta has no `src/worker`, `src/web`, or `packages` runtime changes. Fresh public production `/api/v1/health/ready` is degraded: Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, configured D1/0/cutover true, `globalSource=static`, `fallbackReason=CATALOG_DIAGNOSTICS`. Staging remains healthy D1/500 with no fallback on `8072e0fea9f8f3588426969007dda06cadbbfbb7`. Required `Production D1 Read-Only Diagnostics` dispatch on current main failed: GitHub App HTTP 403 `Resource not accessible by integration`. Last D1 catalog receipt remains `36577380500` (6720 lines / 0 order rows / 0/500 hydrated) and is not a current-main lineage proof. Local 0038 replay is 500/2702/2702. Content Refresh V2 is 500/6766 canonical, not production-release-ready, and is not 6720. `researchV2LineageProven=false`. No production mutation, 0039 apply, restore, or deploy. Next: operator dispatch of the read-only diagnostic with `ref=252096cccf602d07d6e33067024c5df2d6ba8a3e`, `hardened_sha=136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, `confirm_read_only_diagnostics=true`, plus production Environment approval. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_INVESTIGATION.md`.
