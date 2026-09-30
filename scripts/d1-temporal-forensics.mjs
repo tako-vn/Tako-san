@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -56,7 +57,8 @@ function apiClient(accountId, token, fetchImpl) {
 export function sanitizeAuditEvent(event) {
   return {
     timestamp: event?.when ?? null,
-    action: event?.action?.type ?? null,
+    actionInfo: typeof event?.action?.info === 'string' ? event.action.info : null,
+    actionType: typeof event?.action?.type === 'string' ? event.action.type : null,
     result: event?.action?.result ?? null,
     interface: event?.interface ?? null,
     actorType: event?.actor?.type ?? null,
@@ -71,28 +73,29 @@ function summarizeBookmarks(samples) {
   for (let i = 1; i < ordered.length; i++) {
     const before = ordered[i - 1];
     const after = ordered[i];
-    if (before.bookmark !== null && after.bookmark !== null) {
+    if (before.bookmarkDigest !== null && after.bookmarkDigest !== null) {
       changes.push({ timestampA: before.timestamp, timestampB: after.timestamp,
-        state: before.bookmark === after.bookmark ? 'NO_STATE_ADVANCE_OBSERVED' : 'STATE_ADVANCE_OBSERVED' });
+        state: before.bookmarkDigest === after.bookmarkDigest ? 'NO_STATE_ADVANCE_OBSERVED' : 'STATE_ADVANCE_OBSERVED' });
     }
   }
-  const at = (timestamp) => ordered.find((sample) => sample.timestamp === timestamp)?.bookmark ?? null;
-  const before = at('2026-09-26T13:00:00Z');
-  const candidate = at('2026-09-26T13:05:00Z');
-  const after = at('2026-09-26T13:10:00Z');
+  const at = (timestamp) => ordered.find((sample) => sample.timestamp === timestamp)?.bookmarkDigest ?? null;
+  const beforeDigest = at('2026-09-26T13:00:00Z');
+  const atDigest = at('2026-09-26T13:05:00Z');
+  const afterDigest = at('2026-09-26T13:10:00Z');
   const minuteChanges = changes.filter((item) => item.timestampA >= '2026-09-26T13:00:00Z'
     && item.timestampB <= '2026-09-26T13:10:00Z'
     && item.state === 'STATE_ADVANCE_OBSERVED').length;
   return {
-    supported: ordered.some((sample) => sample.bookmark !== null),
+    supported: ordered.some((sample) => sample.bookmarkDigest !== null),
     samples: ordered,
     sampleCount: ordered.length,
-    distinctBookmarks: new Set(ordered.map((sample) => sample.bookmark).filter(Boolean)).size,
+    distinctBookmarks: new Set(ordered.map((sample) => sample.bookmarkDigest).filter(Boolean)).size,
     transitionCount: changes.filter((item) => item.state === 'STATE_ADVANCE_OBSERVED').length,
     intervals: changes,
     signalNoisy: minuteChanges >= 8,
-    candidateWindow: { before, at: candidate, after,
-      stateAdvance: before === null || candidate === null || after === null ? null : before !== candidate || candidate !== after,
+    candidateWindow: { beforeDigest, atDigest, afterDigest,
+      stateAdvance: beforeDigest === null || atDigest === null || afterDigest === null
+        ? null : beforeDigest !== atDigest || atDigest !== afterDigest,
       precision: ordered.some((sample) => sample.timestamp === '2026-09-26T13:01:00Z') ? 'MINUTE' : 'FIVE_MINUTES' },
   };
 }
@@ -107,9 +110,11 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
   const samples = [];
   const sample = async (timestamp) => {
     const response = await get(`d1/database/${DB_ID}/time_travel/bookmark`, { timestamp });
-    samples.push({ timestamp, bookmark: response.ok && typeof response.result?.bookmark === 'string'
-      ? response.result.bookmark : null,
-      available: response.ok && typeof response.result?.bookmark === 'string',
+    const rawBookmark = response.ok && typeof response.result?.bookmark === 'string'
+      ? response.result.bookmark : null;
+    samples.push({ timestamp, bookmarkDigest: rawBookmark === null
+      ? null : createHash('sha256').update(rawBookmark).digest('hex'),
+      available: rawBookmark !== null,
       httpStatus: response.ok ? 200 : response.status });
   };
   for (const timestamp of CHECKPOINTS) await sample(timestamp);
@@ -126,6 +131,7 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
   let auditComplete = true;
   let auditHttpStatus = 200;
   let pagesRead = 0;
+  let totalPages = null;
   for (let page = 1; page <= 50; page++) {
     const response = await get('audit_logs', {
       since: WINDOW_START, before: WINDOW_END, direction: 'asc', per_page: '1000', page: String(page),
@@ -142,10 +148,21 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
         relevantEvents.push(sanitizeAuditEvent(event));
       }
     }
-    if (response.result.length < 1000) break;
+    const reportedTotalPages = response.resultInfo?.total_pages;
+    if (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages < 0
+      || (totalPages !== null && reportedTotalPages !== totalPages)
+      || (reportedTotalPages === 0 && response.result.length > 0)) {
+      auditComplete = false;
+      break;
+    }
+    totalPages = reportedTotalPages;
+    if (page >= Math.max(1, totalPages)) break;
     if (page === 50) auditComplete = false;
   }
-  const action = (pattern) => relevantEvents.filter((event) => pattern.test(event.action ?? '')).length;
+  const operationIdentityComplete = auditAvailable && auditComplete && relevantEvents.every(
+    (event) => typeof event.actionInfo === 'string' && event.actionInfo.trim().length > 0,
+  );
+  const operationCount = (name) => relevantEvents.filter((event) => event.actionInfo === name).length;
   return {
     schemaVersion: 1,
     readOnly: true,
@@ -154,10 +171,11 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
     timeWindow: { lastKnownGood: CHECKPOINTS[0], firstKnownBad: '2026-09-29T13:07:52Z',
       historicalExternalWriteCandidate: '2026-09-26T13:05:00Z' },
     bookmarkForensics: summarizeBookmarks(samples),
-    auditLogs: { available: auditAvailable, complete: auditComplete, httpStatus: auditHttpStatus,
-      pagesRead, d1Events: relevantEvents.length, createDatabase: auditAvailable && auditComplete ? action(/create.?database/i) : null,
-      deleteDatabase: auditAvailable && auditComplete ? action(/delete.?database/i) : null,
-      timeTravelRestore: auditAvailable && auditComplete ? action(/time.?travel|restore/i) : null,
+    auditLogs: { available: auditAvailable, complete: auditComplete, operationIdentityComplete,
+      httpStatus: auditHttpStatus, pagesRead, d1Events: relevantEvents.length,
+      createDatabase: operationIdentityComplete ? operationCount('CreateDatabase') : null,
+      deleteDatabase: operationIdentityComplete ? operationCount('DeleteDatabase') : null,
+      timeTravelRestore: operationIdentityComplete ? operationCount('TimeTravel') : null,
       relevantEvents },
     interpretation: 'Bookmarks show database-wide state only; audit logs are not per-query SQL history.',
     writerProven: false,
