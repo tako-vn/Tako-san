@@ -77,22 +77,24 @@ export function sanitizeAuditEvent(event) {
 
 export function normalizeV1Pagination(resultInfo, resultLength, requestedPage, requestedPerPage) {
   const invalid = { valid: false };
-  if (!resultInfo || typeof resultInfo !== 'object' || Array.isArray(resultInfo)
-    || !Number.isSafeInteger(resultLength) || resultLength < 0
+  if (!Number.isSafeInteger(resultLength) || resultLength < 0
     || !Number.isSafeInteger(requestedPage) || requestedPage < 1
     || !Number.isSafeInteger(requestedPerPage) || requestedPerPage < 1) return invalid;
+  if (resultInfo == null) return { valid: true, page: null, perPage: null,
+    count: null, totalCount: null, totalPages: null };
+  if (typeof resultInfo !== 'object' || Array.isArray(resultInfo)) return invalid;
 
   const { page, per_page: perPage, count, total_count: totalCount, total_pages: reportedTotalPages } = resultInfo;
-  if (!Number.isSafeInteger(page) || page !== requestedPage
-    || !Number.isSafeInteger(perPage) || perPage < 1 || perPage > requestedPerPage
-    || resultLength > perPage
+  if ((page !== undefined && (!Number.isSafeInteger(page) || page !== requestedPage))
+    || (perPage !== undefined && (!Number.isSafeInteger(perPage)
+      || perPage < 1 || perPage > requestedPerPage || resultLength > perPage))
     || (count !== undefined && (!Number.isSafeInteger(count) || count < 0
-      || count > perPage || count !== resultLength))
+      || (perPage !== undefined && count > perPage) || count !== resultLength))
     || (totalCount !== undefined && (!Number.isSafeInteger(totalCount) || totalCount < 0))
     || (reportedTotalPages !== undefined
       && (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages < 0))) return invalid;
 
-  return { valid: true, page, perPage, count: resultLength,
+  return { valid: true, page: page ?? null, perPage: perPage ?? null, count: count ?? null,
     totalCount: totalCount ?? null, totalPages: reportedTotalPages ?? null };
 }
 
@@ -263,25 +265,26 @@ export async function collectTemporalEvidence({ accountId, token, fetchImpl = fe
     pagesRead++;
     const current = normalizeV1Pagination(response.resultInfo, response.result.length, page, AUDIT_PER_PAGE);
     if (!current.valid
-      || (observedPerPage !== null && current.perPage !== observedPerPage)
+      || (observedPerPage !== null && current.perPage !== null
+        && current.perPage !== observedPerPage)
       || (current.totalCount !== null && observedTotalCount !== null
         && current.totalCount !== observedTotalCount)
       || (current.totalPages !== null && observedTotalPages !== null
         && current.totalPages !== observedTotalPages)) {
       break;
     }
-    observedPerPage = current.perPage;
+    if (current.perPage !== null) observedPerPage = current.perPage;
     if (current.totalCount !== null) observedTotalCount = current.totalCount;
     if (current.totalPages !== null) observedTotalPages = current.totalPages;
-    eventsRead += current.count;
+    eventsRead += response.result.length;
     if ((observedTotalCount !== null && eventsRead > observedTotalCount)
-      || (current.count > 0 && observedTotalPages !== null && page > observedTotalPages)) break;
+      || (response.result.length > 0 && observedTotalPages !== null && page > observedTotalPages)) break;
     for (const event of response.result) {
       if (event?.resource?.type === 'd1.database' && event?.resource?.id === DB_ID) {
         relevantEvents.push(sanitizeAuditEvent(event));
       }
     }
-    if (current.count === 0) {
+    if (response.result.length === 0) {
       terminalEmptyPageObserved = true;
       auditComplete = (observedTotalCount === null || eventsRead === observedTotalCount)
         && (observedTotalPages === null || page === observedTotalPages + 1);
