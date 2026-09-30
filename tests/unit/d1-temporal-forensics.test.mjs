@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertAllowedCloudflareRequest, collectTemporalEvidence, sanitizeAuditEvent } from '../../scripts/d1-temporal-forensics.mjs';
+import { assertAllowedCloudflareRequest, collectTemporalEvidence, normalizeV1Pagination, refineTransitionIntervals, sanitizeAuditEvent } from '../../scripts/d1-temporal-forensics.mjs';
 
 const account = 'a'.repeat(32);
 const db = 'f975ec39-b2c8-4a2a-80e1-0366054599d3';
@@ -25,14 +25,19 @@ function auditEvent(info, type, timestamp = '2026-09-26T13:05:00Z') {
   };
 }
 
-function fixtureFetch({ events = [], auditPages = [events], auditResultInfo = { total_pages: 1 },
+function fixtureFetch({ events = [], auditPages = [events], auditResultInfo, auditFailureAt = () => null,
   bookmarkAt = () => 'stable', bookmarkErrorAt = () => false } = {}) {
   const requests = [];
   const fetchImpl = async (url, options) => {
     requests.push([url, options]);
     if (url.pathname.endsWith('/audit_logs')) {
       const page = Number(url.searchParams.get('page'));
-      return mockResponse(auditPages[page - 1] ?? [], auditResultInfo ?? undefined);
+      const failureStatus = auditFailureAt(page);
+      if (failureStatus !== null) return { ok: false, status: failureStatus };
+      const result = auditPages[page - 1] ?? [];
+      const resultInfo = typeof auditResultInfo === 'function'
+        ? auditResultInfo(page, result) : auditResultInfo;
+      return mockResponse(result, resultInfo);
     }
     if (url.pathname.endsWith('/time_travel/bookmark')) {
       const timestamp = url.searchParams.get('timestamp');
@@ -54,6 +59,7 @@ describe('D1 temporal metadata-only forensics', () => {
     }
     expect(() => assertAllowedCloudflareRequest(`${base}/audit_logs?export=true`)).toThrow();
     expect(() => assertAllowedCloudflareRequest(`${base}/audit_logs?probe=%2Fquery`)).toThrow();
+    expect(() => assertAllowedCloudflareRequest(`${base}/logs/audit`)).toThrow();
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
       expect(() => assertAllowedCloudflareRequest(`${base}/d1/database/${db}`, method)).toThrow();
     }
@@ -85,7 +91,7 @@ describe('D1 temporal metadata-only forensics', () => {
     });
     const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
     expect(receipt.bookmarkForensics.candidateWindow.stateAdvance).toBe(true);
-    expect(receipt.bookmarkForensics.candidateWindow.precision).toBe('MINUTE');
+    expect(receipt.bookmarkForensics.candidateWindow.precision).toBe('FIVE_MINUTES');
     expect(receipt.auditLogs.operationIdentityComplete).toBe(true);
     expect(receipt.auditLogs.timeTravelRestore).toBe(1);
     expect(receipt.auditLogs.createDatabase).toBe(1);
@@ -132,33 +138,266 @@ describe('D1 temporal metadata-only forensics', () => {
     expect(changed.bookmarkForensics.candidateWindow.stateAdvance).toBe(true);
   });
 
+  it('does not support the 13:05 candidate from a later 13:05-to-13:10 transition', async () => {
+    const { fetchImpl } = fixtureFetch({ bookmarkAt: (timestamp) =>
+      timestamp < '2026-09-26T13:07:00Z' ? 'stable-before' : 'changed-after' });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    const { beforeDigest, atDigest, afterDigest, stateAdvance } = receipt.bookmarkForensics.candidateWindow;
+    expect(beforeDigest).toBe(atDigest);
+    expect(afterDigest).not.toBe(atDigest);
+    expect(stateAdvance).toBe(true);
+    expect(receipt.timeWindow).toMatchObject({ historicalCandidateStateAdvance: false,
+      historicalTimestampSupported: false });
+  });
+
   it('excludes unrelated audit resources', () => {
     expect(sanitizeAuditEvent({ actor: { email: 'private@example.test' } })).not.toHaveProperty('email');
   });
 });
 
-describe('incomplete control-plane evidence', () => {
-  it('reads later audit pages even when the first page is short', async () => {
+describe('Audit Logs v1 terminal-empty-page pagination', () => {
+  const collect = async (options) => collectTemporalEvidence({
+    accountId: account, token: 'fixture', fetchImpl: fixtureFetch(options).fetchImpl,
+  });
+  const incomplete = { available: true, complete: false,
+    operationIdentityComplete: false, timeTravelRestore: null,
+    createDatabase: null, deleteDatabase: null };
+
+  it('A: accepts the T21D minimal HTTP 200 empty audit response without result_info', async () => {
+    const { fetchImpl, requests } = fixtureFetch();
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+      operationIdentityComplete: true, pagesRead: 1, d1Events: 0,
+      createDatabase: 0, deleteDatabase: 0, timeTravelRestore: 0,
+      pagination: { mode: 'v1-terminal-empty-page', perPage: null, pagesRead: 1,
+        terminalEmptyPageObserved: true, totalCount: null, totalPages: null } });
+    expect(receipt.schemaVersion).toBe(2);
+    expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))).toHaveLength(1);
+  });
+
+  it('B: reads a short nonempty page and then a terminal empty page', async () => {
+    const events = [auditEvent('CreateDatabase', 'create'),
+      auditEvent('DeleteDatabase', 'delete'), auditEvent('TimeTravel', 'update')];
+    const { fetchImpl, requests } = fixtureFetch({ events });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+      operationIdentityComplete: true, pagesRead: 2, d1Events: 3,
+      createDatabase: 1, deleteDatabase: 1, timeTravelRestore: 1,
+      pagination: { perPage: null, terminalEmptyPageObserved: true } });
+    expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))
+      .map(([url]) => url.searchParams.get('page'))).toEqual(['1', '2']);
+  });
+
+  it('C: reads 1000, then 1, then an empty page without total_count', async () => {
+    const unrelated = { resource: { type: 'workers.script', id: 'fixture' } };
     const { fetchImpl, requests } = fixtureFetch({
-      auditPages: [[], [auditEvent('TimeTravel', 'update')]],
-      auditResultInfo: { total_pages: 2 },
+      auditPages: [Array(1000).fill(unrelated), [auditEvent('TimeTravel', 'update')], []],
     });
     const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
-    expect(receipt.auditLogs.available).toBe(true);
-    expect(receipt.auditLogs.complete).toBe(true);
-    expect(receipt.auditLogs.operationIdentityComplete).toBe(true);
-    expect(receipt.auditLogs.pagesRead).toBe(2);
-    expect(receipt.auditLogs.timeTravelRestore).toBe(1);
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+      operationIdentityComplete: true, pagesRead: 3, d1Events: 1, timeTravelRestore: 1,
+      pagination: { terminalEmptyPageObserved: true } });
+    expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))).toHaveLength(3);
+  });
+
+  it('reads 1000, 1000, 1, then the terminal empty page', async () => {
+    const unrelated = { resource: { type: 'workers.script', id: 'fixture' } };
+    const { fetchImpl, requests } = fixtureFetch({ auditPages: [
+      Array(1000).fill(unrelated), Array(1000).fill(unrelated),
+      [auditEvent('TimeTravel', 'update')], [],
+    ] });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+      pagesRead: 4, timeTravelRestore: 1,
+      pagination: { terminalEmptyPageObserved: true } });
+    expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))).toHaveLength(4);
+  });
+
+  it('accepts an empty or partial result_info object', async () => {
+    const event = auditEvent('TimeTravel', 'update');
+    for (const info of [{}, { page: 1 }, { per_page: 1000 }, { count: 0 },
+      { total_count: 0 }, { total_pages: 0 }]) {
+      const receipt = await collect({ auditResultInfo: info });
+      expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+        operationIdentityComplete: true, pagesRead: 1, timeTravelRestore: 0 });
+    }
+    const partial = await collect({ events: [event],
+      auditResultInfo: (page, result) => page === 1
+        ? { page: 1, count: result.length } : { page: 2, count: 0 } });
+    expect(partial.auditLogs).toMatchObject({ complete: true, pagesRead: 2, timeTravelRestore: 1 });
+  });
+
+  it('D: treats count as optional but rejects a count that disagrees with result.length', async () => {
+    expect((await collect({ events: [auditEvent('TimeTravel', 'update')] })).auditLogs.complete).toBe(true);
+    const valid = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (_page, result) => ({ count: result.length }) });
+    expect(valid.auditLogs).toMatchObject({ complete: true, timeTravelRestore: 1 });
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page, result) => ({ count: page === 1 ? 0 : result.length }) });
+    expect(receipt.auditLogs).toMatchObject(incomplete);
+  });
+
+  it('E: accepts optional consistent total_count and rejects a mismatched final count', async () => {
+    const events = [auditEvent('TimeTravel', 'update')];
+    const consistent = await collect({ events,
+      auditResultInfo: (_page, result) => ({ total_count: 1, count: result.length }) });
+    expect(consistent.auditLogs).toMatchObject({ complete: true, pagesRead: 2,
+      timeTravelRestore: 1, pagination: { totalCount: 1, terminalEmptyPageObserved: true } });
+    const mismatched = await collect({ events,
+      auditResultInfo: (_page, result) => ({ total_count: 2, count: result.length }) });
+    expect(mismatched.auditLogs).toMatchObject(incomplete);
+  });
+
+  it('rejects total_count changing between pages', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page, result) => ({ count: result.length,
+        total_count: page === 1 ? 1 : 2 }) });
+    expect(receipt.auditLogs).toMatchObject({ ...incomplete, pagesRead: 2 });
+  });
+
+  it('F: treats total_pages as an optional hint and still probes the empty page', async () => {
+    const { fetchImpl, requests } = fixtureFetch({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: () => ({ total_pages: 1 }) });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.auditLogs).toMatchObject({ complete: true, pagesRead: 2,
+      timeTravelRestore: 1,
+      pagination: { totalPages: 1, terminalEmptyPageObserved: true } });
     expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))).toHaveLength(2);
   });
 
-  it('does not emit a restore zero when audit pagination metadata is missing', async () => {
-    const { fetchImpl } = fixtureFetch({ auditResultInfo: null });
+  it('rejects total_pages changing between pages', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page) => ({ total_pages: page === 1 ? 1 : 2 }) });
+    expect(receipt.auditLogs).toMatchObject({ ...incomplete, pagesRead: 2 });
+  });
+
+  it('rejects a total_pages hint that contradicts the observed terminal page', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: () => ({ total_pages: 2 }) });
+    expect(receipt.auditLogs).toMatchObject({ ...incomplete, pagesRead: 2,
+      pagination: { terminalEmptyPageObserved: true } });
+  });
+
+  it('accepts optional metadata appearing on only one page', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page, result) => page === 1
+        ? { count: result.length, total_count: 1, total_pages: 1, per_page: 1000 } : undefined });
+    expect(receipt.auditLogs).toMatchObject({ complete: true, pagesRead: 2, timeTravelRestore: 1 });
+  });
+
+  it('accepts a hint appearing only on the terminal page', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page) => page === 2 ? { total_count: 1, total_pages: 1 } : undefined });
+    expect(receipt.auditLogs).toMatchObject({ complete: true, pagesRead: 2,
+      pagination: { perPage: null, totalCount: 1, totalPages: 1 } });
+  });
+
+  it('accepts optional hints disappearing and reappearing consistently', async () => {
+    const event = auditEvent('TimeTravel', 'update');
+    const receipt = await collect({ auditPages: [[event], [event], []],
+      auditResultInfo: (page) => page === 2 ? undefined
+        : { total_count: 2, total_pages: 2, per_page: 1000 } });
+    expect(receipt.auditLogs).toMatchObject({ complete: true, pagesRead: 3,
+      timeTravelRestore: 2, pagination: { totalCount: 2, totalPages: 2, perPage: 1000 } });
+    const conflict = await collect({ auditPages: [[event], [event], []],
+      auditResultInfo: (page) => page === 2 ? undefined
+        : { total_count: page === 1 ? 2 : 3 } });
+    expect(conflict.auditLogs).toMatchObject({ ...incomplete, pagesRead: 3 });
+  });
+
+  it('G: rejects a response whose page differs from the requested page', async () => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page) => ({ page: page + 1 }) });
+    expect(receipt.auditLogs).toMatchObject(incomplete);
+  });
+
+  it('H: accepts a valid per_page hint and rejects invalid or changing hints', async () => {
+    const valid = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: () => ({ per_page: 1000 }) });
+    expect(valid.auditLogs).toMatchObject({ complete: true,
+      pagination: { perPage: 1000 } });
+    const tooLarge = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: () => ({ per_page: 1001 }) });
+    expect(tooLarge.auditLogs).toMatchObject(incomplete);
+    const changed = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditResultInfo: (page) => ({ per_page: page === 1 ? 1000 : 999 }) });
+    expect(changed.auditLogs).toMatchObject({ ...incomplete, pagesRead: 2 });
+  });
+
+  it.each([403, 500])('I: keeps audit available when a later page returns HTTP %i', async (status) => {
+    const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')],
+      auditFailureAt: (page) => page === 2 ? status : null });
+    expect(receipt.auditLogs).toMatchObject({ ...incomplete, pagesRead: 1,
+      httpStatus: status, pagination: { terminalEmptyPageObserved: false } });
+  });
+
+  it('J: marks audit unavailable when the first page fails', async () => {
+    const receipt = await collect({ auditFailureAt: (page) => page === 1 ? 403 : null });
+    expect(receipt.auditLogs).toMatchObject({ available: false, complete: false,
+      operationIdentityComplete: false, pagesRead: 0, httpStatus: 403,
+      createDatabase: null, deleteDatabase: null, timeTravelRestore: null,
+      pagination: { terminalEmptyPageObserved: false } });
+  });
+
+  it('fails closed when the first or a later HTTP 200 result is not an array', async () => {
+    const malformedFirst = await collect({ auditPages: [{}] });
+    expect(malformedFirst.auditLogs).toMatchObject({ available: false, complete: false,
+      pagesRead: 0, timeTravelRestore: null });
+    const malformedLater = await collect({ auditPages: [[auditEvent('TimeTravel', 'update')], {}] });
+    expect(malformedLater.auditLogs).toMatchObject({ ...incomplete, pagesRead: 1,
+      httpStatus: 200, pagination: { terminalEmptyPageObserved: false } });
+  });
+
+  it('K: stops after 50 nonempty pages without requesting page 51', async () => {
+    const unrelated = { resource: { type: 'workers.script', id: 'fixture' } };
+    const { fetchImpl, requests } = fixtureFetch({ auditPages: Array.from({ length: 51 }, () => [unrelated]) });
     const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
-    expect(receipt.auditLogs.available).toBe(true);
-    expect(receipt.auditLogs.complete).toBe(false);
-    expect(receipt.auditLogs.operationIdentityComplete).toBe(false);
-    expect(receipt.auditLogs.timeTravelRestore).toBeNull();
+    expect(receipt.auditLogs).toMatchObject({ ...incomplete, pagesRead: 50,
+      pagination: { terminalEmptyPageObserved: false } });
+    expect(requests.filter(([url]) => url.pathname.endsWith('/audit_logs'))).toHaveLength(50);
+  });
+
+  it('L: remains incomplete on missing action.info despite a terminal empty page', async () => {
+    const receipt = await collect({ events: [auditEvent(undefined, 'update')] });
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+      operationIdentityComplete: false, pagesRead: 2, timeTravelRestore: null,
+      createDatabase: null, deleteDatabase: null,
+      pagination: { terminalEmptyPageObserved: true } });
+  });
+
+  it('accepts missing metadata and rejects malformed optional integer hints', async () => {
+    for (const info of [undefined, null, {}]) {
+      const receipt = await collect({ events: [auditEvent('TimeTravel', 'update')], auditResultInfo: info });
+      expect(receipt.auditLogs).toMatchObject({ available: true, complete: true,
+        operationIdentityComplete: true, timeTravelRestore: 1,
+        pagination: { perPage: null } });
+      expect(normalizeV1Pagination(info, 1, 1, 1000)).toEqual({ valid: true,
+        page: null, perPage: null, count: null, totalCount: null, totalPages: null });
+    }
+    const valid = { page: 1, per_page: 1000 };
+    expect(normalizeV1Pagination(valid, 1, 1, 1000)).toMatchObject({ valid: true,
+      page: 1, perPage: 1000, count: null, totalCount: null, totalPages: null });
+    expect(normalizeV1Pagination({ ...valid, count: 1, total_count: 1, total_pages: 1 }, 1, 1, 1000))
+      .toMatchObject({ valid: true, count: 1, totalCount: 1, totalPages: 1 });
+    for (const bad of [
+      { page: 2 }, { page: 1.5 }, { per_page: 0 }, { per_page: 1001 }, { per_page: 1.5 },
+      { count: -1 }, { count: 0 }, { count: 1001 }, { total_count: -1 },
+      { total_count: 1.5 }, { total_pages: -1 }, { total_pages: 1.5 },
+    ]) {
+      expect(normalizeV1Pagination(bad, 1, 1, 1000).valid).toBe(false);
+    }
+    expect(normalizeV1Pagination({ page: 1 }, 0, 1, 1000).valid).toBe(true);
+    expect(normalizeV1Pagination({ per_page: 1000 }, 0, 1, 1000).valid).toBe(true);
+    expect(normalizeV1Pagination({}, 0, 0, 1000).valid).toBe(false);
+  });
+});
+
+describe('incomplete control-plane evidence', () => {
+  it('does not emit a restore zero when audit pagination metadata contradicts the result', async () => {
+    const { fetchImpl } = fixtureFetch({ auditResultInfo: { count: 1 } });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.auditLogs).toMatchObject({ available: true, complete: false,
+      operationIdentityComplete: false, timeTravelRestore: null });
   });
 
   it('does not emit a false restore zero when D1 action.info is missing', async () => {
@@ -196,5 +435,107 @@ describe('incomplete control-plane evidence', () => {
     expect(failed.httpStatus).toBe(503);
     expect(failed.bookmarkDigest).toBeNull();
     expect(receipt.bookmarkForensics.candidateWindow.stateAdvance).toBeNull();
+  });
+});
+
+describe('adaptive bookmark refinement', () => {
+  const start = '2026-09-26T12:00:00Z';
+  const end = '2026-09-26T13:00:00Z';
+  const timeline = (states) => async (timestamp) => {
+    const state = [...states].reverse().find(([at]) => timestamp >= at)?.[1] ?? states[0][1];
+    return { timestamp, bookmarkDigest: state, available: true, httpStatus: 200 };
+  };
+  const refine = (overrides = {}) => refineTransitionIntervals({
+    leftTimestamp: start, leftDigest: 'A', rightTimestamp: end, rightDigest: 'B',
+    sample: timeline([[start, 'A'], ['2026-09-26T12:37:00Z', 'B']]),
+    minimumResolutionSeconds: 60, requestBudget: 96, ...overrides,
+  });
+
+  it('stops immediately when the endpoint states are equal', async () => {
+    let calls = 0;
+    const result = await refine({ rightDigest: 'A', sample: async () => { calls++; } });
+    expect(result).toMatchObject({ complete: true, budgetExhausted: false, requestCount: 0 });
+    expect(result.transitionIntervals).toHaveLength(0);
+    expect(calls).toBe(0);
+  });
+
+  it('narrows a single transition to a containing interval of at most one minute', async () => {
+    const result = await refine();
+    expect(result.complete).toBe(true);
+    expect(result.budgetExhausted).toBe(false);
+    expect(result.requestCount).toBeGreaterThan(0);
+    expect(result.requestCount).toBeLessThanOrEqual(96);
+    expect(result.transitionIntervals).toHaveLength(1);
+    expect(result.transitionIntervals[0]).toMatchObject({ state: 'STATE_ADVANCE_OBSERVED',
+      leftDigest: 'A', rightDigest: 'B' });
+    expect(result.transitionIntervals[0].durationSeconds).toBeLessThanOrEqual(60);
+    expect(Date.parse(result.transitionIntervals[0].start)).toBeLessThanOrEqual(Date.parse('2026-09-26T12:37:00Z'));
+    expect(Date.parse(result.transitionIntervals[0].end)).toBeGreaterThanOrEqual(Date.parse('2026-09-26T12:37:00Z'));
+  });
+
+  it('preserves two transitions through A, B, and C rather than collapsing them', async () => {
+    const result = await refine({ rightDigest: 'C', sample: timeline([
+      [start, 'A'], ['2026-09-26T12:20:00Z', 'B'], ['2026-09-26T12:40:00Z', 'C'],
+    ]) });
+    expect(result.complete).toBe(true);
+    expect(result.transitionIntervals).toHaveLength(2);
+    expect(result.transitionIntervals.map(({ leftDigest, rightDigest }) => [leftDigest, rightDigest]))
+      .toEqual([['A', 'B'], ['B', 'C']]);
+    expect(result.transitionIntervals.every(({ durationSeconds }) => durationSeconds <= 60)).toBe(true);
+  });
+
+  it('fails closed when a midpoint bookmark request fails', async () => {
+    const result = await refine({ sample: async (timestamp) => ({ timestamp,
+      bookmarkDigest: null, available: false, httpStatus: 503 }) });
+    expect(result.complete).toBe(false);
+    expect(result.requestCount).toBe(1);
+  });
+
+  it('stops at a deterministic request budget and preserves incomplete evidence', async () => {
+    let calls = 0;
+    const result = await refine({ requestBudget: 2, sample: async (timestamp) => {
+      calls++;
+      return timeline([[start, 'A'], ['2026-09-26T12:37:00Z', 'B']])(timestamp);
+    } });
+    expect(result).toMatchObject({ complete: false, budgetExhausted: true, requestCount: 2 });
+    expect(calls).toBe(2);
+  });
+
+  it('refines only the two known coarse windows and never serializes raw handles', async () => {
+    const rawA = 'bookmark-before-secret-handle';
+    const rawB = 'bookmark-middle-secret-handle';
+    const rawC = 'bookmark-after-secret-handle';
+    const { fetchImpl, requests } = fixtureFetch({ bookmarkAt: (timestamp) => {
+      if (timestamp < '2026-09-26T12:37:00Z') return rawA;
+      if (timestamp < '2026-09-26T15:31:00Z') return rawB;
+      return rawC;
+    } });
+    const receipt = await collectTemporalEvidence({ accountId: account, token: 'fixture', fetchImpl });
+    expect(receipt.schemaVersion).toBe(2);
+    expect(receipt.refinement).toMatchObject({ attempted: true, complete: true,
+      requestBudget: 96, minimumResolutionSeconds: 60 });
+    expect(receipt.refinement.requestCount).toBeLessThanOrEqual(96);
+    expect(receipt.refinement.windows).toHaveLength(2);
+    expect(receipt.refinement.windows.map(({ initialStart, initialEnd }) => [initialStart, initialEnd]))
+      .toEqual([
+        ['2026-09-26T12:00:00Z', '2026-09-26T13:00:00Z'],
+        ['2026-09-26T13:10:00Z', '2026-09-26T18:00:00Z'],
+      ]);
+    expect(receipt.refinement.windows.every(({ transitionIntervals }) => transitionIntervals.length === 1)).toBe(true);
+    expect(receipt.bookmarkForensics.candidateWindow.stateAdvance).toBe(false);
+    expect(receipt.timeWindow).toMatchObject({ historicalCandidateStateAdvance: false,
+      historicalTimestampSupported: false });
+    const candidateSamples = receipt.bookmarkForensics.samples.filter(({ timestamp }) =>
+      timestamp >= '2026-09-26T13:00:00Z' && timestamp <= '2026-09-26T13:10:00Z');
+    expect(candidateSamples.map(({ timestamp }) => timestamp)).toEqual([
+      '2026-09-26T13:00:00Z', '2026-09-26T13:05:00Z', '2026-09-26T13:10:00Z',
+    ]);
+    expect(new Set(candidateSamples.map(({ bookmarkDigest }) => bookmarkDigest)).size).toBe(1);
+    const serialized = JSON.stringify(receipt);
+    for (const raw of [rawA, rawB, rawC]) expect(serialized).not.toContain(raw);
+    expect(requests.every(([url, options]) => {
+      assertAllowedCloudflareRequest(url, options.method);
+      return options.method === 'GET' && options.redirect === 'error';
+    })).toBe(true);
   });
 });
