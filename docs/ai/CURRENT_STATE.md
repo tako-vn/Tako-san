@@ -4474,3 +4474,23 @@ flag change or deploy occurred. The next action is independent review, exact
 main CI after a protected merge, and a separately authorized production
 Environment read-only dispatch. Review only the sanitized receipt before any
 row-level evidence path or T21G design decision.
+
+---
+
+# T21R-B protected integration merge — 2026-10-02 JST
+
+PR #33 merged reviewed head `0b28b48e2fbd8f4892ddbf57ae9139d96addc0a3`
+into protected main as `483e054b8ad5e0391aaedfcaf65343ce95949562`.
+Exact-head CI `36931130799` and exact-main CI `36931887016` both passed
+`validate` (lint, typecheck, Vitest, local migration smoke, build). The manual
+read-only V1 diagnostic integration is now on main; no production diagnostic
+was dispatched. Full authority, CI and safety evidence is in
+`recipe-catalog/T21RB_PROTECTED_INTEGRATION_MERGE_RECEIPT.md`.
+
+Current status: `T21RB_PROTECTED_INTEGRATION_MERGED`, with no live V1-relative
+production counts. The two SELECT observations remain non-atomic evidence;
+receipt scope is recipe ID set and V1 ingredient tuples only. T21G remains
+`T21G_NOT_READY`, repair unauthorized, 0039 stopped and production deploy
+stopped. Next: separately authorize a manual production Environment read-only
+diagnostic at an exact current-main SHA, then inspect only the sanitized
+receipt before planning any row-level evidence path.

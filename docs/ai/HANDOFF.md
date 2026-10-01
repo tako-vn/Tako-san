@@ -4480,3 +4480,27 @@ then separately authorize a manual read-only production Environment dispatch.
 Inspect the sanitized V1 receipt and plan a distinct protected row-evidence
 path for unresolved occurrences before any T21G repair design. Do not infer a
 repair action from counts; 0039 and production deploy remain stopped.
+
+---
+
+# T21R-B protected integration merge handoff — 2026-10-02 JST
+
+**State:** `T21RB_PROTECTED_INTEGRATION_MERGED`. PR #33 merged reviewed head
+`0b28b48e2fbd8f4892ddbf57ae9139d96addc0a3` into main as
+`483e054b8ad5e0391aaedfcaf65343ce95949562`. PR exact-head run
+`36931130799` and merge exact-main run `36931887016` both passed `validate`.
+The independent read-only review found no concrete issue. See
+`recipe-catalog/T21RB_PROTECTED_INTEGRATION_MERGE_RECEIPT.md` for the exact
+checks and remaining evidence limits.
+
+**Production boundary:** No D1 read dispatch, mutation, restore, 0039 apply,
+flag change or deploy. The workflow is manual and retains the exact-main CI,
+production Environment, account/D1 identity and ledger guards. Two matching
+five-statement observations are `OBSERVED_STABLE_NON_ATOMIC`, not a release
+certification. Only recipe ID set and V1 ingredient tuples are compared.
+`T21G_NOT_READY`; `repairAuthorized=false`.
+
+**Next:** operator separately authorizes a manual read-only diagnostic at an
+exact current-main SHA. Review the sanitized V1 receipt and unresolved rows
+before a distinct protected row-evidence path. Do not infer repair from counts;
+0039 and production deploy stay stopped.
