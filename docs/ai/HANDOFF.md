@@ -4429,3 +4429,54 @@ capture/consistency design, then use exact-main CI and production Environment
 approval for a new read-only capture if authorized. Keep raw rows runner-local
 and review only a sanitized V1-relative receipt. Do not infer repair actions
 from classification counts.
+
+---
+
+# T21R-B protected V1 diagnostic integration handoff — 2026-10-02 JST
+
+**State:** `T21RB_PROTECTED_INTEGRATION_PREPARED`; no production V1 snapshot
+has been captured. Repository ID `1385308553` resolves to
+`vn-tako4/Tako-san`; verified GitHub main and local `origin/main` are
+`3e0f6531b98feb1e44743513b91aff131bbd522b`. Branch
+`codex/t21rb-offline-semantic-snapshot` starts this continuation at
+`8d275b5e30bc6b29a40d7747f18512a82e436a73`. Implementation checkpoint:
+`90569fa6e9890403bbbf57eaecad2c6e049fd1e8`.
+
+**Implemented:** `.github/workflows/production-d1-diagnostics.yml` performs a
+second guarded five-statement catalog read and third migration-ledger read.
+`scripts/t21rb-v1-production.mjs` requires complete equal captures, reviewed
+0038 ledger prefix, matching order coverage and prior diagnostic, repository
+and D1 identity, and the certified V1 manifest hash. It calls the offline
+comparator without Cloudflare credentials and emits an allowlisted aggregate
+receipt only after the workflow's final exact-main check. Raw rows and raw-row
+digests are not uploaded. `scripts/t21rb-v1-semantic.mjs` rejects boolean or
+whitespace-only raw ingredient fields. Tests cover drift, contradictory flags,
+coverage, identity, malformed fields and output redaction. The design packet
+specifies the ingredient-only and non-atomic evidence boundary.
+
+**Executed:** `pnpm exec vitest run tests/unit/t21rb-v1-production.test.mjs
+ tests/unit/t21rb-v1-semantic.test.mjs
+ tests/unit/production-d1-diagnostics.test.mjs` — 3 files / 23 tests PASS.
+`pnpm lint` and `pnpm typecheck` PASS. `pnpm check:migrations` PASS
+(`migration-smoke=ok`); `pnpm build` PASS. `node --check` on both changed
+scripts and `git diff --check` PASS. `pnpm exec vitest run --maxWorkers=2`
+passed 225 files / 4,906 tests twice, including once after the implementation
+commit on the frozen tree. Earlier in this continuation, an initial diagnostic
+fixture mismatch caused two focused test failures; correcting the `{name,id}`
+shape yielded the final 23/23. `node --test` failed because the files require
+Vitest; the correct runner passed. No combined `pnpm check` result is claimed.
+
+**Limits:** `OBSERVED_STABLE_NON_ATOMIC` means two equal observations across
+separate SELECTs, not a transactionally pinned state. The receipt classifies
+only the recipe ID set and V1 ingredient tuples. It does not certify recipe
+order, metadata, steps, nutrition, physical line identity, live positions or
+T20 hard-restriction evidence. `NOT_A_RELEASE_CERTIFICATION`,
+`runtimePositionAuthority=false`, `repairAuthorized=false` and
+`T21G_NOT_READY` remain explicit. Production read dispatches, SQL mutations,
+restore calls, migration/0039 applies, flag changes and deploys: **0**.
+
+**Next:** independent review of this branch, protected merge and exact-main CI,
+then separately authorize a manual read-only production Environment dispatch.
+Inspect the sanitized V1 receipt and plan a distinct protected row-evidence
+path for unresolved occurrences before any T21G repair design. Do not infer a
+repair action from counts; 0039 and production deploy remain stopped.

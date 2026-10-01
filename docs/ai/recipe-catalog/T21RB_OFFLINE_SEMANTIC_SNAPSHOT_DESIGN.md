@@ -1,58 +1,73 @@
 # T21R-B: Offline semantic snapshot design
 
-Status: `T21RB_OFFLINE_TOOLING_READY`; live row classification is pending an
-independently reviewed, Environment-gated production read. This packet defines
-the comparison contract. It does not dispatch a read or authorize repair, 0039,
-a flag change, or deployment.
+Status: `T21RB_PROTECTED_INTEGRATION_PREPARED`. The offline V1 comparator is
+wired into the protected read-only production diagnostic workflow, but no new
+production read or live V1 classification has been dispatched. This packet
+neither authorizes repair, 0039, a flag change nor deployment.
 
 ## Goal and authority
 
-Compare a complete, explicitly captured D1 recipe-content snapshot against the
-T21R-A certified V1 `RuntimeRecipe` release projection, preserving duplicate
-multiplicity and uncertainty. The target is release
-`rel-bd00a4f53fcaeee4`, 500 ordered recipes, fingerprint
+Compare captured D1 recipe-content rows against the T21R-A certified V1
+`RuntimeRecipe` ingredient projection, preserving duplicate multiplicity and
+uncertainty. The target is release `rel-bd00a4f53fcaeee4`, 500 ordered
+recipes, fingerprint
 `f8cf8c7ff59df9fe29e246b9e3c9aad0fd155fa8df35bf671ac4d03fa2b5ab37`.
 The source is the static 71 recipes plus the two approved batches of 30 and
 399, composed with the checked-in release code. `scripts/t21rb-v1-offline.mjs`
 recomposes this source, verifies the approved registry and migration bytes,
 requires a byte-equal committed release manifest, and checks the T21R-A target
-spec before comparing any saved rows. Its input is a local five-statement
-`runtime-catalog.json`; its stdout contains sanitized aggregate evidence only.
+spec before comparing saved rows. It has no Cloudflare or D1 access.
 
 This target is semantic, not a mapping onto existing physical D1 line IDs. The
 V2 research catalog and the old V2-relative counts of 596 matches, 1,475
 conflicts and 4,649 production-only lines are not V1 classifications.
 Production and staging states are observations, not source authority.
 
-## Capture boundary
+## Protected capture boundary
 
-The existing protected Production D1 Read-Only Diagnostics workflow reads the
-five statements from `prepareRecipeContentRead()` in
-`packages/db/src/recipe-content.ts`, plus the order-coverage SELECT and pre/post
-migration ledgers. Its raw `runtime-catalog.json` stays runner-local; uploaded
-artifacts contain only sanitized aggregates. Earlier uploaded receipts lack the
-rows required for this comparison.
+The manual Production D1 Read-Only Diagnostics workflow reads the five
+statements from `prepareRecipeContentRead()` in
+`packages/db/src/recipe-content.ts`, plus the fixed order-coverage SELECT and
+migration ledgers. It now retains the first five-statement result on the runner,
+performs a second full five-statement read, and reads the ledger again. The
+credential-free `scripts/t21rb-v1-production.mjs` wrapper checks the two
+captures, three ledgers, coverage, prior sanitized diagnostic, repository and
+D1 identity, then runs the offline comparator against the first capture.
+Raw `runtime-catalog*.json`, SQL results, and credentials stay runner-local.
+Earlier uploaded receipts lack the rows required for a V1 comparison.
 
 Before a future protected dispatch, review the exact candidate SHA, repository
 ID `1385308553`, production Cloudflare account and D1 database ID
 `f975ec39-b2c8-4a2a-80e1-0366054599d3`, release manifest and workflow diff.
-The existing manual exact-main CI gate, production Environment approval,
-credential identity check, five-statement runtime SQL guard, reviewed fixed
-coverage/ledger SELECTs, unchanged ledger and final main-SHA recheck remain
-mandatory. No raw row, recipe ID, ingredient ID, name, household datum or
-credential may enter an uploaded receipt or log.
+The manual exact-main CI gate, production Environment approval, credential
+identity check, five-statement runtime SQL guard, reviewed fixed
+coverage/ledger SELECTs, expected 38-entry ledger through 0038 and final
+main-SHA recheck remain mandatory. The V1 receipt uploads only after all
+steps, including the final main check, succeed. No raw row, recipe ID,
+ingredient ID, name, household datum or credential may enter an uploaded
+receipt or log.
 
-The five catalog SELECTs execute separately, not in one D1 transaction. Equal
-pre/post ledgers rule out a migration change only. A future capture must check
-statement success and structure, distinct physical line IDs, foreign-key
-references, the ingredient row count against order coverage, and the other
-statement counts against source/target invariants. A repeated full catalog read
-with identical per-table digests may establish `OBSERVED_STABLE`; it cannot
-prove an atomic snapshot against an unrelated writer. Differing digests,
-counts or incomplete statement responses mean `SNAPSHOT_INCONSISTENT` and stop
-classification. A parseable row with an invalid field is counted `MALFORMED`
-and makes the overall result non-certifiable; its values are never coerced into
-an authoritative match.
+Each catalog SELECT executes separately, not in one D1 transaction. The wrapper
+requires successful five-result structures and exact equality of the complete
+ordered result arrays across the two reads. It also requires all three ledger
+reads to equal the reviewed 0038 prefix and binds the order-coverage aggregates
+to the first capture and diagnostic receipt. This establishes
+`OBSERVED_STABLE_NON_ATOMIC` only: matching observations and unchanged ledgers
+cannot prove an atomic snapshot or exclude an intervening writer that leaves
+both observed results equal. A failed, incomplete or differing read stops V1
+classification; no V1 artifact is uploaded. No production action has been
+executed by this integration work.
+
+The ingredient comparator validates raw recipe IDs, ingredient fields and
+parent recipe references. It counts malformed ingredient rows, duplicate
+physical line IDs, unknown parents and missing or invalid positions, and leaves
+uncertain occurrences unmatched for manual review. Its `semanticParity` covers
+only the recipe ID set and V1 ingredient tuples. The other three SELECTs are
+checked for response structure and repeated equality, with row counts exposed
+as aggregates; their metadata, steps and nutrition content are not certified
+by this receipt. The recipe runtime order is not compared to the V1 ordered
+release manifest. Neither this receipt nor a matching ingredient result is a
+complete catalog or release certification.
 
 ## Ingredient classification contract
 
@@ -101,17 +116,22 @@ links, so T20 hard-restriction nutrition evidence is not certified.
 
 ## Output, verification and next gate
 
-The local comparison emits counts and status flags only: target
-release/fingerprint, input row counts, class counts, duplicate/ambiguous
-counts, `runtimePositionAuthority=false`, and `repairAuthorized=false`.
-It says `NOT_A_RELEASE_CERTIFICATION`. Raw row-level review needs a separate
-protected evidence path and must not be uploaded by this tool.
+The uploaded `production-t21rb-v1.json` contains allowlisted identity and
+release references, statement row counts, order-coverage counts, ingredient
+comparison counts and status flags. Raw rows stay runner-local; the receipt
+does not publish per-statement content digests. `unmatchedProductionLines`
+also includes malformed and unknown-parent ingredient rows; it is not a reviewed list of production-only
+identities. The receipt says `NOT_A_RELEASE_CERTIFICATION`,
+`runtimePositionAuthority=false`, `repairAuthorized=false` and
+`T21G_NOT_READY`. Raw row-level review needs a separate protected evidence
+path and must not be uploaded by this tool.
 
 Offline fixtures cover exact equality, changed quantity/name/optional values,
 duplicate multiplicity, malformed rows, cross-ID resemblance, valid and
-ambiguous bridges, incomplete statements and output redaction. The comparison
-script has no Cloudflare or D1 access and is not wired to the production
-workflow. No historical writer attribution is required.
+ambiguous bridges, incomplete statements, capture drift, guard failures and
+output redaction. The workflow integration is prepared for independent review;
+no production diagnostic was dispatched by this task. No historical writer
+attribution is required.
 
 Only after independent review and a separately approved read-only capture may
 T21R-B report actual V1-relative production counts. `T21G_NOT_READY` remains

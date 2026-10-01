@@ -4434,3 +4434,42 @@ main CI, production Environment approval, account/D1 identity checks, content
 stability assessment and a separate sanitized receipt review. No production
 read, mutation, restore, migration, 0039 apply, flag change or deploy occurred.
 `T21G_NOT_READY`; repair remains unauthorized.
+
+---
+
+# T21R-B protected V1 diagnostic integration — 2026-10-02 JST
+
+Status: `T21RB_PROTECTED_INTEGRATION_PREPARED`; no live V1 row result. On
+`codex/t21rb-offline-semantic-snapshot`, implementation checkpoint `90569fa`
+wires the existing offline V1 ingredient comparator into the manual, protected
+Production D1 Read-Only Diagnostics workflow. The runner now observes the
+five-statement catalog read twice, checks all three migration ledgers against
+the reviewed 0038 prefix, binds the first read to the prior diagnostic and
+order-coverage receipt, and emits `production-t21rb-v1.json` only after the
+final exact-main check. Repository ID, production D1 ID, candidate SHA and V1
+manifest hash are explicit guards. Raw rows remain runner-local; the uploaded
+receipt contains only allowlisted counts and flags, with no row digests. Invalid
+raw optional bits, contradictory comparison flags and coverage mismatch fail
+closed.
+
+This is `OBSERVED_STABLE_NON_ATOMIC` evidence. The separate SELECTs do not prove
+an atomic snapshot. The comparison certifies neither steps/metadata/nutrition
+nor physical line IDs or runtime positions. A V1 ingredient match is not a
+release certification or repair instruction. T21G remains `T21G_NOT_READY`;
+repair, 0039 and production deploy remain stopped.
+
+Verification: focused Vitest 3 files / 23 tests PASS; `pnpm lint` PASS;
+`pnpm typecheck` PASS; `pnpm check:migrations` PASS (`migration-smoke=ok`);
+`pnpm build` PASS; `node --check` on both changed scripts PASS. A full
+`pnpm exec vitest run --maxWorkers=2` completed 225 files / 4,906 tests PASS;
+a second run on the frozen implementation checkpoint also passed the same
+225 files and 4,906 tests. `git diff --check` PASS. An exploratory `node --test` invocation
+failed because these are Vitest files; the corrected Vitest command passed.
+An initial receipt fixture had a diagnostic database shape mismatch and was
+corrected before the final focused run.
+
+No production SQL, read dispatch, mutation, restore, migration, 0039 apply,
+flag change or deploy occurred. The next action is independent review, exact
+main CI after a protected merge, and a separately authorized production
+Environment read-only dispatch. Review only the sanitized receipt before any
+row-level evidence path or T21G design decision.
