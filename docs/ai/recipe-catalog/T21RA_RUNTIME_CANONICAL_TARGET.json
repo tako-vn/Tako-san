@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "status": "T21RA_CANONICAL_TARGET_CERTIFIED",
+  "certificationScope": "current-approved-D1-RuntimeRecipe-release-projection-only",
+  "repository": {
+    "id": 1385308553,
+    "resolvedNameAtReview": "vn-tako4/Tako-san",
+    "originMainSha": "3e0f6531b98feb1e44743513b91aff131bbd522b"
+  },
+  "target": {
+    "type": "SINGLE_SOURCE",
+    "source": "V1 approved release: 71 static recipes plus reviewed pilot-30 and scale-399 batches",
+    "releaseId": "rel-bd00a4f53fcaeee4",
+    "releaseManifest": "packages/recipes/src/import/catalog-release.current.json",
+    "releaseManifestFileSha256": "fa47d31f344736d338dc0ba50654e4604f793089fe97e44857e7dd5dd0134ac0",
+    "approvedBatches": "data/recipe-import/approved-batches.json",
+    "approvedBatchesFileSha256": "2dcd4b03c1f2991d74de0c938b5f5a850034c6659a963ca2438f9308542dbb42",
+    "recipeCount": 500,
+    "legacyStaticPrefixCount": 71,
+    "expectedRuntimeFingerprint": "f8cf8c7ff59df9fe29e246b9e3c9aad0fd155fa8df35bf671ac4d03fa2b5ab37",
+    "fingerprintMeaning": "SHA-256 of ordered stable JSON projection of all RuntimeRecipe fields; excludes physical D1 line IDs, parent version/provenance, linked nutrition evidence, media rows and timestamps",
+    "historicalReplayIngredientLines": 2702,
+    "historicalStagingSteps": 2064,
+    "historicalReplayOrderRows": 2702,
+    "stagingCertificationRun": 36494932501,
+    "stagingCertificationArtifactId": 11003036030,
+    "stagingCertifiedAtUtc": "2026-09-28T22:53:36.138Z"
+  },
+  "dimensions": {
+    "recipeIdentity": {
+      "level": "CERTIFIED",
+      "authority": "V1 release manifest exact 500 ordered recipe IDs"
+    },
+    "recipeMetadata": {
+      "level": "CERTIFIED",
+      "authority": "V1 RuntimeRecipe projection and release fingerprint"
+    },
+    "ingredientSemanticIdentity": {
+      "level": "CERTIFIED",
+      "authority": "V1 RuntimeRecipe ingredientId and name in each recipe; physical D1 line ID excluded"
+    },
+    "ingredientMembership": {
+      "level": "CERTIFIED",
+      "authority": "V1 ordered RuntimeRecipe ingredient arrays"
+    },
+    "quantityUnit": {
+      "level": "CERTIFIED",
+      "authority": "V1 requiredQuantity and closed standard unit in the release fingerprint"
+    },
+    "optionalFlag": {
+      "level": "CERTIFIED",
+      "authority": "V1 isOptional true or absent/false in the release fingerprint"
+    },
+    "steps": {
+      "level": "CERTIFIED",
+      "authority": "V1 ordered RuntimeRecipe step content in the release fingerprint"
+    },
+    "runtimeNutritionAsPresent": {
+      "level": "CERTIFIED",
+      "authority": "V1 optional legacy nutrition macros as present in the release fingerprint"
+    },
+    "nutritionEvidenceForHardRestrictions": {
+      "level": "PARTIAL",
+      "authority": "Separate linked evidence and fail-closed T03/T20 eligibility, outside the runtime fingerprint"
+    },
+    "reconciliationRules": {
+      "level": "PROVEN",
+      "authority": "Strict current diagnostic/refresh code predicates; committed V2 metadata yields zero cross-ID bridges"
+    },
+    "v1TargetIngredientOrder": {
+      "level": "CERTIFIED",
+      "authority": "V1 ordered ingredient arrays, explicit 0034/0036/0037 positions and dated staging runtime fingerprint"
+    },
+    "currentProductionLiveLinePositions": {
+      "level": "UNKNOWN",
+      "authority": null
+    },
+    "physicalD1LineIds": {
+      "level": "UNKNOWN",
+      "authority": null
+    }
+  },
+  "runtimePositionAuthority": false,
+  "runtimePositionAuthorityMeaning": "No certified mapping from V1 target positions or V2 source-relative order to 6720 current production physical ingredient lines",
+  "reconciliationPolicy": {
+    "sameId": "Require recipe membership, ingredientId, quantity, unit, optional flag and approved name comparison; compare duplicate-preserving multisets",
+    "existingCanonicalIdBridge": "Require nonempty distinct sourceId and canonicalId, resolution=existing_canonical_id and review=null",
+    "reviewedNewCanonicalIdBridge": "Require nonempty sourceId, ING_ENR_ canonicalId, resolution=reviewed_new_canonical_id and exact review object with only nonempty basis and evidenceReference",
+    "prohibitedAsAuthority": [
+      "provisional_new_canonical_id",
+      "duplicate_alias",
+      "ambiguous",
+      "invalid",
+      "cross-ID name/content similarity without a strict bridge"
+    ],
+    "productionOnly": "Classify relative to the named target; V2-relative aggregate production-only counts cannot be reused as V1 classifications. Without independently reviewed evidence use UNREVIEWED_PRODUCTION_ONLY",
+    "idConflict": "ID_CONFLICT_RESOLVED only with a unique bridge passing the strict existing_canonical_id or reviewed_new_canonical_id predicate plus content tuple equality; otherwise ID_CONFLICT_REVIEW_REQUIRED",
+    "duplicateTuple": "Multiplicity must match; semantic equality of duplicate tuples does not identify a unique physical row, so row mapping and position remain UNKNOWN"
+  },
+  "t21rb": {
+    "readiness": "READY",
+    "scope": "Design a read-only row-level semantic comparison against the certified V1 RuntimeRecipe projection; unresolved rows require MANUAL_REVIEW_REQUIRED",
+    "mayClassify": [
+      "recipe ID set and order",
+      "ingredient semantic ID and recipe membership",
+      "quantity, unit and optional flag",
+      "steps and runtime metadata",
+      "runtime nutrition macros when present"
+    ],
+    "mustNotClassifyAsRepairDefect": [
+      "physical production line-ID mismatch alone",
+      "current live ingredient position mismatch without a certified mapping",
+      "V2-relative production-only or cross-ID aggregate count treated as a V1 row result",
+      "cross-ID resemblance without a strict bridge",
+      "missing nutrition evidence inferred from runtime macros"
+    ],
+    "productionReadDispatchedByT21RA": false
+  },
+  "unresolvedDimensions": [
+    "authority of 6720 observed production physical ingredient-line IDs",
+    "runtime positions for those live lines",
+    "validity of V2-relative 1475 cross-ID content matches and 4649 production-only lines",
+    "current production steps, nutrition evidence and metadata coverage",
+    "T20 stored-composition and role impact of any future identity change"
+  ],
+  "t19Compatibility": "PASS_FOR_V1_TARGET; OBSERVED_PRODUCTION_D1_NOT_READY",
+  "t20Compatibility": "PARTIAL",
+  "productionMutations": 0,
+  "repairAuthorized": false,
+  "migration0039": "STOPPED",
+  "productionDeploy": "STOPPED",
+  "t21gReadiness": "T21G_NOT_READY"
+}

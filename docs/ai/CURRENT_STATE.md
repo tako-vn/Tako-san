@@ -4399,3 +4399,78 @@ Next: maintainer merges PR #8 normally, confirms exact-main CI, retargets
 PR #9 to main, certifies its exact-head CI/review and merges normally. Then
 verify staging identity/ledger with authorized credentials before a reviewed
 migration and paired flag-off/flag-on deploy sequence. Do not touch production.
+
+---
+
+# T21R-B offline semantic snapshot preparation — 2026-10-01
+
+Status: `T21RB_OFFLINE_TOOLING_READY`, not a production row classification.
+Branch `codex/t21rb-offline-semantic-snapshot` builds on the separate T21R-A
+certification commit `6bcef891` and has implementation checkpoint `5dd9990`.
+`scripts/t21rb-v1-offline.mjs` recomposes the approved V1 release, checks the
+committed release manifest/migration bytes and T21R-A target fingerprint, then
+compares a saved five-statement catalog read using
+`scripts/t21rb-v1-semantic.mjs`. It emits aggregate counts only and never calls
+D1. Exact tuples retain duplicate multiplicity; a strict reviewed ID bridge
+is identity evidence, not exact V1 runtime parity. Live physical positions
+remain without authority. The design is in
+`recipe-catalog/T21RB_OFFLINE_SEMANTIC_SNAPSHOT_DESIGN.md`.
+
+Offline SQLite replay through 0038 supplied 500 recipes, 2,702 ingredient
+lines and 2,064 steps; the CLI found 2,702 exact V1 ingredient tuples and no
+unmatched lines. This is local replay evidence only. Focused comparator tests
+8/8 and focused comparator plus staging Wrangler test 40/40 passed.
+`WRANGLER_SEND_METRICS=false pnpm check` passed typecheck/lint but failed one
+unrelated staging Wrangler startup test at its 5-second timeout (4,897/4,898
+Vitest); the focused rerun passed. A complete controlled rerun
+`WRANGLER_SEND_METRICS=false pnpm exec vitest run --maxWorkers=2` passed 224
+files / 4,898 tests. `pnpm check:migrations`, `pnpm build`, syntax and diff
+checks passed separately. The combined `pnpm check` is not claimed green.
+
+Existing uploaded production receipts lack raw rows and cannot produce a V1
+row classification. The five existing SELECTs are separate reads; a stable
+ledger cannot prove an atomic snapshot. A future protected read needs exact
+main CI, production Environment approval, account/D1 identity checks, content
+stability assessment and a separate sanitized receipt review. No production
+read, mutation, restore, migration, 0039 apply, flag change or deploy occurred.
+`T21G_NOT_READY`; repair remains unauthorized.
+
+---
+
+# T21R-B protected V1 diagnostic integration — 2026-10-02 JST
+
+Status: `T21RB_PROTECTED_INTEGRATION_PREPARED`; no live V1 row result. On
+`codex/t21rb-offline-semantic-snapshot`, implementation checkpoint `90569fa`
+wires the existing offline V1 ingredient comparator into the manual, protected
+Production D1 Read-Only Diagnostics workflow. The runner now observes the
+five-statement catalog read twice, checks all three migration ledgers against
+the reviewed 0038 prefix, binds the first read to the prior diagnostic and
+order-coverage receipt, and emits `production-t21rb-v1.json` only after the
+final exact-main check. Repository ID, production D1 ID, candidate SHA and V1
+manifest hash are explicit guards. Raw rows remain runner-local; the uploaded
+receipt contains allowlisted identity references, counts and flags, with no
+row digests. Invalid
+raw optional bits, contradictory comparison flags and coverage mismatch fail
+closed.
+
+This is `OBSERVED_STABLE_NON_ATOMIC` evidence. The separate SELECTs do not prove
+an atomic snapshot. The comparison certifies neither steps/metadata/nutrition
+nor physical line IDs or runtime positions. A V1 ingredient match is not a
+release certification or repair instruction. T21G remains `T21G_NOT_READY`;
+repair, 0039 and production deploy remain stopped.
+
+Verification: focused Vitest 3 files / 23 tests PASS; `pnpm lint` PASS;
+`pnpm typecheck` PASS; `pnpm check:migrations` PASS (`migration-smoke=ok`);
+`pnpm build` PASS; `node --check` on both changed scripts PASS. A full
+`pnpm exec vitest run --maxWorkers=2` completed 225 files / 4,906 tests PASS;
+a second run on the frozen implementation checkpoint also passed the same
+225 files and 4,906 tests. `git diff --check` PASS. An exploratory `node --test` invocation
+failed because these are Vitest files; the corrected Vitest command passed.
+An initial receipt fixture had a diagnostic database shape mismatch and was
+corrected before the final focused run.
+
+No production SQL, read dispatch, mutation, restore, migration, 0039 apply,
+flag change or deploy occurred. The next action is independent review, exact
+main CI after a protected merge, and a separately authorized production
+Environment read-only dispatch. Review only the sanitized receipt before any
+row-level evidence path or T21G design decision.

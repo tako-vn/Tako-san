@@ -2718,3 +2718,45 @@ rolling `qwen3.7-flash` alias is canary-only.
 - [ ] Push final documentation receipt and require its exact-head CI. Release
   gate remains expected-red; no 0040/final
   manifest/T20 enablement.
+
+---
+
+# T21R-B offline semantic snapshot — 2026-10-01
+
+- [x] Pin certified V1 target release/fingerprint and recompose approved batches.
+- [x] Build offline ingredient multiset comparator with strict bridge, malformed,
+  duplicate and position-unknown handling; 8/8 focused tests PASS.
+- [x] Validate against local 0038 replay: 500 recipes / 2,702 exact ingredient
+  tuples / zero unmatched; full controlled Vitest 4,898/4,898 PASS.
+- [ ] Review and integrate the comparator into a protected runner-local read
+  workflow with an explicit consistency/provenance receipt. Current five SELECTs
+  are not transactionally pinned; existing aggregate artifacts lack raw rows.
+- [ ] Obtain exact-main CI and production Environment approval before any new
+  read-only production dispatch. No dispatch or repair is authorized here.
+- [ ] T21G design remains blocked on individual row evidence, T20 impact,
+  bounded blast radius and isolated rehearsal; 0039/deploy stay stopped.
+
+Implementation checkpoint: `5dd9990` on
+`codex/t21rb-offline-semantic-snapshot`, based on T21R-A `6bcef891`.
+
+---
+
+# T21R-B protected diagnostic integration — 2026-10-02 JST
+
+- [x] Integrate the offline certified-V1 ingredient comparator into the existing
+  manual, production-Environment-gated read-only diagnostic workflow.
+- [x] Reobserve all five catalog SELECT results, require equal ordered result
+  arrays and three matching 0038-prefix ledgers; label only
+  `OBSERVED_STABLE_NON_ATOMIC`.
+- [x] Bind repository/D1/candidate/V1-manifest identity, prior diagnostic and
+  order-coverage evidence; upload allowlisted counts/flags only after the final
+  exact-main check. Raw rows and content digests are not uploaded.
+- [x] Fail closed on invalid raw optional bits, contradictory comparator flags,
+  incomplete captures, capture drift and inconsistent coverage. Focused 23/23,
+  first controlled full Vitest 4,906/4,906, lint, typecheck, migration smoke,
+  build and syntax checks PASS. Implementation checkpoint: `90569fa`.
+- [ ] Obtain independent review, protected merge and exact-main CI before an
+  operator-approved read-only production Environment dispatch. No dispatch in
+  this task and no V1-relative production count yet.
+- [ ] T21G remains blocked pending individual row evidence, T20 impact, bounded
+  blast radius and isolated rehearsal. 0039 and production deploy remain stopped.

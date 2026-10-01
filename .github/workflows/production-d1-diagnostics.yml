@@ -121,10 +121,29 @@ jobs:
         run: node scripts/production-catalog-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-lineage.json
       - name: Compare live ingredient lines with canonical Recipe Refresh V2
         run: node scripts/production-catalog-v2-lineage.mjs release-manifest.json pre-ledger.json runtime-catalog.json order-coverage.json post-ledger.json production-catalog-v2-lineage.json
+      - name: Recheck read-only catalog snapshot and migration ledger
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          cat runtime-catalog.json > runtime-catalog-first.json
+          node scripts/d1-readonly-query.mjs runtime-catalog
+          pnpm wrangler d1 execute frigo-db --remote --yes --json --command "SELECT name FROM d1_migrations ORDER BY name" > t21rb-post-ledger.json
+      - name: Compare stable production snapshot with certified V1
+        run: node scripts/t21rb-v1-production.mjs release-manifest.json pre-ledger.json runtime-catalog-first.json runtime-catalog.json order-coverage.json post-ledger.json t21rb-post-ledger.json production-d1-diagnostics.json production-t21rb-v1.json
       - name: Reject main change during diagnosis
         env:
           GH_TOKEN: ${{ github.token }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$(node -p 'require("./production-d1-diagnostics.json").candidateSha')"
+      - name: Save sanitized T21R-B V1 comparison only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-t21rb-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: production-t21rb-v1.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Save sanitized V2 lineage only
         if: always()
         uses: actions/upload-artifact@v4
