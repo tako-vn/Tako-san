@@ -48,14 +48,14 @@ function rowsOf(statement) {
 }
 
 function optionalBit(value) {
-  if (value === 1 || value === true) return true;
-  if (value === 0 || value === false) return false;
+  if (value === 1) return true;
+  if (value === 0) return false;
   return null;
 }
 
 function parseLine(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)
-      || !['id', 'recipe_id', 'ingredient_id', 'name'].every((field) => typeof row[field] === 'string' && row[field].length > 0)
+      || !['id', 'recipe_id', 'ingredient_id', 'name'].every((field) => isNonempty(row[field]))
       || !UNITS.has(row.unit)
       || typeof row.required_quantity !== 'number' || !Number.isFinite(row.required_quantity)
       || row.required_quantity <= 0) return null;

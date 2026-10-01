@@ -127,6 +127,43 @@ describe('T21R-B certified V1 ingredient comparator', () => {
     expect(report.semanticParity).toBe(false);
   });
 
+  it('rejects boolean optional values in raw D1 rows', () => {
+    for (const value of [true, false]) {
+      const snapshot = runtimeResults();
+      snapshot[1].results[0].is_optional = value;
+      const report = compare(snapshot);
+      expect(report.snapshot.malformedIngredientRows).toBe(1);
+      expect(report.comparison.unmatchedProductionLines).toBe(1);
+      expect(report.comparison.unmatchedTargetLines).toBe(1);
+      expect(report.semanticParity).toBe(false);
+    }
+  });
+
+  it('treats whitespace-only ingredient IDs and names as malformed', () => {
+    for (const field of ['id', 'recipe_id', 'ingredient_id', 'name']) {
+      const snapshot = runtimeResults();
+      snapshot[1].results[0][field] = ' \t ';
+      const report = compare(snapshot);
+      expect(report.snapshot.malformedIngredientRows).toBe(1);
+      expect(report.snapshot.unknownParentLines).toBe(0);
+      expect(report.comparison.unmatchedProductionLines).toBe(1);
+      expect(report.comparison.unmatchedTargetLines).toBe(1);
+      expect(report.semanticParity).toBe(false);
+    }
+  });
+
+  it('rejects failed or malformed trailing SELECT results before parity', () => {
+    for (const index of [2, 3, 4]) {
+      const failed = runtimeResults();
+      failed[index].success = false;
+      expect(() => compare(failed)).toThrow('Five-statement runtime snapshot is incomplete');
+
+      const malformed = runtimeResults();
+      malformed[index].results = null;
+      expect(() => compare(malformed)).toThrow('Five-statement runtime snapshot is incomplete');
+    }
+  });
+
   it('rejects release drift and incomplete snapshots before classification', () => {
     const snapshot = runtimeResults();
     expect(() => compareV1IngredientSemantics({
