@@ -2760,3 +2760,18 @@ Implementation checkpoint: `5dd9990` on
   this task and no V1-relative production count yet.
 - [ ] T21G remains blocked pending individual row evidence, T20 impact, bounded
   blast radius and isolated rehearsal. 0039 and production deploy remain stopped.
+
+---
+
+# T21R-B protected integration merge — 2026-10-02 JST
+
+- [x] Publish and independently review PR #33 at exact head `0b28b48`;
+  hosted `validate` run `36931130799` SUCCESS.
+- [x] Merge through protected main as `483e054`; exact-main `validate` run
+  `36931887016` SUCCESS. See
+  `recipe-catalog/T21RB_PROTECTED_INTEGRATION_MERGE_RECEIPT.md`.
+- [ ] No production diagnostic dispatch yet. A separate operator decision must
+  select an exact current-main SHA and approve the manual read-only workflow.
+- [ ] Review sanitized V1 counts, unresolved rows and T20 impact before a
+  protected row-evidence path or T21G design. `T21G_NOT_READY`; repair, 0039
+  and production deploy remain stopped.
