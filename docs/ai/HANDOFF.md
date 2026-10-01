@@ -4395,3 +4395,37 @@ both flags OFF first, then explicitly opt in and run Manual/Assisted/Auto,
 safety, shopping, legacy, T19 and UX smokes. Production authorization was not
 given: `production_migration=NO`, `production_deploy=NO`,
 `production_enablement=NO`.
+
+---
+
+# T21R-B offline semantic snapshot handoff — 2026-10-01
+
+**State:** `T21RB_OFFLINE_TOOLING_READY`; no production row snapshot has been
+captured. Implementation commit `5dd9990` on
+`codex/t21rb-offline-semantic-snapshot` follows the separate T21R-A target
+commit `6bcef891`. See
+`recipe-catalog/T21RB_OFFLINE_SEMANTIC_SNAPSHOT_DESIGN.md` for target, capture
+boundary, classification rules and unresolved consistency caveat.
+
+**Executed:** `pnpm exec vitest run tests/unit/t21rb-v1-semantic.test.mjs`
+8/8 PASS; comparator plus staging Wrangler focused rerun 40/40 PASS; local
+SQLite 0038 replay through the offline CLI matched 2,702/2,702 ingredient
+tuples in 500 recipes. `WRANGLER_SEND_METRICS=false pnpm check` passed types
+and lint, then one staging Wrangler startup test timed out at 5 seconds while
+4,897/4,898 tests passed. Controlled full Vitest rerun with `--maxWorkers=2`
+passed 224 files / 4,898 tests. Migration smoke and build passed separately;
+`node --check` and `git diff --check` passed. The combined check failed and
+is not reported as green.
+
+**Limits:** The tool accepts a saved five-statement local JSON input and emits
+sanitized aggregate counts. The prior production artifacts contain no raw
+rows. Separate D1 SELECTs and a stable migration ledger do not prove an atomic
+production snapshot. The tool is not wired to a remote workflow; no production
+read, mutation, repair, 0039, deploy or flag change occurred. T21G remains
+`T21G_NOT_READY`.
+
+**Next:** Independently review the offline tool and a protected runner-local
+capture/consistency design, then use exact-main CI and production Environment
+approval for a new read-only capture if authorized. Keep raw rows runner-local
+and review only a sanitized V1-relative receipt. Do not infer repair actions
+from classification counts.
