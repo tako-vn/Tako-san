@@ -4448,7 +4448,8 @@ the reviewed 0038 prefix, binds the first read to the prior diagnostic and
 order-coverage receipt, and emits `production-t21rb-v1.json` only after the
 final exact-main check. Repository ID, production D1 ID, candidate SHA and V1
 manifest hash are explicit guards. Raw rows remain runner-local; the uploaded
-receipt contains only allowlisted counts and flags, with no row digests. Invalid
+receipt contains allowlisted identity references, counts and flags, with no
+row digests. Invalid
 raw optional bits, contradictory comparison flags and coverage mismatch fail
 closed.
 
