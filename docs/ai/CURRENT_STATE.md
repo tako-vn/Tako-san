@@ -1,3 +1,79 @@
+# T21R-C3 production dispatch readiness — 2026-10-03 JST
+
+**State:** `T21RC3_IMPLEMENTATION_READY_FOR_REVIEW`;
+code, local verification and approved documentation publication complete.
+Current owner login/write access is working.
+Repository `1385308553` now resolves to `vn-tak/Tako-san`. Isolated branch
+`codex/t21rc3-production-dispatch-readiness` starts at certified PR #36 merge
+`0d4fe89b7ccc72e013aafe53665059d0e62bd3b4`; its exact-main push CI
+`37008867187` is SUCCESS and `63739c56` had independent approval. Historical
+C2 is `PROTECTED_INTEGRATION_CERTIFIED`; C3 does not authorize live capture.
+Code checkpoints: `57edc3ac9c2b3f86d28774c0c26bb1e9a961746e` and final tested
+fixture checkpoint `a34ec5e3245b5fdc6718c611ae23dcea6f56eb4c`.
+GitData publication code checkpoint `e49c60a176cec80593e8b8644d058341cfeca720`
+has the exact same tested executable tree `5b20d72eeb4f0077ac17b0d0e8584e4596292fb3`
+and certified main parent; only its commit metadata/identity differs.
+
+**Implemented:** Four verified upstream Action commits pin all six production
+`uses:` entries. Workflow semantics and CI full history are unchanged. Gate and
+receipt authorize the new repository name with unchanged ID; the V1 target's
+recorded review-time name/bytes remain historical. All 73 bound entries are
+retained; any future dispatch needs the independently reviewed final C3 head
+plus matching post-merge current main and CI. A credential-free packet/runbook
+documents exact inputs, pins, privacy, aborts and unresolved permission scope.
+
+**Verified:** Focused 8 files / 556 tests PASS (C2 247, C/B/release 309).
+Additional guarded AI/local-D1 6 files / 128 PASS. Full single-worker final run:
+230 files / 5,210 PASS, zero skips, exit 0. Lint, typecheck, local SQLite migration
+smoke, web/Worker build, syntax and diff checks PASS. The test-only AI recovery
+fixture now returns synthetic 401 instead of making a real call-through request;
+assertions/timeouts unchanged. Local proxy/installer failures and automatic
+egress-review rejection were resolved and recorded in the scoped report. The
+final run blocks external Node transport; one transport attempt was denied before
+network use. No unrestricted full-run success is claimed.
+The exact published code checkpoint was also rechecked: C2 4 files / 247 PASS,
+11.39 seconds. Its first command could not find the old scratch pnpm entrypoint;
+the existing local Vitest entrypoint then passed without dependency changes.
+
+**Governance / limits:** Read-only GitHub metadata confirms production and
+User reviewer `vn-taphoanhatung` / `329713999`; self-review prevention false,
+admin bypass available true, branch policy null. Availability is not use;
+existing validator rejects self/skipped/bypass approval. Metadata audit PASS;
+future actual approval NOT_RUN. `QUERY_PATH_SELECT_ONLY=true`,
+`TOKEN_SCOPE_READ_ONLY_PROVEN=false`, scope UNKNOWN; no Cloudflare metadata call
+or token/policy mutation. No application/T19/T20/config/migration changes.
+
+**Publication access:** Earlier normal push had no CLI credential (exit 128); the
+`takovn2` connection's first workflow-blob write returned HTTP 403, `Resource
+not accessible by integration`. That failed path created no C3 ref/commit/PR. Neither
+earlier implementation connection's installation listing included owner
+`vn-tak`; the exact missing permission was unproven. The current session now
+verifies `vn-tak` / `335007142`, installation `167341024`, and actual blob writes.
+Use this connection for normal GitData feature publication; preserve original
+local history, verify tree equality, fetch and verify final local/remote SHA.
+No login, permission change or reviewer-account write is needed. The previous
+recovery ZIP is a historical checkpoint, superseded for current status.
+
+**Publication:** Automatic approval review previously rejected the full historical
+CURRENT_STATE payload, one evidence-based retry, and the narrower C3 report for
+public operational metadata without explicit payload/destination consent.
+On 2026-10-03 JST the user explicitly confirmed publication of all five documents
+from the private approval packet to public `vn-tak/Tako-san`, including completion
+status updates. The documentation checkpoint follows the published code SHA
+above through a normal feature-ref update, preserving its tested executable
+bytes and original local history. No force push or new login is needed. Final
+documentation-inclusive local/remote SHA and tree equality are reported in the
+external completion receipt; this document cannot contain its own commit hash.
+
+**Boundary / next:** Independently review the final published C3 head before any PR.
+No PR, merge, production dispatch/approval,
+D1 read/write, Cloudflare SQL, restore, 0039 apply or deploy. LIVE capture
+NOT_RUN, T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED, row delivery
+UNCONFIGURED. Complete the post-merge operator packet only after separate gates.
+Evidence: `recipe-catalog/T21RC3_PRODUCTION_DISPATCH_READINESS.md`.
+
+---
+
 # T21R-C2 PR #36 CI-history remediation — 2026-10-02 UTC
 
 **State:** Local CI-history correction on the same C2 branch; renewed exact-head

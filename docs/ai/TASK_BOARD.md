@@ -1,3 +1,56 @@
+# T21R-C3 dispatch readiness and dependency hardening — 2026-10-03 JST
+
+- [x] Resolve `vn-tak/Tako-san` to stable ID `1385308553`; exact base main
+  `0d4fe89b7ccc72e013aafe53665059d0e62bd3b4`, PR36 merged, reviewed head
+  `63739c56`, exact-main push CI `37008867187` SUCCESS; isolated C3 branch.
+- [x] Verify official upstream version refs, peeled commits and releases;
+  pin four Action dependencies / six uses; preserve workflow semantics and CI.
+- [x] Reject mutable/tag/branch/short/uppercase refs, appended/job-level actions;
+  prove a pin-only delta still fails the existing 73-entry review binding.
+- [x] Bind transferred current repository name in gate/receipt; reject former
+  authorization names while preserving certified V1 historical target metadata.
+- [x] Audit production Environment metadata without mutation: expected reviewer
+  present; self-review prevention false, bypass available true, branch policy null.
+- [x] Record SELECT-only path separately from UNKNOWN Cloudflare credential
+  scope; no Cloudflare introspection, credential provisioning or production read.
+- [x] Document future distinct feature/main SHA pair, exact-main CI, attempt 1,
+  normal approval, privacy, 0038/0039 boundaries and explicit abort conditions.
+- [x] Focused 556/556; guarded AI/local-D1 128/128; full single-worker 230 files /
+  5,210 tests / zero skips PASS. Lint/types/local migrations/build/syntax/diff PASS.
+  One-line synthetic AI response fixes proven test egress; no assertion weakening.
+- [x] Recheck the exact published code checkpoint: C2 4 files / 247 PASS,
+  11.39 seconds using existing Vitest after the old scratch pnpm path was absent.
+  No dependency, assertion, timeout or test-selection change.
+- [x] Resolve publication access: earlier CLI credential unavailable; first workflow
+  blob write via `takovn2` returned 403 `Resource not accessible by integration`.
+  Earlier connections did not list a `vn-tak` installation. Current `vn-tak`
+  profile/owner `335007142`, installation `167341024` and actual writes verified.
+  Publish through this connection using normal GitData feature-ref creation,
+  preserve original local history and verify exact tree/head equality. Remote
+  code checkpoint `e49c60a176cec80593e8b8644d058341cfeca720` has the tested tree.
+- [x] Create normal feature ref at that code checkpoint, without force or PR.
+- [x] Obtain explicit approval for all five documentation files and destination
+  public `vn-tak/Tako-san`: user confirmation on 2026-10-03 JST includes completion
+  status updates. Earlier automatic-review metadata rejections are recorded in
+  the report; no alternate transport was used to bypass them.
+- [x] Publish the approved documentation checkpoint after the tested code SHA
+  through a normal feature-ref update. Preserve original local history and
+  executable bytes; report final local/remote SHA and tree equality externally.
+- [ ] Independently review the final normally published C3 head before opening
+  any PR. Then protected merge and exact post-merge current-main push CI.
+- [ ] Separately authorized operator capture/risk decision and new normal
+  production Environment approval. No production action is authorized by C3.
+
+`T21RC3_IMPLEMENTATION_READY_FOR_REVIEW`; code, local checks and approved
+documentation publication complete. Token scope remains an unresolved operator
+item. C3 hosted CI has not run.
+No PR/merge, production dispatch/approval/read/write/SQL/restore/0039/deploy.
+T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED, row delivery
+UNCONFIGURED. Scoped evidence and failure history:
+`recipe-catalog/T21RC3_PRODUCTION_DISPATCH_READINESS.md`.
+
+---
+
 # T21R-C2 PR #36 hosted CI-history correction — 2026-10-02 UTC
 
 - [x] Verify PR36 OPEN, head `3e1bb60b`, failed run `37002486858` / job
