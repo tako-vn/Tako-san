@@ -19,6 +19,7 @@ import {
   validateT21RC2Manifest,
 } from '../../scripts/t21rc2-production-receipt.mjs';
 import { captureDigest } from '../../scripts/t21rc2-production-capture.mjs';
+import { buildT21RC2FailureReceipt } from '../../scripts/t21rc2-production-files.mjs';
 import { reconcileIngredientOccurrences } from '../../scripts/t21rc-row-reconciliation.mjs';
 
 const PRIVATE_PHYSICAL_ID = 'PRIVATE_PHYSICAL_ID_123';
@@ -275,6 +276,19 @@ describe('T21R-C2 aggregate production receipt', () => {
     expect(serialized).not.toContain(PRIVATE_PHYSICAL_ID);
     expect(serialized).not.toContain(PRIVATE_NAME);
     expect(serialized).not.toContain(String(PRIVATE_QUANTITY));
+  });
+
+  it('distinguishes SELECT-only execution from unproven token permissions without accepting input claims', () => {
+    const input = receiptInput(validFixture);
+    input.capture.queryPathSelectOnly = false;
+    input.capture.tokenScopeReadOnlyProven = true;
+    const receipt = buildT21RC2ProductionReceipt(input);
+    expect(receipt.queryPathSelectOnly).toBe(true);
+    expect(receipt.tokenScopeReadOnlyProven).toBe(false);
+    const failure = buildT21RC2FailureReceipt(new Error(PRIVATE_NAME));
+    expect(failure).not.toHaveProperty('queryPathSelectOnly');
+    expect(failure).not.toHaveProperty('tokenScopeReadOnlyProven');
+    expect(JSON.stringify({ receipt, failure })).not.toContain(PRIVATE_NAME);
   });
 
   it('rejects forged authorization, identity, stability, ledger, digest, and source proof inputs', () => {

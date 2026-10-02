@@ -19,6 +19,15 @@ with the merged implementation/schema. Keep raw/full evidence outside checkout
 in restrictive runner-local files, and upload only an explicit aggregate receipt
 on success. Secure row delivery remains unconfigured and separately unauthorized.
 
+**Review-binding remediation:** The reviewed feature SHA must differ from the
+dispatch main SHA, remain its ancestor, and have byte-identical security/execution
+closure at gate, capture reauthorization and final recheck. Unrelated main
+advancement is allowed only outside that traced closure and with current exact-main
+CI. The success receipt distinguishes SELECT-only code from unproven credential
+scope (`queryPathSelectOnly=true`, `tokenScopeReadOnlyProven=false`); failure does
+not claim completed path attestation. This additive hardening changes no workflow,
+classifier, target, production permission or row-delivery policy.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.

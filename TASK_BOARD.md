@@ -1,3 +1,23 @@
+# Current — T21R-C2 review-binding remediation only (2026-10-02 UTC)
+
+**Status: `T21RC2_REMEDIATION_READY_FOR_REVIEW`.** Same published C2 branch,
+reviewed parent `8d8028f3`, repository `1385308553` / `vn-tako4/Tako-san`.
+P1 adds ancestry + exact reviewed byte closure (73 paths), rejects reviewed SHA
+equal to ref, and rechecks before capture credentials/final publication. P2
+receipt clarifies SELECT-only execution versus unproven token permissions.
+Workflow/classifier/schema/target/capture/T19/T20/runtime unchanged.
+
+Focused PASS: 537 tests, C2 228; full single-worker PASS: 230 files / 5,191.
+Lint/typecheck/local migration smoke/build/syntax/diff PASS. Real-Git A–L and
+all 73 bound changes tested; no timeout/assertion weakened. No production,
+Cloudflare, approval, apply, restore or deploy; no PR/merge/delivery configuration.
+Normal push of one tested remediation commit is authorized, then independent
+delta review before opening any PR. `T21G_NOT_READY`; repair NOT_AUTHORIZED,
+0039/deploy STOPPED; delivery `UNCONFIGURED`.
+Exact closure/rationale/failures: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # Current — T21R-C2 executable protected row-read (2026-10-02 UTC)
 
 **Status: `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`.** Correct branch

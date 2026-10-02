@@ -16,6 +16,74 @@ export const T21RC2_REPOSITORY_ID = 1385308553;
 export const T21RC2_REPOSITORY = 'vn-tako4/Tako-san';
 export const EXPECTED_PRODUCTION_REVIEWER = 'vn-taphoanhatung';
 export const T21RC2_WORKFLOW_PATH = '.github/workflows/production-d1-t21rc-row-reconciliation.yml';
+const OPTIONAL_REVIEW_BOUND_PATHS = Object.freeze([
+  '.npmrc', '.pnpmfile.cjs', 'pnpm-workspace.yaml', '.gitattributes',
+  'vite.config.js', 'vite.config.mjs', 'vite.config.cjs', 'vite.config.mts', 'vite.config.cts',
+  '.env', '.env.local', '.env.development', '.env.development.local',
+]);
+export const T21RC2_REVIEW_BOUND_PATHS = Object.freeze([
+  T21RC2_WORKFLOW_PATH,
+  'scripts/t21rc2-production-approval.mjs',
+  'scripts/t21rc2-production-capture.mjs',
+  'scripts/t21rc2-production-files.mjs',
+  'scripts/t21rc2-production-receipt.mjs',
+  'scripts/t21rc-row-reconciliation.mjs',
+  'scripts/t21r-v1-authority.mjs',
+  'scripts/release-check.mjs',
+  'scripts/d1-migration-check.mjs',
+  'docs/ai/recipe-catalog/T21RC_ROW_RECONCILIATION_SCHEMA.json',
+  'docs/ai/recipe-catalog/T21RA_RUNTIME_CANONICAL_TARGET.json',
+  'wrangler.jsonc',
+  'package.json',
+  'pnpm-lock.yaml',
+  '.github/workflows/ci.yml',
+  'scripts/t21rb-v1-semantic.mjs',
+  'vite.config.ts',
+  'tsconfig.json',
+  'data/recipe-import/approved-batches.json',
+  'data/recipe-import/t14f/pilot-30.jsonl',
+  'data/recipe-import/t14f/scale-399.jsonl',
+  'data/recipe-refresh/v2/ingredient-reconciliation.json',
+  'packages/recipes/src/import/catalog-release.current.json',
+  'migrations',
+  'packages/domain/src/availability.ts',
+  'packages/domain/src/foundation.ts',
+  'packages/domain/src/index.ts',
+  'packages/domain/src/inventory-read-authority.ts',
+  'packages/domain/src/inventory-truth.ts',
+  'packages/domain/src/meal-planning-api.ts',
+  'packages/domain/src/meal-shopping-api.ts',
+  'packages/domain/src/quantity.ts',
+  'packages/domain/src/units.ts',
+  'packages/domain/src/week/index.ts',
+  'packages/domain/src/week/leftover.ts',
+  'packages/domain/src/week/packages.ts',
+  'packages/domain/src/week/planner.ts',
+  'packages/domain/src/week/portion.ts',
+  'packages/domain/src/week/pricing.ts',
+  'packages/domain/src/week/score.ts',
+  'packages/domain/src/week/shopping.ts',
+  'packages/domain/src/week/types.ts',
+  'packages/domain/src/week/utilization.ts',
+  'packages/recipes/src/catalog-fingerprint.ts',
+  'packages/recipes/src/data.ts',
+  'packages/recipes/src/import/compiler.ts',
+  'packages/recipes/src/import/duplicates.ts',
+  'packages/recipes/src/import/identity.ts',
+  'packages/recipes/src/import/ingredients.ts',
+  'packages/recipes/src/import/index.ts',
+  'packages/recipes/src/import/normalize.ts',
+  'packages/recipes/src/import/parse.ts',
+  'packages/recipes/src/import/release-manifest.ts',
+  'packages/recipes/src/import/schema.ts',
+  'packages/recipes/src/import/sql-render.ts',
+  'packages/recipes/src/import/types.ts',
+  'packages/recipes/src/runtime-recipe.ts',
+  'packages/recipes/src/seed-render.ts',
+  'packages/recipes/src/vietnamese-bank.ts',
+  'packages/recipes/src/vietnamese-images.ts',
+  ...OPTIONAL_REVIEW_BOUND_PATHS,
+]);
 
 const API_VERSION = '2026-03-10';
 const API_BASE = `https://api.github.com/repos/${T21RC2_REPOSITORY}`;
@@ -208,6 +276,37 @@ function validateRunMetadata({ run, ref, runId, runAttempt, actor, triggeringAct
   fail(normalizeLogin(run.triggering_actor?.login) === triggeringActor);
 }
 
+export function assertReviewedExecutionClosure(reviewedSha, releaseRef, { cwd = process.cwd() } = {}) {
+  const code = 'T21RC2_REVIEW_BINDING_REJECTED';
+  try {
+    fail(FULL_SHA.test(reviewedSha ?? '') && FULL_SHA.test(releaseRef ?? '') && reviewedSha !== releaseRef, code);
+    const options = { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000 };
+    for (const sha of [reviewedSha, releaseRef]) {
+      const commit = execFileSync('git', ['rev-parse', '--verify', '--end-of-options', `${sha}^{commit}`], options).trim();
+      fail(commit === sha, code);
+    }
+    const reviewedEntries = execFileSync('git', [
+      'ls-tree', '-r', '-z', '--full-tree', reviewedSha, '--', ...T21RC2_REVIEW_BOUND_PATHS,
+    ], options).split('\0').filter(Boolean);
+    const reviewedFiles = new Map(reviewedEntries.map((entry) => {
+      const [metadata, file] = entry.split('\t');
+      fail(/^100(?:644|755) blob [a-f0-9]{40}$/.test(metadata), code);
+      return [file, metadata];
+    }));
+    // Auto-loaded config slots may be absent, but their later addition is still bound.
+    const reviewedPaths = [...reviewedFiles.keys()];
+    fail(T21RC2_REVIEW_BOUND_PATHS.every((file) => OPTIONAL_REVIEW_BOUND_PATHS.includes(file)
+      ? reviewedFiles.has(file) || !reviewedPaths.some((entry) => entry.startsWith(`${file}/`))
+      : reviewedFiles.has(file) || (file === 'migrations' && reviewedPaths.some((entry) => entry.startsWith('migrations/')))), code);
+    execFileSync('git', [
+      'diff', '--quiet', '--no-ext-diff', '--no-textconv', reviewedSha, releaseRef,
+      '--', ...T21RC2_REVIEW_BOUND_PATHS,
+    ], options);
+  } catch {
+    throw t21rc2Error(code);
+  }
+}
+
 export function validateT21RC2Gate({
   ref,
   reviewedSha,
@@ -227,6 +326,7 @@ export function validateT21RC2Gate({
   try {
     fail(FULL_SHA.test(ref ?? '') && FULL_SHA.test(reviewedSha ?? '') && FULL_SHA.test(mainSha ?? ''));
     fail(ref === mainSha);
+    fail(reviewedSha !== ref, 'T21RC2_REVIEW_BINDING_REJECTED');
     fail(confirmation === true || confirmation === 'true');
     fail(normalizeId(repositoryId) === String(T21RC2_REPOSITORY_ID));
     fail(repository === T21RC2_REPOSITORY);
@@ -245,6 +345,7 @@ export function validateT21RC2Gate({
     fail(typeof sourceValidator === 'function');
     const source = sourceValidator({ ref, hardenedSha: reviewedSha, cwd });
     fail(source?.sha === ref && source?.mainSha === mainSha && source?.hardenedSha === reviewedSha);
+    assertReviewedExecutionClosure(reviewedSha, ref, { cwd });
     const successfulCi = requireSuccessfulCi(ciRuns, { sha: ref, repository: T21RC2_REPOSITORY });
     const ci = {
       id: safeInteger(successfulCi.id),
@@ -264,7 +365,8 @@ export function validateT21RC2Gate({
       triggeringActor: normalizedTriggeringActor,
       ci,
     };
-  } catch {
+  } catch (error) {
+    if (error?.code === 'T21RC2_REVIEW_BINDING_REJECTED') throw error;
     throw gateError();
   }
 }

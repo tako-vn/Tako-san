@@ -1,3 +1,41 @@
+# T21R-C2 review-binding remediation only — 2026-10-02 UTC
+
+**State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`; not independently re-approved
+or production-ready. Repository `1385308553` / `vn-tako4/Tako-san`, same branch
+`codex/t21rc2-protected-production-row-read`, reviewed parent
+`8d8028f3e3358655b19fa2dd02ba883e57c52204`, prior implementation `ad7b3012`;
+base main `518818458a354c5e180da52ae9bb73c9d3c1af78`. One logical remediation
+checkpoint follows the reviewed parent; no rebase, squash or force push.
+
+**Changed:** P1 adds immutable 73-entry execution-closure byte equality to the
+existing ancestry gate, rejects `reviewed_sha=ref`, and repeats binding through
+capture reauthorization and final recheck. Actual local Vite/import/source tracing
+documents the added dependency paths; configs absent at review remain bound
+against later introduction. P2 adds success fields `queryPathSelectOnly=true` /
+`tokenScopeReadOnlyProven=false`; failure receipts do not claim completed query
+attestation. Workflow, classifier/schema/target, capture, T19/T20 and privacy unchanged.
+
+**Executed:** Requested focused `--maxWorkers=1` command PASS, 8 files / 537
+tests: C2 228 (approval 143, capture 70, receipt 8, workflow 7), T21R-C 57,
+T21R-B 16 and release-check 236. Full `pnpm exec vitest run --maxWorkers=1`
+PASS, 230 files / 5,191 tests, 608.00 seconds. `pnpm lint`, `pnpm typecheck`,
+`pnpm check:migrations`, `pnpm build`, modified script syntax and diff checks PASS.
+All A–L and gate/pre-credential/final binding regressions use real temporary Git
+objects plus mocked API responses. Initial helper-import/scope test errors fixed;
+no assertion/timeout weakened. Scoped agent review passed 151 approval/receipt
+tests with no material finding; not human approval of the full closure/delta.
+
+**Boundary / next:** Production dispatch/read/Cloudflare call/mutation/approval/
+SQL write/restore/migration/0039 apply/deploy: 0; local SQLite fixtures only.
+No secrets used, PR, merge, delivery/storage/configuration or dependency change.
+Normal push of this one tested delta is authorized; verify exact local/provider
+HEAD and seek independent delta review from `8d8028f3` before opening any PR.
+`ROW_LEVEL_DELIVERY=UNCONFIGURED`, `T21G_NOT_READY`; repair NOT_AUTHORIZED,
+0039/deploy STOPPED. Exact path list, reasons, checks, failures and next action:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C2 executable protected row-read — 2026-10-02 UTC
 
 **State:** `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`. Correct branch

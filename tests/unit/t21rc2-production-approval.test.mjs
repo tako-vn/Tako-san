@@ -15,14 +15,17 @@ import {
   EXPECTED_PRODUCTION_REVIEWER,
   T21RC2_REPOSITORY,
   T21RC2_REPOSITORY_ID,
+  T21RC2_REVIEW_BOUND_PATHS,
   T21RC2_WORKFLOW_PATH,
+  assertReviewedExecutionClosure,
   authorizeProductionRun,
   requireStoredAuthorizationBinding,
   runT21RC2ApprovalCommand,
   validateProductionApproval,
   validateT21RC2Gate,
 } from '../../scripts/t21rc2-production-approval.mjs';
-import { readPrivateJson } from '../../scripts/t21rc2-production-files.mjs';
+import { buildT21RC2FailureReceipt, readPrivateJson, writePrivateJson } from '../../scripts/t21rc2-production-files.mjs';
+import { runT21RC2CaptureCommand } from '../../scripts/t21rc2-production-capture.mjs';
 import { validateReleaseSource } from '../../scripts/release-check.mjs';
 
 const WORKFLOW_CI = '.github/workflows/ci.yml';
@@ -47,6 +50,7 @@ function git(...args) {
 }
 
 function commit(file, contents, message) {
+  mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
   writeFileSync(path.join(cwd, file), contents);
   git('add', file);
   git('-c', 'user.name=T21RC2 Test', '-c', 'user.email=t21rc2-test@example.invalid', 'commit', '--quiet', '-m', message);
@@ -139,6 +143,17 @@ function approvalEntry(overrides = {}) {
   };
 }
 
+function authorizationProof() {
+  const gate = validateT21RC2Gate(gateInput());
+  const approval = validateProductionApproval({
+    history: [approvalEntry()],
+    environment: approvalEnvironment(),
+    actor: gate.actor,
+    triggeringActor: gate.triggeringActor,
+  });
+  return { ...gate, approval };
+}
+
 function actionContext(label = 'test') {
   const runnerTemp = path.join(fixtureRoot, `runner-${label}-${contextCounter++}`);
   mkdirSync(runnerTemp);
@@ -215,9 +230,19 @@ beforeAll(() => {
   execFileSync('git', ['init', '--initial-branch=main', '--quiet'], { cwd });
   execFileSync('git', ['config', 'user.name', 'T21RC2 Test'], { cwd });
   execFileSync('git', ['config', 'user.email', 't21rc2-test@example.invalid'], { cwd });
+  for (const file of T21RC2_REVIEW_BOUND_PATHS) {
+    const fixtureFile = file === 'migrations' ? 'migrations/0001_reviewed_fixture.sql' : file;
+    mkdirSync(path.dirname(path.join(cwd, fixtureFile)), { recursive: true });
+    writeFileSync(path.join(cwd, fixtureFile), `reviewed fixture for ${file}\n`);
+  }
+  git('add', '--', ...T21RC2_REVIEW_BOUND_PATHS);
   baselineSha = commit('fixture.txt', 'baseline\n', 'baseline');
+  git('checkout', '--quiet', '-b', 'reviewed-implementation');
   reviewedSha = commit('fixture.txt', 'reviewed\n', 'reviewed change');
-  mainSha = commit('fixture.txt', 'candidate\n', 'main candidate');
+  git('checkout', '--quiet', 'main');
+  commit('main-doc.md', 'unrelated main documentation\n', 'main documentation');
+  git('merge', '--no-ff', '--quiet', 'reviewed-implementation', '-m', 'protected feature merge');
+  mainSha = git('rev-parse', 'HEAD');
   git('update-ref', 'refs/remotes/origin/main', mainSha);
   git('checkout', '--quiet', '-b', 'unreviewed', baselineSha);
   sideSha = commit('fixture.txt', 'side\n', 'unreviewed side commit');
@@ -267,6 +292,146 @@ describe('T21R-C2 repository and exact-main gate', () => {
   ])('fails closed for %s', (_label, buildOverrides) => {
     const overrides = typeof buildOverrides === 'function' ? buildOverrides() : buildOverrides;
     expect(() => validateT21RC2Gate(gateInput(overrides))).toThrow('T21RC2_GATE_REJECTED');
+  });
+});
+
+describe('T21R-C2 reviewed execution closure (real Git objects)', () => {
+  function candidateInput(sha) {
+    return gateInput({ ref: sha, mainSha: sha, run: runMetadata({ head_sha: sha }), ciRuns: [ciRun(sha)] });
+  }
+
+  function candidateContext(sha, label) {
+    return { ...actionContext(label), GITHUB_SHA: sha, RELEASE_REF: sha };
+  }
+
+  function candidateApi(sha) {
+    return apiFetch({ currentMainSha: sha, run: runMetadata({ head_sha: sha }), ciPages: [{ total_count: 1, workflow_runs: [ciRun(sha)] }] });
+  }
+
+  async function changedCandidate(file, callback) {
+    git('checkout', '--quiet', '--detach', mainSha);
+    try {
+      const fixtureFile = file === 'migrations' ? 'migrations/0001_reviewed_fixture.sql' : file;
+      const changedSha = commit(fixtureFile, `PRIVATE_CHANGED_FILE_CONTENT ${file}\n`, 'change reviewed execution bytes');
+      git('update-ref', 'refs/remotes/origin/main', changedSha);
+      return await callback(changedSha);
+    } finally {
+      git('checkout', '--quiet', 'main');
+      git('update-ref', 'refs/remotes/origin/main', mainSha);
+    }
+  }
+
+  it('allows the protected merge and later unrelated docs commit with its own exact-main CI', () => {
+    expect(git('rev-list', '--parents', '-n', '1', mainSha).split(' ')).toHaveLength(3);
+    expect(git('merge-base', '--is-ancestor', reviewedSha, mainSha)).toBe('');
+    expect(() => assertReviewedExecutionClosure(reviewedSha, mainSha, { cwd })).not.toThrow();
+    git('update-ref', 'refs/remotes/origin/main', advancedMainSha);
+    try {
+      expect(validateT21RC2Gate(candidateInput(advancedMainSha)).mainSha).toBe(advancedMainSha);
+      expect(() => validateT21RC2Gate({ ...candidateInput(advancedMainSha), ciRuns: [ciRun(mainSha)] })).toThrow('T21RC2_GATE_REJECTED');
+    } finally {
+      git('update-ref', 'refs/remotes/origin/main', mainSha);
+    }
+  });
+
+  it.each(T21RC2_REVIEW_BOUND_PATHS)('rejects unreviewed changes to %s despite ancestry and green exact-main CI', async (file) => {
+    await changedCandidate(file, (changedSha) => {
+      expect(git('merge-base', '--is-ancestor', reviewedSha, changedSha)).toBe('');
+      expect(() => assertReviewedExecutionClosure(reviewedSha, changedSha, { cwd })).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+      expect(() => validateT21RC2Gate(candidateInput(changedSha))).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    });
+  });
+
+  it('rejects equality, unresolved SHAs and shell-like arguments without exposing them', () => {
+    expect(() => validateT21RC2Gate(gateInput({ reviewedSha: mainSha }))).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    for (const invalid of [mainSha, '0'.repeat(40), 'main; PRIVATE_PHYSICAL_ID_123', mainSha.toUpperCase()]) {
+      let error;
+      try { assertReviewedExecutionClosure(invalid, mainSha, { cwd }); } catch (caught) { error = caught; }
+      expect(error?.code).toBe('T21RC2_REVIEW_BINDING_REJECTED');
+      const failure = buildT21RC2FailureReceipt(error);
+      expect(failure.reason).toBe('T21RC2_REVIEW_BINDING_REJECTED');
+      expect(JSON.stringify(failure)).not.toContain('PRIVATE_PHYSICAL_ID_123');
+    }
+    expect(Object.isFrozen(T21RC2_REVIEW_BOUND_PATHS)).toBe(true);
+    expect(new Set(T21RC2_REVIEW_BOUND_PATHS).size).toBe(T21RC2_REVIEW_BOUND_PATHS.length);
+  });
+
+  it('rejects a missing mandatory reviewed file even when both commit snapshots omit it', () => {
+    git('checkout', '--quiet', '--detach', mainSha);
+    try {
+      git('rm', '--quiet', '--', T21RC2_WORKFLOW_PATH);
+      git('commit', '--quiet', '-m', 'missing reviewed workflow');
+      const missingReviewedSha = git('rev-parse', 'HEAD');
+      const candidate = commit('unrelated-doc.md', 'only documentation\n', 'unrelated docs');
+      expect(() => assertReviewedExecutionClosure(missingReviewedSha, candidate, { cwd })).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    } finally {
+      git('checkout', '--quiet', 'main');
+    }
+  });
+
+  it('allows an absent optional config but rejects introducing an unreviewed auto-loaded config', () => {
+    git('checkout', '--quiet', '--detach', mainSha);
+    try {
+      git('rm', '--quiet', '--', '.npmrc');
+      git('commit', '--quiet', '-m', 'reviewed configuration absence');
+      const reviewedWithoutConfig = git('rev-parse', 'HEAD');
+      const docsOnly = commit('unrelated-doc.md', 'documentation only\n', 'unrelated docs');
+      expect(() => assertReviewedExecutionClosure(reviewedWithoutConfig, docsOnly, { cwd })).not.toThrow();
+      const configAdded = commit('.npmrc', 'unreviewed configuration\n', 'unreviewed config addition');
+      expect(() => assertReviewedExecutionClosure(reviewedWithoutConfig, configAdded, { cwd })).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    } finally {
+      git('checkout', '--quiet', 'main');
+    }
+  });
+
+  it('rejects adding a later migration anywhere in the reviewed migration tree', async () => {
+    await changedCandidate('migrations/0040_unreviewed_fixture.sql', (sha) => {
+      expect(() => validateT21RC2Gate(candidateInput(sha))).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    });
+  });
+
+  it('blocks the gate before production approval and before emitting a candidate output', async () => {
+    await changedCandidate(T21RC2_WORKFLOW_PATH, async (sha) => {
+      const env = candidateContext(sha, 'bound-gate');
+      const api = candidateApi(sha);
+      await expect(runT21RC2ApprovalCommand('gate', { env, cwd, fetchImpl: api.fetchImpl, sourceValidator })).rejects.toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+      expect(api.calls.some(({ url }) => url.pathname.includes('/environments/') || url.pathname.endsWith('/approvals'))).toBe(false);
+      expect(readFileSync(env.GITHUB_OUTPUT, 'utf8')).toBe('');
+    });
+  });
+
+  it('blocks capture reauthorization before any Cloudflare subprocess when reviewed bytes changed', async () => {
+    const stored = authorizationProof();
+    await changedCandidate('scripts/t21rc2-production-capture.mjs', async (sha) => {
+      const env = candidateContext(sha, 'bound-capture');
+      writePrivateJson('authorization.json', { ...stored, mainSha: sha, ci: { ...stored.ci, headSha: sha } }, env, cwd);
+      const api = candidateApi(sha);
+      const cloudflareCalls = [];
+      const execute = (command, args, options) => {
+        if (command === 'pnpm') {
+          cloudflareCalls.push(args);
+          throw new Error('Cloudflare execution forbidden in this regression');
+        }
+        return execFileSync(command, args, options);
+      };
+      await expect(runT21RC2CaptureCommand('capture', {
+        env, cwd, execute,
+        authorize: (options) => authorizeProductionRun({ ...options, fetchImpl: api.fetchImpl, sourceValidator }),
+      })).rejects.toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+      expect(cloudflareCalls).toHaveLength(0);
+      expect(existsSync(path.join(env.RUNNER_TEMP, 't21rc2', 'capture-a.json'))).toBe(false);
+    });
+  });
+
+  it('rechecks byte binding again before producing final authorization for aggregate publication', async () => {
+    const stored = authorizationProof();
+    await changedCandidate('scripts/t21rc2-production-approval.mjs', async (sha) => {
+      const env = candidateContext(sha, 'bound-final');
+      writePrivateJson('authorization.json', { ...stored, mainSha: sha, ci: { ...stored.ci, headSha: sha } }, env, cwd);
+      const api = candidateApi(sha);
+      await expect(runT21RC2ApprovalCommand('recheck', { env, cwd, fetchImpl: api.fetchImpl, sourceValidator })).rejects.toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+      expect(existsSync(path.join(env.RUNNER_TEMP, 't21rc2', 'authorization-final.json'))).toBe(false);
+    });
   });
 });
 
@@ -400,17 +565,6 @@ describe('normal production environment approval', () => {
 });
 
 describe('stored authorization binding', () => {
-  function authorizationProof() {
-    const gate = validateT21RC2Gate(gateInput());
-    const approval = validateProductionApproval({
-      history: [approvalEntry()],
-      environment: approvalEnvironment(),
-      actor: gate.actor,
-      triggeringActor: gate.triggeringActor,
-    });
-    return { ...gate, approval };
-  }
-
   it('binds an approved proof to the exact Actions context and main CI SHA', () => {
     const env = actionContext();
     const proof = authorizationProof();

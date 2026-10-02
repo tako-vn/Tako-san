@@ -1,10 +1,236 @@
 # T21R-C2 — Protected production row-read implementation
 
-Status: `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`; executable implementation and
+Status: `T21RC2_REMEDIATION_READY_FOR_REVIEW`; reviewed-byte binding remediation and
 tests only. Production dispatch, production reads and Cloudflare production
 calls are **not authorized** by this task. `T21G_NOT_READY`; repair, 0039 and
 production deployment remain stopped. Row-level delivery is `UNCONFIGURED` /
 `DELIVERY_NOT_AUTHORIZED`.
+
+## Review-binding remediation — 2026-10-02 UTC
+
+Independent review of head `8d8028f3e3358655b19fa2dd02ba883e57c52204` identified one
+blocking P1: ancestry plus green exact-main CI does not bind a later main's
+execution bytes to the independently reviewed implementation. The reviewed
+implementation checkpoint remains `ad7b3012`; this is a narrow additive delta
+on `codex/t21rc2-protected-production-row-read`, not a workflow/classifier redesign.
+Neither prior agent review nor this remediation is human approval or permission
+to open a PR, merge, prepare a production dispatch or access Cloudflare.
+
+### REVIEWED_SHA is an exact implementation snapshot, not an ancestry marker
+
+Future authorization requires **all** of:
+
+- Full lowercase immutable SHAs, existing hardened ancestry/repository/run/main/
+  exact-main push CI/normal independent approval guards, unchanged.
+- `reviewedSha !== ref`. The reviewed feature head `R` is expected to be an
+  ancestor of the later protected main merge `M`, not `M` itself.
+- Byte-identical repository-owned execution closure at `R` and dispatched main
+  `M`. The gate calls `assertReviewedExecutionClosure` before the production job
+  can obtain useful candidate output. Capture's independent authorization and
+  final recheck call the same gate, so both repeat the closure proof before
+  Cloudflare use and aggregate publication respectively.
+
+An unrelated later docs/application commit `D` is allowed if the bound closure
+is unchanged, `R` is an ancestor of `D`, exact-main push CI for `D` succeeds and
+all original guards pass. There is no reviewed-parent/first-parent or whole-repo
+freeze requirement. A changed bound file needs a newly independently reviewed
+implementation checkpoint; choosing `reviewed_sha=ref` cannot bypass the guard.
+
+The constant `T21RC2_REVIEW_BOUND_PATHS` is repository-owned, never taken from
+workflow/env/JSON/CLI input. The helper resolves both commit objects, requires
+reviewed executable files to be regular Git blobs, then uses argument-array
+`git diff --quiet --no-ext-diff --no-textconv R M -- <bound paths>`.
+No fuzzy text, timestamp, label, approval comment or commit-message comparison.
+Changed/missing/unsafe binding yields only `T21RC2_REVIEW_BINDING_REJECTED`,
+including its redacted failure receipt; no changed contents are printed.
+
+### Traced security/execution closure — 73 path entries
+
+The proposed 14 paths are all retained. Direct JavaScript imports and runtime
+file loads were inspected, then the V1 loader's same three Vite SSR roots were
+loaded and both approved batches compiled/composed **offline**. The resulting
+local module graph contained 36 repository TypeScript modules. This is the actual
+execution closure, not a blanket application-tree restriction.
+
+| Added group | Exact dependency reason |
+| --- | --- |
+| `scripts/t21rb-v1-semantic.mjs` | Both classifier and authority loader call its reviewed bridge predicate |
+| `.github/workflows/ci.yml` | The gate's trusted exact-main push CI is selected by this workflow path; changing its validation authority requires review |
+| `vite.config.ts`, `tsconfig.json` | `createServer` loads repository plugins/aliases and TypeScript transform configuration |
+| Approved-batch registry, two JSONL sources, release manifest, reconciliation JSON | The loader reads/recompiles the current V1 source and reviewed reconciliation data; neither V2 proximity nor an unbound registry can change authority |
+| 36 explicit TypeScript paths below | Actual loaded data/import/fingerprint/runtime/domain modules, including modules evaluated through the domain/import barrels. This includes particular Week files because they are loaded, not because the whole Week/application tree is frozen |
+| `migrations` | `migrationManifest` enumerates/hashes the committed migration tree and the loader checks compiled 0036/0037 bytes. Bind the tree, including later additions/deletions, instead of enumerating only today's 39 filenames. No migration is applied |
+| 13 optional configuration slots below | pnpm install hooks/configuration, Git checkout attributes, Vite's installed auto-config filename list, and development dotenv inputs. All are absent at the reviewed head; their later introduction must not evade binding |
+
+The helper requires existing reviewed files to be regular blobs and the
+`migrations` tree to contain reviewed regular files. Optional config slots may
+be absent; if present they must be regular files, and Git still compares their
+addition/removal/content/mode. Installed Vite's `DEFAULT_CONFIG_FILES` confirms
+the five alternate config names; source loading uses the default development
+mode. No path list comes from an operator or environment input.
+
+`tsconfig.worker.json`, uncalled D1 hydration/deployment exports, unrelated
+application/payment/authentication/composition trees, test files, generated
+artifacts and ordinary handoff/report docs are not executed by this capture and
+are not added merely for convenience. Installed third-party/runtime versions
+remain governed by unchanged package/lockfile/workflow bytes, not vendored
+`node_modules`. Closure membership does **not** authorize editing any protected
+dependency: workflow, classifier, schemas, target, T19/T20, migrations and
+dependency source remain unchanged in this remediation.
+
+Complete repository-owned constant, in execution order:
+
+```text
+.github/workflows/production-d1-t21rc-row-reconciliation.yml
+scripts/t21rc2-production-approval.mjs
+scripts/t21rc2-production-capture.mjs
+scripts/t21rc2-production-files.mjs
+scripts/t21rc2-production-receipt.mjs
+scripts/t21rc-row-reconciliation.mjs
+scripts/t21r-v1-authority.mjs
+scripts/release-check.mjs
+scripts/d1-migration-check.mjs
+docs/ai/recipe-catalog/T21RC_ROW_RECONCILIATION_SCHEMA.json
+docs/ai/recipe-catalog/T21RA_RUNTIME_CANONICAL_TARGET.json
+wrangler.jsonc
+package.json
+pnpm-lock.yaml
+.github/workflows/ci.yml
+scripts/t21rb-v1-semantic.mjs
+vite.config.ts
+tsconfig.json
+data/recipe-import/approved-batches.json
+data/recipe-import/t14f/pilot-30.jsonl
+data/recipe-import/t14f/scale-399.jsonl
+data/recipe-refresh/v2/ingredient-reconciliation.json
+packages/recipes/src/import/catalog-release.current.json
+migrations
+packages/domain/src/availability.ts
+packages/domain/src/foundation.ts
+packages/domain/src/index.ts
+packages/domain/src/inventory-read-authority.ts
+packages/domain/src/inventory-truth.ts
+packages/domain/src/meal-planning-api.ts
+packages/domain/src/meal-shopping-api.ts
+packages/domain/src/quantity.ts
+packages/domain/src/units.ts
+packages/domain/src/week/index.ts
+packages/domain/src/week/leftover.ts
+packages/domain/src/week/packages.ts
+packages/domain/src/week/planner.ts
+packages/domain/src/week/portion.ts
+packages/domain/src/week/pricing.ts
+packages/domain/src/week/score.ts
+packages/domain/src/week/shopping.ts
+packages/domain/src/week/types.ts
+packages/domain/src/week/utilization.ts
+packages/recipes/src/catalog-fingerprint.ts
+packages/recipes/src/data.ts
+packages/recipes/src/import/compiler.ts
+packages/recipes/src/import/duplicates.ts
+packages/recipes/src/import/identity.ts
+packages/recipes/src/import/ingredients.ts
+packages/recipes/src/import/index.ts
+packages/recipes/src/import/normalize.ts
+packages/recipes/src/import/parse.ts
+packages/recipes/src/import/release-manifest.ts
+packages/recipes/src/import/schema.ts
+packages/recipes/src/import/sql-render.ts
+packages/recipes/src/import/types.ts
+packages/recipes/src/runtime-recipe.ts
+packages/recipes/src/seed-render.ts
+packages/recipes/src/vietnamese-bank.ts
+packages/recipes/src/vietnamese-images.ts
+.npmrc
+.pnpmfile.cjs
+pnpm-workspace.yaml
+.gitattributes
+vite.config.js
+vite.config.mjs
+vite.config.cjs
+vite.config.mts
+vite.config.cts
+.env
+.env.local
+.env.development
+.env.development.local
+```
+
+### P2 — SELECT-only path is not a read-only credential certificate
+
+The success receipt now explicitly contains:
+
+```json
+{"queryPathSelectOnly":true,"tokenScopeReadOnlyProven":false}
+```
+
+The first field attests the reviewed executable's fixed SELECT allowlist; the
+second states that Cloudflare token permission scope is **not proven**. Neither
+zero observed writes nor this path restriction proves write-impossible credentials
+or a read-only database. Input-supplied claims cannot override either field.
+No production token was used, introspected or changed.
+
+The fixed failure receipt deliberately omits both fields: failure can precede
+review-binding/authorization/execution, so it must not look like a successful
+reviewed-query-path attestation. Its existing safe status/code/privacy and zero
+mutation/apply/deploy fields remain unchanged. Raw names/quantities/IDs/keys,
+approval comments and response bodies remain excluded from public output.
+
+### Delta verification and authorization boundary
+
+New regressions use temporary real Git commits, a genuine two-parent merge,
+`rev-parse`, `merge-base` and `diff`, not a mocked closure calculation. They cover
+unrelated-doc advancement, each bound-file change, equal SHAs/non-ancestry,
+missing required files, gate output rejection, pre-Cloudflare capture rejection
+and final publication recheck. Existing assertions/timeouts remain intact.
+
+Final executed checks (Node `24.21.0`, pnpm `10.31.0`, Vitest `3.2.7`):
+
+| Exact command/check | Result |
+| --- | --- |
+| `pnpm exec vitest run tests/unit/t21rc2-*.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/release-check.test.mjs --maxWorkers=1` | PASS: 8 files / 537 tests, 27.27 seconds |
+| C2 suites in that command | PASS: approval 143, capture/privacy 70, receipt 8, workflow static 7; 228 total |
+| Predecessor/release suites in that command | PASS: T21R-C 57, T21R-B 11 + 5, release-check 236 |
+| `pnpm exec vitest run --maxWorkers=1` | PASS: 230 files / 5,191 tests, 608.00 seconds, exit 0 |
+| `pnpm lint`, `pnpm typecheck` | PASS, exit 0 each |
+| `pnpm check:migrations` | PASS: `migration-smoke=ok`, local in-memory SQLite only |
+| `pnpm build` | PASS: Web and Worker compilation, exit 0 |
+| `node --check` for the three modified C2 scripts | PASS |
+| `git diff --check`, staged check and full scoped diff/protected-path review | PASS |
+| `assertReviewedExecutionClosure(ad7b3012, 8d8028f3)` on the existing immutable commits | PASS, local Git only; implementation-to-doc-head bytes unchanged |
+
+All A–L regressions PASS: unrelated-doc advancement, workflow/capture/approval/
+receipt/classifier/schema/target/release/D1 helper/package/lockfile changes,
+same SHA and existing non-ancestor rejection. Every one of the 73 bound entries
+has a real-Git change regression; additions in the migration tree and introduction
+of previously absent auto-configs also fail. Gate, capture pre-credential and
+final recheck rejection tests call the real authorization path with mocked
+GitHub responses and assert no Cloudflare subprocess or publication output.
+
+Initial new-test failures were missing test-helper imports/scope: the safe
+failure-receipt import and shared approved fixture were corrected. No production
+experiment, assertion removal or timeout adjustment was used. The final focused
+and full suites passed without retries of their test failures. Raw local logs
+remain ignored under `.hoplite/artifacts/t21rc2-review-binding/`; dependencies
+and lockfile are unchanged and no audit was rerun.
+
+A bounded independent agent delta review found no material issue and passed
+the approval/receipt suites (151 tests). It did not independently retrace the
+entire dependency list; the execution trace above was completed locally by the
+primary agent. This is not independent human re-approval of the remediation.
+
+Verified reviewed parent: `8d8028f3` (`8d8028f3e3358655b19fa2dd02ba883e57c52204`),
+containing implementation `ad7b3012`. The one logical remediation commit follows
+that exact parent without rebase/squash; its own hash is resolved by Git/provider
+verification rather than embedded in the same commit's handoff. Next is independent
+**delta** review from that reviewed parent to the normally published remediation
+HEAD, before opening any PR. Existing main CI is not hosted CI for this delta.
+
+Only normal publication of one logical remediation commit after the reviewed
+head is authorized after all local checks pass. No PR, merge, workflow dispatch,
+Environment approval, production read/mutation/Cloudflare call, restore,
+migration/0039 apply, deployment or delivery configuration is authorized.
+`ROW_LEVEL_EVIDENCE_DELIVERY=UNCONFIGURED`, `T21G_NOT_READY`; repair/0039/deploy STOPPED.
 
 ## Exact starting authority and scope
 
@@ -178,7 +404,7 @@ No R2/S3 bucket, Drive, webhook, email, private repository or encryption/key
 infrastructure is provisioned. Publishing this implementation branch is not
 publishing a row manifest or authorizing a production capture.
 
-## Verification, limitations and next action
+## Original implementation verification, limitations and next action (historical)
 
 All finalized local gates passed on Node `24.21.0`, pnpm `10.31.0`, Vitest `3.2.7`:
 

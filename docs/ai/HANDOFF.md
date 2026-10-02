@@ -1,3 +1,47 @@
+# T21R-C2 review-binding remediation handoff — 2026-10-02 UTC
+
+**State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`, not re-approved or production-ready.
+Repository `1385308553` / `vn-tako4/Tako-san`; same
+`codex/t21rc2-protected-production-row-read`, reviewed parent
+`8d8028f3e3358655b19fa2dd02ba883e57c52204`, verified prior implementation
+`ad7b3012`, certified base main `518818458a354c5e180da52ae9bb73c9d3c1af78`.
+One logical remediation commit follows that reviewed head without rebase/squash;
+its own hash is resolved by final Git/provider verification, not embedded here.
+
+**Implemented:** P1 binds the current ref's 73-entry security/execution closure
+to the exact reviewed implementation bytes in addition to preserved ancestry/
+main/CI/normal approval guards, rejects equal SHAs, and gates candidate output,
+pre-Cloudflare capture and final publication recheck. Full dependency tracing and
+optional auto-config absence/addition semantics are documented. P2 success
+receipt: `queryPathSelectOnly=true`, `tokenScopeReadOnlyProven=false`; no token
+introspection or override. Failure omits both because path attestation can fail
+before execution. No workflow/capture/classifier/schema/target/runtime redesign.
+
+**Executed:** `pnpm exec vitest run tests/unit/t21rc2-*.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/release-check.test.mjs --maxWorkers=1`
+PASS, 8 files / 537 tests (C2 228, T21R-C/B 73, release 236).
+`pnpm exec vitest run --maxWorkers=1` PASS, 230 files / 5,191, 608.00 seconds.
+`pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, script
+syntax, diff and protected-path checks PASS. Real temporary Git A–L/binding/
+addition regressions and API mocks only. Initial test-helper import/scope errors
+were fixed; no timeout/assertion weakened. Bounded agent review found no material
+issue in guard/P2 logic and passed 151 tests; it did not re-audit the full closure.
+
+**Production boundary / limits:** Zero production read/Cloudflare call/dispatch/
+mutation/SQL write/Environment approval/restore/migration/0039 apply/deploy; no
+production secrets, PR or merge. SQLite smoke writes throwaway local fixtures
+only. Approval history, fixed SELECTs, two-read stability, row privacy and no
+row-manifest upload remain unchanged. Row delivery `UNCONFIGURED` /
+`DELIVERY_NOT_AUTHORIZED`. No human re-approval or hosted delta-head CI is claimed.
+
+**Next:** Normally publish exactly one logical remediation commit after the
+reviewed head, verify remote/local equality, then stop for independent delta
+review from `8d8028f3` to that published HEAD **before opening any PR**. No
+production authorization or delivery configuration. `T21G_NOT_READY`, repair
+NOT_AUTHORIZED, 0039/deploy STOPPED. Closure/checks/failures:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C2 executable protected row-read handoff — 2026-10-02 UTC
 
 **State:** `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`, not production-ready.

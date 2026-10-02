@@ -524,6 +524,8 @@ function buildReceipt({ authorization, capture, manifest }) {
     },
     productionMutations: 0,
     sqlWrites: 0,
+    queryPathSelectOnly: true,
+    tokenScopeReadOnlyProven: false,
     restores: 0,
     migrations: 0,
     applied0039: false,

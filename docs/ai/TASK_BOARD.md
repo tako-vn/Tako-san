@@ -1,3 +1,29 @@
+# T21R-C2 review-binding remediation — 2026-10-02 UTC
+
+- [x] Verify reviewed local/remote head `8d8028f3`, base main `51881845`, clean
+  same branch `codex/t21rc2-protected-production-row-read`; no history rewrite.
+- [x] Trace direct imports, Vite SSR evaluation, canonical sources/configs and
+  ledger reads; bind 73 explicit path entries without shrinking the proposed 14.
+- [x] Gate requires reviewed ancestry plus byte-equivalent closure and distinct
+  SHAs; capture independent authorization and final recheck enforce the same guard.
+- [x] Real-Git merge/docs-only pass; all bound changes fail. A–L plus missing
+  required file, auto-config addition, migration addition and execution-point tests PASS.
+- [x] Success receipt explicitly distinguishes fixed SELECT path from unknown
+  token permissions; input cannot override fields. Failure/privacy unchanged.
+- [x] Focused 537/537, C2 228/228, full 230 files / 5,191 PASS; lint/typecheck/
+  local migration smoke/build/syntax/diff PASS. Initial new-test helper errors fixed,
+  no timeout/assertion reduced. Scoped agent review found no material delta issue.
+- [ ] Independently review the one normally published remediation commit after
+  `8d8028f3`; no self-approval, PR opening, merge or production preparation.
+
+`T21RC2_REMEDIATION_READY_FOR_REVIEW`; normal push authorized after final checks,
+not independent review approval. No production/Cloudflare/approval/apply/deploy
+operations or workflow/classifier/T19/T20 changes. Delivery `UNCONFIGURED`,
+`T21G_NOT_READY`; repair/0039/deploy STOPPED. Full bound list/check evidence:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C2 protected production row-read implementation — 2026-10-02 UTC
 
 - [x] Start `codex/t21rc2-protected-production-row-read` exactly at certified
