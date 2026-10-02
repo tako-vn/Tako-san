@@ -1,10 +1,115 @@
 # T21R-C2 — Protected production row-read implementation
 
-Status: `T21RC2_REMEDIATION_READY_FOR_REVIEW`; reviewed-byte binding remediation and
+Status: PR #36 CI-history remediation; renewed exact-head review required. Code and
 tests only. Production dispatch, production reads and Cloudflare production
 calls are **not authorized** by this task. `T21G_NOT_READY`; repair, 0039 and
 production deployment remain stopped. Row-level delivery is `UNCONFIGURED` /
 `DELIVERY_NOT_AUTHORIZED`.
+
+## PR #36 hosted CI history remediation — 2026-10-02 UTC
+
+This checkpoint repairs only `HOSTED_CI_GIT_HISTORY_FIX` after independent review
+of `3e1bb60b7afa9706fca6bfed41252bfd4d421cdd`. PR #36 remains open and unmerged on
+`codex/t21rc2-protected-production-row-read`; certified main remains
+`518818458a354c5e180da52ae9bb73c9d3c1af78`. No production authorization follows from
+this change or a passing PR check.
+
+### Verified failure and cause
+
+Original CI run `37002486858`, validate job `110823126447`: ESLint/typecheck
+PASS; Vitest FAIL during `t21rc2-production-capture.test.mjs` module setup;
+migration smoke/build SKIPPED. Hosted Vitest reported 229 passing suites, one
+failed suite, and 5,121 passing collected tests. The safe failure was
+`T21RC2_LEDGER_CHANGED` from `reviewedLedgerNames` at capture line 110 and test
+line 20, not an observed change to production.
+
+Inspected the actual Actions checkout log, not just workflow defaults:
+
+```text
+RUN_37002486858_CHECKOUT_FETCH_DEPTH = 1
+RUN_37002486858_FETCHED_REF = db7728d0203089e8f35897f2fff2f2e35437e026
+git fetch ... --depth=1 origin +db7728d0203089e8f35897f2fff2f2e35437e026:refs/remotes/pull/36/merge
+HEAD is now at db7728d Merge 3e1bb60b... into 51881845...
+ROOT_CAUSE = SHALLOW_CHECKOUT_MISSING_HISTORICAL_COMMIT
+ACTUAL_LEDGER_DRIFT_FOUND = NO
+```
+
+Local `git show 51881845:migrations/0038_auth_onboarding_completion.sql` and
+`git ls-tree -r 51881845 -- migrations` resolve the certified historical tree:
+exactly 39 repository migrations, index 37 is 0038, index 38 is
+`0039_meal_composition_v2.sql`. Real
+`reviewedLedgerNames(cwd, 51881845)` returns exactly the first 38 names,
+ending at `0038_auth_onboarding_completion.sql`, with 0039 absent.
+
+An offline throwaway `git clone --no-local --no-checkout --depth=1 file://...`
+also reproduced missing certified-main object (Git exit 128), followed by the
+same `T21RC2_LEDGER_CHANGED` from the existing helper. The full-history checkout
+succeeded without modifying that helper. The first direct-path clone attempt
+was unsuitable: Git ignores depth for local clones and the sandbox refused its
+hardlink. The corrected file-transport clone used no network and was removed.
+
+### Minimal remediation and review consequence
+
+Only CI `actions/checkout@v4` configuration gains `fetch-depth: 0`. The existing
+T21R-C2 workflow static suite now parses `ci.yml` and requires full history on
+the Actions checkout, so exact historical ledger/review objects cannot silently
+disappear again. No unit-test network fetch, authority fallback or HEAD substitution.
+No Action version/pinning, Node/pnpm version, permission, secret, other CI step,
+production workflow or Cloudflare configuration change.
+
+`schema.count !== 39`, the 0038/0039 repository expectations,
+`schema.migrations.slice(0, 38)`, exact live-ledger name comparison, and all
+fixed-query/approval/identity/stability/privacy guards are unchanged. No applied
+migration or classifier/schema/target is edited. `T21RC2_REVIEW_BOUND_PATHS`
+remains the same 73-entry constant.
+
+CI workflow bytes **are** review-bound, so old independent review of `3e1bb60b`
+is not sufficient for this new head. Obtain independent delta review of
+`3e1bb60b` to the one normally pushed remediation commit and renewed PR approval
+before any merge. Do not remove CI from the closure to preserve stale approval.
+
+### Checkpoint evidence and handoff
+
+Local capture suite PASS (70 tests); approval 143, receipt 8, workflow 8, C2
+total 229. Executed:
+
+```sh
+pnpm exec vitest run tests/unit/t21rc2-production-capture.test.mjs tests/unit/t21rc2-production-approval.test.mjs tests/unit/t21rc2-production-receipt.test.mjs tests/unit/t21rc2-workflow.test.mjs --maxWorkers=1
+pnpm exec vitest run tests/unit/t21rc2-*.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/release-check.test.mjs --maxWorkers=1
+pnpm lint
+pnpm typecheck
+pnpm check:migrations
+pnpm build
+pnpm exec vitest run --maxWorkers=1
+git diff --check
+```
+
+C2 run PASS: 4 files / 229 tests, 25.67 seconds. Focused regressions PASS:
+8 files / 538 tests, 31.43 seconds; T21R-C 57, T21R-B 16 and release-check 236
+unchanged. Lint/typecheck/local migration smoke/build PASS, exit 0 each.
+Full `pnpm exec vitest run --maxWorkers=1` PASS: 230 files / 5,192 tests,
+701.72 seconds, exit 0. Syntax and working/staged diff checks PASS.
+No timeout/assertion was relaxed. Build does not deploy; migration smoke uses
+disposable local SQLite, not production D1.
+
+This is a pre-publication repository checkpoint, not hosted-success evidence.
+After the one normal push, verify PR #36's exact new head and its automatically
+triggered **new** pull-request CI run/job; do not rerun the old head as evidence.
+Require ESLint/typecheck/Vitest/migration smoke/build all PASS. If that hosted
+run fails, stop with `T21RC2_PR36_CI_REMEDIATION_INCOMPLETE` and its run/job/failure,
+rather than piling new fixes onto this narrowly authorized branch.
+
+Per-head hosted results and final receipt are retained in
+`.hoplite/artifacts/t21rc2-pr36-ci/` and GitHub's PR checks; the same commit's
+report cannot embed its own new hash or its future CI run ID. Historical raw
+CI logs remain private and are not published. The PR check subscription is
+enabled, but any subsequent failure remains subject to this packet's stop rule.
+
+Production dispatch/Environment approval/Cloudflare call/D1 read/mutation/
+restore/migration/0039 apply/deploy remain zero. `T21G_NOT_READY`, repair
+`NOT_AUTHORIZED`, 0039/deploy STOPPED; row delivery `UNCONFIGURED` /
+`DELIVERY_NOT_AUTHORIZED`. Green PR CI is neither exact-main push CI nor
+production approval.
 
 ## Review-binding remediation — 2026-10-02 UTC
 

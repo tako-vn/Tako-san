@@ -1,3 +1,22 @@
+# Current — T21R-C2 PR #36 hosted CI-history remediation (2026-10-02 UTC)
+
+Same branch/PR36, verified pre-fix head `3e1bb60b`. Actual old run `37002486858`
+/ job `110823126447` used depth-1 synthetic-merge checkout; missing historical
+Git object caused capture test setup `T21RC2_LEDGER_CHANGED`. Offline reproduction
+confirms it; full local history meets the unchanged 39-repository/38-production
+ledger contract. CI now `fetch-depth: 0` with a static regression, no guard,
+version, production workflow or bound-path-list changes.
+
+C2 229 / focused 538 / full 230 files, 5,192 PASS; lint/typecheck/local migration
+smoke/build/syntax/diff PASS. Exact commands are in the scoped report. One narrow
+normal push authorized, then verify the new exact-head hosted run; stop if it
+fails. Bound CI change invalidates the old review: independent delta review and
+renewed PR approval required before merge. No production/Cloudflare/approval/
+apply/deploy, T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+Report: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # Current — T21R-C2 review-binding remediation only (2026-10-02 UTC)
 
 **Status: `T21RC2_REMEDIATION_READY_FOR_REVIEW`.** Same published C2 branch,

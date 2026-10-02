@@ -28,6 +28,10 @@ scope (`queryPathSelectOnly=true`, `tokenScopeReadOnlyProven=false`); failure do
 not claim completed path attestation. This additive hardening changes no workflow,
 classifier, target, production permission or row-delivery policy.
 
+**Hosted CI environment:** PR36's depth-1 checkout omitted historical authority
+objects needed by ledger tests. CI must provide full Git history; preserve exact
+ledger semantics. Changing this review-bound CI file requires renewed review.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.

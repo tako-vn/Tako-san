@@ -1,3 +1,41 @@
+# T21R-C2 PR #36 CI-history remediation — 2026-10-02 UTC
+
+**State:** Local CI-history correction on the same C2 branch; renewed exact-head
+independent review required. Repository `1385308553` / `vn-tako4/Tako-san`,
+PR #36 OPEN/unmerged; pre-remediation head `3e1bb60b7afa9706fca6bfed41252bfd4d421cdd`,
+base main `518818458a354c5e180da52ae9bb73c9d3c1af78`. One narrow normal-push
+checkpoint after that head; no rebase/force push/merge.
+
+**Diagnosis / change:** Failed hosted run `37002486858` / job `110823126447`
+used checkout depth 1 and synthetic PR merge `db7728d0203089e8f35897f2fff2f2e35437e026`.
+Historical reviewed/main Git object was unavailable to capture-suite setup,
+surfacing the safe `T21RC2_LEDGER_CHANGED`. Full local history proves the 39-file
+repository contract and exact first 38 live-ledger names unchanged. Offline
+depth-1 clone reproduces the missing-object failure. CI checkout now uses
+`fetch-depth: 0`; one static workflow regression requires it. No ledger/count/
+tip/name guard, capture/classifier/production workflow/configuration, version,
+timeout/assertion or 73-entry review-bound list change.
+
+**Executed:** C2 4 files / 229 tests PASS (capture 70, approval 143, receipt 8,
+workflow 8); requested focused regressions 8 files / 538 PASS. Lint/typecheck/
+local SQLite migration smoke/build PASS. Full single-worker result and exact
+commands are recorded in the scoped report: 230 files / 5,192 PASS, 701.72 seconds.
+Hosted-success evidence is not
+available at this pre-publication checkpoint; check the automatically triggered
+new PR run on the exact new head, not an old-head rerun.
+
+**Boundary / next:** CI workflow bytes are review-bound, so the old head's
+independent approval is not current for this delta. After local gates pass,
+normal push, verify new-head hosted ESLint/typecheck/Vitest/migration smoke/build;
+stop if that run fails. Final per-head evidence lives with PR checks and ignored
+`.hoplite/artifacts/t21rc2-pr36-ci/`. Obtain independent delta review and renewed
+PR approval before merge. No production dispatch/approval/Cloudflare/read/write/
+restore/migration/0039 apply/deploy. `T21G_NOT_READY`, repair NOT_AUTHORIZED,
+0039/deploy STOPPED, row delivery UNCONFIGURED / DELIVERY_NOT_AUTHORIZED.
+Report: `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C2 review-binding remediation only — 2026-10-02 UTC
 
 **State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`; not independently re-approved

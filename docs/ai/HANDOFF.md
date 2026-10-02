@@ -1,3 +1,44 @@
+# T21R-C2 PR #36 CI-history remediation handoff — 2026-10-02 UTC
+
+**State:** Narrow local Git-history environment correction; not new independent
+approval, merge readiness or production authorization. Same C2 branch, PR #36
+OPEN/unmerged, repository `1385308553` / `vn-tako4/Tako-san`; verified reviewed
+pre-fix head `3e1bb60b7afa9706fca6bfed41252bfd4d421cdd` and base main
+`518818458a354c5e180da52ae9bb73c9d3c1af78`. This checkpoint cannot embed its own hash
+or future hosted run ID; final exact-head results are retained in PR checks and
+`.hoplite/artifacts/t21rc2-pr36-ci/`.
+
+**Implemented:** CI checkout now `fetch-depth: 0`, plus one regression in the
+existing C2 static workflow suite requiring historical Git objects. Hosted old
+run `37002486858` / job `110823126447` had depth 1 and fetched only synthetic
+merge `db7728d0203089e8f35897f2fff2f2e35437e026`. Offline shallow fixture reproduces
+missing certified-main object -> `T21RC2_LEDGER_CHANGED`; full-history helper
+still yields exact first 38 of 39 repository names through 0038. No actual ledger
+drift, guard relaxation, authority substitution or unit-test network call.
+
+**Executed:** C2 command PASS, 4 files / 229 tests; focused C2/T21R-C/B/release
+command PASS, 8 files / 538. `pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`,
+`pnpm build` PASS. Full single-worker 230 files / 5,192 PASS, 701.72 seconds.
+Exact commands and syntax/diff checks are
+in `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`. Initial direct-path
+shallow clone ignored depth/failed hardlink; corrected offline file-transport
+clone proved diagnosis and was removed. No timeout/assertion changes.
+
+**Production boundary / limits:** No production dispatch/Environment approval/
+Cloudflare call/D1 read/mutation/restore/migration/0039 apply/deploy. Local smoke
+fixtures only. No production workflow, versions, config, classifier/schema/target,
+73-entry closure or ledger policy change. Old independent review of `3e1bb60b`
+does not authorize new CI bytes. Delivery UNCONFIGURED / DELIVERY_NOT_AUTHORIZED;
+T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+
+**Next:** Normal push of one narrow commit, inspect automatically triggered PR36
+CI at its exact new head, require all five hosted gates PASS; if it fails, stop
+INCOMPLETE with run/job/failure. Then independent delta review from `3e1bb60b`
+and renewed approval before merge. Do not close/create another PR or dispatch.
+PR auto-fix subscription is enabled; this packet's no-fix-piling stop remains.
+
+---
+
 # T21R-C2 review-binding remediation handoff — 2026-10-02 UTC
 
 **State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`, not re-approved or production-ready.

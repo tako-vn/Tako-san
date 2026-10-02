@@ -7,6 +7,9 @@ const { load } = createRequire(require.resolve('eslint/package.json'))('js-yaml'
 const file = '.github/workflows/production-d1-t21rc-row-reconciliation.yml';
 const text = readFileSync(file, 'utf8');
 const workflow = load(text);
+const ciFile = '.github/workflows/ci.yml';
+const ciText = readFileSync(ciFile, 'utf8');
+const ci = load(ciText);
 const steps = workflow.jobs.capture.steps;
 const find = (command) => steps.find((step) => step.run === command);
 
@@ -77,5 +80,18 @@ describe('T21R-C2 production workflow static safety contract', () => {
       'node scripts/t21rc2-production-receipt.mjs publish', 'node scripts/t21rc2-production-capture.mjs cleanup',
     ]);
     expect(commands.join('\n')).not.toMatch(/wrangler|migrations apply|deploy|restore|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|\bcat\b|\btee\b|workflow run|curl|webhook|s3|r2/i);
+  });
+});
+
+describe('hosted CI Git history for T21R-C2 validation', () => {
+  it('checks out full history so historical reviewed SHAs remain Git objects', () => {
+    // T21R-C2 validation depends on exact historical Git objects and must run with full history.
+    const checkouts = Object.values(ci.jobs).flatMap((job) => (
+      job.steps.filter((step) => String(step.uses ?? '').startsWith('actions/checkout@'))
+    ));
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0].uses).toBe('actions/checkout@v4');
+    expect(checkouts[0].with).toEqual({ 'fetch-depth': 0 });
+    expect(ciText).not.toMatch(/fetch-depth:\s*[1-9]/);
   });
 });

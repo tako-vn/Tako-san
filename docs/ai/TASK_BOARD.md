@@ -1,3 +1,28 @@
+# T21R-C2 PR #36 hosted CI-history correction — 2026-10-02 UTC
+
+- [x] Verify PR36 OPEN, head `3e1bb60b`, failed run `37002486858` / job
+  `110823126447`; actual checkout `fetch-depth: 1`, fetched synthetic merge
+  `db7728d0203089e8f35897f2fff2f2e35437e026`, failure `T21RC2_LEDGER_CHANGED` in setup.
+- [x] Resolve certified-main 0038 blob and exact 39 repository migrations;
+  existing helper returns the exact first 38 production names. No ledger drift.
+- [x] Reproduce missing historical-object error in an offline throwaway shallow
+  clone; full-history helper succeeds. No tests fetch Git or substitute authority.
+- [x] CI checkout full history and static regression; other CI/runtime/production
+  guards/versions and 73-entry review-bound closure unchanged.
+- [x] C2 229 and focused 538 PASS; lint/types/local migration smoke/build PASS.
+  Full single-worker 230 files / 5,192 PASS (701.72 seconds), syntax/diff PASS.
+  Exact command list and limitations are in the scoped report.
+
+**Publication/review handoff:** One narrow normal-push commit after `3e1bb60b`,
+not a history rewrite. Confirm new-head hosted PR CI via the actual provider
+run/job; if it fails, stop and report INCOMPLETE, do not expand fixes. Prior review
+is invalidated by the bound CI change; independent delta review/renewed PR
+approval required. No merge or production/Cloudflare/approval/apply/deploy;
+`T21G_NOT_READY`, repair NOT_AUTHORIZED, 0039/deploy STOPPED, delivery UNCONFIGURED.
+Report: `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C2 review-binding remediation — 2026-10-02 UTC
 
 - [x] Verify reviewed local/remote head `8d8028f3`, base main `51881845`, clean
