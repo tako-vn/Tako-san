@@ -420,6 +420,15 @@ mutation, and a failed or cancelled deployment restores the exact previous
 Worker version through the Cloudflare API with a complete proof. Serving
 rollback is redeploying `mode=shadow`/`static`.
 
+**Evidence-only supplement 2026-10-02 (T21R-C):** Offline occurrence
+classification against the T21R-A-certified V1 release does not change this
+runtime authority, stored-plan freshness, ADR-031 composition/role/shopping
+contracts or migration/deployment permission. Exact tuple/multiset evidence
+does not establish live physical order, linked nutrition safety or a repair
+action. A live T21R-C receipt, normal independent approval and bounded blast
+radius remain prerequisites to a separate T21G decision; bypass is forbidden
+for mutation. See `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
 ## ADR-027 — Reviewed Bulk Recipe Imports and Catalog Release Manifests (T14E)
 
 **Status:** Accepted 2026-09-17; remediated 2026-09-17 after independent review (nutrition evidence persistence, complete

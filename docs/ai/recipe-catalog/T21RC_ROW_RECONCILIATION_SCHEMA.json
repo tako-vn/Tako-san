@@ -1,0 +1,766 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "T21R-C row reconciliation evidence schema",
+  "description": "Closed schema for the sanitized offline evidence manifest and its minimal saved input. Manifest records contain no raw ingredient names, quantities, units, physical line IDs, positions, timestamps, credentials, or user/household data. Physical occurrence identity is represented only by the classifier's digest-based occurrence keys.",
+  "$ref": "#/definitions/manifest",
+  "definitions": {
+    "catalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+      "description": "Foundation CatalogId shape used for recipe IDs; values are not trimmed or coerced."
+    },
+    "canonicalIngredientId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Foundation canonical ingredient ID shape; values are not trimmed or coerced."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "productionOccurrenceKey": {
+      "type": "string",
+      "pattern": "^p:[0-9a-f]{64}:[1-9][0-9]*$"
+    },
+    "targetOccurrenceKey": {
+      "type": "string",
+      "pattern": "^t:[0-9a-f]{64}$"
+    },
+    "productionClassification": {
+      "type": "string",
+      "enum": [
+        "EXACT_V1_MATCH",
+        "SAME_ID_CONTENT_DRIFT",
+        "DETERMINISTIC_V1_COUNTERPART",
+        "REVIEWED_ID_BRIDGE",
+        "PRODUCTION_ONLY_KNOWN_ID",
+        "PRODUCTION_ONLY_NEW_ID",
+        "DUPLICATE_SEMANTIC_OCCURRENCE",
+        "MALFORMED_OCCURRENCE",
+        "ID_CONFLICT_REVIEW_REQUIRED",
+        "AMBIGUOUS"
+      ]
+    },
+    "targetClassification": {
+      "type": "string",
+      "enum": ["SATISFIED_EXACT", "SATISFIED_DETERMINISTICALLY", "TARGET_ONLY_MISSING", "AMBIGUOUS"]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["DETERMINISTIC", "REVIEW_REQUIRED", "UNKNOWN"]
+    },
+    "authoritySource": {
+      "type": "string",
+      "enum": ["V1_RELEASE", "REVIEWED_RECONCILIATION", "SCHEMA_CONTRACT", "CANONICAL_REGISTRY"]
+    },
+    "authoritySources": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/authoritySource" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "mapping": {
+      "type": "string",
+      "enum": ["UNIQUE", "MULTISET_ONLY", "NONE", "UNRESOLVED"]
+    },
+    "identityPopulation": {
+      "type": "string",
+      "enum": [
+        "V1_ID",
+        "NON_V1_CANONICAL_ID",
+        "REVIEWED_NEW_ID",
+        "UNREVIEWED_ING_ENR",
+        "UNKNOWN_ID",
+        "MALFORMED"
+      ]
+    },
+    "driftKind": {
+      "type": "string",
+      "enum": [
+        "quantity_only",
+        "unit_only",
+        "optional_only",
+        "quantity_unit",
+        "quantity_optional",
+        "unit_optional",
+        "multi_field",
+        "membership_only",
+        "membership_plus_content",
+        "name_only",
+        "name_plus_semantics",
+        "indeterminate"
+      ]
+    },
+    "reasonCode": {
+      "type": "string",
+      "enum": [
+        "INVALID_REQUIRED_FIELD",
+        "INVALID_RECIPE_ID",
+        "INVALID_INGREDIENT_ID",
+        "INVALID_QUANTITY",
+        "UNKNOWN_UNIT",
+        "INVALID_OPTIONAL_ENCODING",
+        "BROKEN_RECIPE_REFERENCE",
+        "DUPLICATE_PHYSICAL_LINE_ID",
+        "UNRESOLVED_PRODUCTION_IDENTITY",
+        "MALFORMED_INPUT_PREVENTS_MEMBERSHIP_PROOF",
+        "EXCESS_SEMANTIC_MULTIPLICITY",
+        "NON_UNIQUE_REVIEWED_COUNTERPART",
+        "CONTENT_OR_MEMBERSHIP_DRIFT",
+        "PHYSICAL_MAPPING_UNKNOWN_FOR_DUPLICATES",
+        "BRIDGE_CONTENT_DOES_NOT_MATCH_V1",
+        "NO_UNIQUE_APPROVED_ID_BRIDGE",
+        "MALFORMED_INPUT_PREVENTS_ABSENCE_PROOF",
+        "UNSATISFIED_COUNTERPART_REQUIRES_REVIEW",
+        "CAPTURE_COMPLETENESS_UNVERIFIED",
+        "ALTERNATE_IDENTITY_CONTENT_CONFLICT"
+      ]
+    },
+    "nullableReasonCode": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/reasonCode" }]
+    },
+    "nullableDriftKind": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/driftKind" }]
+    },
+    "nullableSha256": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/sha256" }]
+    },
+    "nullableRecipeId": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/catalogId" }]
+    },
+    "nullableIngredientId": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/canonicalIngredientId" }]
+    },
+    "jsonValue": {
+      "description": "Any JSON value, accepted only in the raw offline input so malformed field values can be classified without coercion."
+    },
+    "positionObservation": {
+      "description": "Optional position captured only as OBSERVATION_ONLY. It is ignored by classification and is never runtime semantic authority."
+    },
+    "standardUnit": {
+      "type": "string",
+      "enum": ["g", "kg", "ml", "l", "piece", "pack", "bunch", "slice"]
+    },
+    "rawOccurrenceObject": {
+      "type": "object",
+      "description": "A saved row-shaped fixture has exactly the seven projected fields. Their values remain untrusted so null and wrong-typed values can exercise MALFORMED_OCCURRENCE. A real SQL capture should supply a structurally object-shaped row with all seven fields.",
+      "properties": {
+        "id": { "$ref": "#/definitions/jsonValue" },
+        "recipe_id": { "$ref": "#/definitions/jsonValue" },
+        "ingredient_id": { "$ref": "#/definitions/jsonValue" },
+        "name": { "$ref": "#/definitions/jsonValue" },
+        "required_quantity": { "$ref": "#/definitions/jsonValue" },
+        "unit": { "$ref": "#/definitions/jsonValue" },
+        "is_optional": { "$ref": "#/definitions/jsonValue" },
+        "position": { "$ref": "#/definitions/positionObservation" }
+      },
+      "required": [
+        "id",
+        "recipe_id",
+        "ingredient_id",
+        "name",
+        "required_quantity",
+        "unit",
+        "is_optional"
+      ],
+      "additionalProperties": false
+    },
+    "rawOccurrence": {
+      "description": "Untrusted classifier input. Primitive and array rows are allowed for malformed offline fixtures; future SQL input should use rawOccurrenceObject.",
+      "oneOf": [
+        { "$ref": "#/definitions/rawOccurrenceObject" },
+        { "type": ["array", "boolean", "number", "string", "null"] }
+      ]
+    },
+    "inputEnvelope": {
+      "type": "object",
+      "description": "Minimal saved input accepted by the row-classifier CLI: the captured recipe ID set and selected ingredient occurrence fields, with optional caller-supplied row and recipe counts for offline completeness consistency checks. Counts are not proof of a live or atomic capture. Do not add timestamps, credentials, user/household data, or unrelated row fields.",
+      "properties": {
+        "recipeIds": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/catalogId" },
+          "uniqueItems": true
+        },
+        "occurrences": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/rawOccurrence" }
+        },
+        "captureCounts": {
+          "anyOf": [{ "$ref": "#/definitions/captureCounts" }, { "type": "null" }],
+          "description": "Optional count envelope. Explicit null has the same unverified offline meaning as omission."
+        }
+      },
+      "required": ["recipeIds", "occurrences"],
+      "additionalProperties": false
+    },
+    "validOccurrence": {
+      "type": "object",
+      "description": "Normative, semantically valid selected occurrence. Validation is strict and performs no trimming, defaulting, or type coercion. The physical id is input-only; optional position is observation-only and excluded from semantic authority.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "Observed physical row identifier; never emitted as an identifier in the sanitized manifest."
+        },
+        "recipe_id": { "$ref": "#/definitions/catalogId" },
+        "ingredient_id": { "$ref": "#/definitions/canonicalIngredientId" },
+        "name": {
+          "type": "string",
+          "pattern": "^\\s*\\S(?:[\\s\\S]{0,298}\\S)?\\s*$",
+          "description": "CatalogTextSchema validates 1–300 trimmed characters; raw spelling remains unchanged for semantic comparison."
+        },
+        "required_quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1e308
+        },
+        "unit": { "$ref": "#/definitions/standardUnit" },
+        "is_optional": { "type": "integer", "enum": [0, 1] },
+        "position": { "$ref": "#/definitions/positionObservation" }
+      },
+      "required": [
+        "id",
+        "recipe_id",
+        "ingredient_id",
+        "name",
+        "required_quantity",
+        "unit",
+        "is_optional"
+      ],
+      "additionalProperties": false
+    },
+    "nonnegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nonnegativeSafeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "captureCounts": {
+      "type": "object",
+      "description": "Optional offline capture counts. The classifier requires these to equal recipeIds.length and occurrences.length; equality is only count consistency, not evidence of a complete live or atomic read.",
+      "properties": {
+        "recipeCount": { "$ref": "#/definitions/nonnegativeSafeInteger" },
+        "ingredientOccurrenceCount": { "$ref": "#/definitions/nonnegativeSafeInteger" }
+      },
+      "required": ["recipeCount", "ingredientOccurrenceCount"],
+      "additionalProperties": false
+    },
+    "captureEvidence": {
+      "type": "object",
+      "description": "Offline count-consistency status, not proof of live capture completeness or snapshot atomicity.",
+      "properties": {
+        "completeness": {
+          "type": "string",
+          "enum": ["COUNT_CONSISTENT_OFFLINE_INPUT", "UNVERIFIED"]
+        },
+        "recipeCount": {
+          "anyOf": [{ "$ref": "#/definitions/nonnegativeSafeInteger" }, { "type": "null" }]
+        },
+        "ingredientOccurrenceCount": {
+          "anyOf": [{ "$ref": "#/definitions/nonnegativeSafeInteger" }, { "type": "null" }]
+        }
+      },
+      "required": ["completeness", "recipeCount", "ingredientOccurrenceCount"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "completeness": { "const": "COUNT_CONSISTENT_OFFLINE_INPUT" }
+            }
+          },
+          "then": {
+            "properties": {
+              "recipeCount": { "$ref": "#/definitions/nonnegativeSafeInteger" },
+              "ingredientOccurrenceCount": { "$ref": "#/definitions/nonnegativeSafeInteger" }
+            }
+          },
+          "else": {
+            "properties": {
+              "recipeCount": { "type": "null" },
+              "ingredientOccurrenceCount": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "productionClassCounts": {
+      "type": "object",
+      "properties": {
+        "EXACT_V1_MATCH": { "$ref": "#/definitions/nonnegativeInteger" },
+        "SAME_ID_CONTENT_DRIFT": { "$ref": "#/definitions/nonnegativeInteger" },
+        "DETERMINISTIC_V1_COUNTERPART": { "$ref": "#/definitions/nonnegativeInteger" },
+        "REVIEWED_ID_BRIDGE": { "$ref": "#/definitions/nonnegativeInteger" },
+        "PRODUCTION_ONLY_KNOWN_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "PRODUCTION_ONLY_NEW_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "DUPLICATE_SEMANTIC_OCCURRENCE": { "$ref": "#/definitions/nonnegativeInteger" },
+        "MALFORMED_OCCURRENCE": { "$ref": "#/definitions/nonnegativeInteger" },
+        "ID_CONFLICT_REVIEW_REQUIRED": { "$ref": "#/definitions/nonnegativeInteger" },
+        "AMBIGUOUS": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "EXACT_V1_MATCH",
+        "SAME_ID_CONTENT_DRIFT",
+        "DETERMINISTIC_V1_COUNTERPART",
+        "REVIEWED_ID_BRIDGE",
+        "PRODUCTION_ONLY_KNOWN_ID",
+        "PRODUCTION_ONLY_NEW_ID",
+        "DUPLICATE_SEMANTIC_OCCURRENCE",
+        "MALFORMED_OCCURRENCE",
+        "ID_CONFLICT_REVIEW_REQUIRED",
+        "AMBIGUOUS"
+      ],
+      "additionalProperties": false
+    },
+    "targetClassCounts": {
+      "type": "object",
+      "properties": {
+        "SATISFIED_EXACT": { "$ref": "#/definitions/nonnegativeInteger" },
+        "SATISFIED_DETERMINISTICALLY": { "$ref": "#/definitions/nonnegativeInteger" },
+        "TARGET_ONLY_MISSING": { "$ref": "#/definitions/nonnegativeInteger" },
+        "AMBIGUOUS": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "SATISFIED_EXACT",
+        "SATISFIED_DETERMINISTICALLY",
+        "TARGET_ONLY_MISSING",
+        "AMBIGUOUS"
+      ],
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "properties": {
+        "recipe": { "type": ["boolean", "null"] },
+        "ingredientId": { "type": ["boolean", "null"] },
+        "canonicalIdentity": { "type": ["boolean", "null"] },
+        "name": { "type": ["boolean", "null"] },
+        "quantity": { "type": ["boolean", "null"] },
+        "unit": { "type": ["boolean", "null"] },
+        "optional": { "type": ["boolean", "null"] },
+        "membership": { "type": ["boolean", "null"] }
+      },
+      "required": [
+        "recipe",
+        "ingredientId",
+        "canonicalIdentity",
+        "name",
+        "quantity",
+        "unit",
+        "optional",
+        "membership"
+      ],
+      "additionalProperties": false
+    },
+    "productionEvidence": {
+      "type": "object",
+      "properties": {
+        "occurrenceKey": { "$ref": "#/definitions/productionOccurrenceKey" },
+        "recipeId": { "$ref": "#/definitions/nullableRecipeId" },
+        "productionIngredientId": { "$ref": "#/definitions/nullableIngredientId" },
+        "targetIngredientId": { "$ref": "#/definitions/nullableIngredientId" },
+        "candidateTargetOccurrenceKeys": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/targetOccurrenceKey" },
+          "uniqueItems": true
+        },
+        "classification": { "$ref": "#/definitions/productionClassification" },
+        "confidence": { "$ref": "#/definitions/confidence" },
+        "authority": { "$ref": "#/definitions/authoritySources" },
+        "mapping": { "$ref": "#/definitions/mapping" },
+        "comparison": { "$ref": "#/definitions/comparison" },
+        "identityPopulation": { "$ref": "#/definitions/identityPopulation" },
+        "driftKind": { "$ref": "#/definitions/nullableDriftKind" },
+        "reviewReason": { "$ref": "#/definitions/nullableReasonCode" },
+        "bridgeEvidenceSha256": { "$ref": "#/definitions/nullableSha256" }
+      },
+      "required": [
+        "occurrenceKey",
+        "recipeId",
+        "productionIngredientId",
+        "targetIngredientId",
+        "candidateTargetOccurrenceKeys",
+        "classification",
+        "confidence",
+        "authority",
+        "mapping",
+        "comparison",
+        "identityPopulation",
+        "driftKind",
+        "reviewReason",
+        "bridgeEvidenceSha256"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "mapping": { "const": "UNIQUE" } } },
+          "then": {
+            "properties": {
+              "candidateTargetOccurrenceKeys": { "minItems": 1, "maxItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "enum": ["DETERMINISTIC_V1_COUNTERPART", "REVIEWED_ID_BRIDGE"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "authority": { "contains": { "const": "REVIEWED_RECONCILIATION" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "classification": { "const": "SAME_ID_CONTENT_DRIFT" } }
+          },
+          "then": { "properties": { "driftKind": { "$ref": "#/definitions/driftKind" } } }
+        }
+      ]
+    },
+    "targetEvidence": {
+      "type": "object",
+      "properties": {
+        "occurrenceKey": { "$ref": "#/definitions/targetOccurrenceKey" },
+        "recipeId": { "$ref": "#/definitions/catalogId" },
+        "targetIngredientId": { "$ref": "#/definitions/canonicalIngredientId" },
+        "candidateProductionOccurrenceKeys": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/productionOccurrenceKey" },
+          "uniqueItems": true
+        },
+        "classification": { "$ref": "#/definitions/targetClassification" },
+        "confidence": { "$ref": "#/definitions/confidence" },
+        "authority": { "$ref": "#/definitions/authoritySources" },
+        "mapping": { "$ref": "#/definitions/mapping" },
+        "reviewReason": { "$ref": "#/definitions/nullableReasonCode" }
+      },
+      "required": [
+        "occurrenceKey",
+        "recipeId",
+        "targetIngredientId",
+        "candidateProductionOccurrenceKeys",
+        "classification",
+        "confidence",
+        "authority",
+        "mapping",
+        "reviewReason"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "mapping": { "const": "UNIQUE" } } },
+          "then": {
+            "properties": {
+              "candidateProductionOccurrenceKeys": { "minItems": 1, "maxItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": { "const": "SATISFIED_DETERMINISTICALLY" }
+            }
+          },
+          "then": {
+            "properties": {
+              "authority": { "contains": { "const": "REVIEWED_RECONCILIATION" } }
+            }
+          }
+        }
+      ]
+    },
+    "recipeStatus": {
+      "type": "string",
+      "enum": [
+        "EXACT_V1_PARITY",
+        "DETERMINISTICALLY_RECONCILABLE",
+        "PARTIALLY_RECONCILABLE",
+        "AMBIGUOUS",
+        "SEVERELY_DIVERGED"
+      ]
+    },
+    "recipeClassSummary": {
+      "type": "object",
+      "properties": {
+        "recipeId": { "$ref": "#/definitions/catalogId" },
+        "status": { "$ref": "#/definitions/recipeStatus" },
+        "productionOccurrenceCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "targetOccurrenceCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "exactMatchCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "deterministicCounterpartCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "reviewedBridgeCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "sameIdDriftCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "productionOnlyCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "targetOnlyCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "ambiguousProductionCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "ambiguousTargetCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "reviewRequiredCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "productionClassCounts": { "$ref": "#/definitions/productionClassCounts" },
+        "targetClassCounts": { "$ref": "#/definitions/targetClassCounts" }
+      },
+      "required": [
+        "recipeId",
+        "status",
+        "productionOccurrenceCount",
+        "targetOccurrenceCount",
+        "exactMatchCount",
+        "deterministicCounterpartCount",
+        "reviewedBridgeCount",
+        "sameIdDriftCount",
+        "productionOnlyCount",
+        "targetOnlyCount",
+        "ambiguousProductionCount",
+        "ambiguousTargetCount",
+        "reviewRequiredCount",
+        "productionClassCounts",
+        "targetClassCounts"
+      ],
+      "additionalProperties": false
+    },
+    "accounting": {
+      "type": "object",
+      "properties": {
+        "productionClassSum": { "$ref": "#/definitions/nonnegativeInteger" },
+        "targetClassSum": { "$ref": "#/definitions/nonnegativeInteger" },
+        "productionAccounted": { "type": "boolean" },
+        "targetAccounted": { "type": "boolean" }
+      },
+      "required": [
+        "productionClassSum",
+        "targetClassSum",
+        "productionAccounted",
+        "targetAccounted"
+      ],
+      "additionalProperties": false
+    },
+    "populations": {
+      "type": "object",
+      "properties": {
+        "deterministic": { "$ref": "#/definitions/nonnegativeInteger" },
+        "reviewRequired": { "$ref": "#/definitions/nonnegativeInteger" },
+        "unknown": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": ["deterministic", "reviewRequired", "unknown"],
+      "additionalProperties": false
+    },
+    "identityPopulationCounts": {
+      "type": "object",
+      "properties": {
+        "V1_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "NON_V1_CANONICAL_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "REVIEWED_NEW_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "UNREVIEWED_ING_ENR": { "$ref": "#/definitions/nonnegativeInteger" },
+        "UNKNOWN_ID": { "$ref": "#/definitions/nonnegativeInteger" },
+        "MALFORMED": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "V1_ID",
+        "NON_V1_CANONICAL_ID",
+        "REVIEWED_NEW_ID",
+        "UNREVIEWED_ING_ENR",
+        "UNKNOWN_ID",
+        "MALFORMED"
+      ],
+      "additionalProperties": false
+    },
+    "driftBreakdown": {
+      "type": "object",
+      "properties": {
+        "quantity_only": { "$ref": "#/definitions/nonnegativeInteger" },
+        "unit_only": { "$ref": "#/definitions/nonnegativeInteger" },
+        "optional_only": { "$ref": "#/definitions/nonnegativeInteger" },
+        "quantity_unit": { "$ref": "#/definitions/nonnegativeInteger" },
+        "quantity_optional": { "$ref": "#/definitions/nonnegativeInteger" },
+        "unit_optional": { "$ref": "#/definitions/nonnegativeInteger" },
+        "multi_field": { "$ref": "#/definitions/nonnegativeInteger" },
+        "membership_only": { "$ref": "#/definitions/nonnegativeInteger" },
+        "membership_plus_content": { "$ref": "#/definitions/nonnegativeInteger" },
+        "name_only": { "$ref": "#/definitions/nonnegativeInteger" },
+        "name_plus_semantics": { "$ref": "#/definitions/nonnegativeInteger" },
+        "indeterminate": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "quantity_only",
+        "unit_only",
+        "optional_only",
+        "quantity_unit",
+        "quantity_optional",
+        "unit_optional",
+        "multi_field",
+        "membership_only",
+        "membership_plus_content",
+        "name_only",
+        "name_plus_semantics",
+        "indeterminate"
+      ],
+      "additionalProperties": false
+    },
+    "largestDriftRecipe": {
+      "type": "object",
+      "properties": {
+        "recipeId": { "$ref": "#/definitions/catalogId" },
+        "count": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": ["recipeId", "count"],
+      "additionalProperties": false
+    },
+    "baselineComparison": {
+      "type": "object",
+      "properties": {
+        "exactTupleMatches": { "$ref": "#/definitions/nonnegativeInteger" },
+        "bridgedTupleMatches": { "$ref": "#/definitions/nonnegativeInteger" },
+        "sameIdContentDrift": { "$ref": "#/definitions/nonnegativeInteger" },
+        "idConflictReviewRequired": { "$ref": "#/definitions/nonnegativeInteger" },
+        "unmatchedProductionLines": { "$ref": "#/definitions/nonnegativeInteger" },
+        "unmatchedTargetLines": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "exactTupleMatches",
+        "bridgedTupleMatches",
+        "sameIdContentDrift",
+        "idConflictReviewRequired",
+        "unmatchedProductionLines",
+        "unmatchedTargetLines"
+      ],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "productionOccurrenceCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "targetOccurrenceCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "productionClassCounts": { "$ref": "#/definitions/productionClassCounts" },
+        "targetClassCounts": { "$ref": "#/definitions/targetClassCounts" },
+        "accounting": { "$ref": "#/definitions/accounting" },
+        "recipeIdSetMatch": { "type": "boolean" },
+        "unattributedProductionOccurrences": { "$ref": "#/definitions/nonnegativeInteger" },
+        "populations": { "$ref": "#/definitions/populations" },
+        "identityPopulations": { "$ref": "#/definitions/identityPopulationCounts" },
+        "driftBreakdown": { "$ref": "#/definitions/driftBreakdown" },
+        "driftRecipeCount": { "$ref": "#/definitions/nonnegativeInteger" },
+        "largestDriftRecipes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/largestDriftRecipe" },
+          "maxItems": 10
+        },
+        "idConflictOccurrenceKeys": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/productionOccurrenceKey" },
+          "uniqueItems": true,
+          "description": "Non-exclusive index of occurrence keys classified as ID_CONFLICT_REVIEW_REQUIRED or carrying the secondary reviewReason ALTERNATE_IDENTITY_CONTENT_CONFLICT. The secondary reason does not replace the row's primary classification."
+        },
+        "baselineComparison": { "$ref": "#/definitions/baselineComparison" }
+      },
+      "required": [
+        "productionOccurrenceCount",
+        "targetOccurrenceCount",
+        "productionClassCounts",
+        "targetClassCounts",
+        "accounting",
+        "recipeIdSetMatch",
+        "unattributedProductionOccurrences",
+        "populations",
+        "identityPopulations",
+        "driftBreakdown",
+        "driftRecipeCount",
+        "largestDriftRecipes",
+        "idConflictOccurrenceKeys",
+        "baselineComparison"
+      ],
+      "additionalProperties": false
+    },
+    "authorityProof": {
+      "type": "object",
+      "properties": {
+        "canonicalTargetSha256": { "$ref": "#/definitions/sha256" },
+        "releaseManifestSha256": { "$ref": "#/definitions/sha256" },
+        "approvedBatchesSha256": { "$ref": "#/definitions/sha256" },
+        "canonicalRegistrySourceSha256": { "$ref": "#/definitions/sha256" },
+        "reconciliationSha256": { "$ref": "#/definitions/sha256" },
+        "releaseId": { "$ref": "#/definitions/catalogId" },
+        "runtimeFingerprint": { "$ref": "#/definitions/sha256" },
+        "reviewedBridgeCount": { "$ref": "#/definitions/nonnegativeInteger" }
+      },
+      "required": [
+        "canonicalTargetSha256",
+        "releaseManifestSha256",
+        "approvedBatchesSha256",
+        "canonicalRegistrySourceSha256",
+        "reconciliationSha256",
+        "releaseId",
+        "runtimeFingerprint",
+        "reviewedBridgeCount"
+      ],
+      "additionalProperties": false
+    },
+    "digests": {
+      "type": "object",
+      "properties": {
+        "occurrenceSha256": { "$ref": "#/definitions/sha256" },
+        "semanticSha256": { "$ref": "#/definitions/sha256" },
+        "classificationSha256": { "$ref": "#/definitions/sha256" }
+      },
+      "required": ["occurrenceSha256", "semanticSha256", "classificationSha256"],
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "mode": { "const": "OFFLINE_EVIDENCE_ONLY" },
+        "certification": { "const": "NOT_A_RELEASE_CERTIFICATION" },
+        "runtimePositionAuthority": { "const": false },
+        "repairAuthorized": { "const": false },
+        "t21gStatus": { "const": "T21G_NOT_READY" },
+        "captureEvidence": { "$ref": "#/definitions/captureEvidence" },
+        "authorityProof": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/authorityProof" }],
+          "description": "Null for pure classifier fixtures; populated only by the certified V1 authority loader in the CLI."
+        },
+        "production": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/productionEvidence" }
+        },
+        "target": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/targetEvidence" }
+        },
+        "recipes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/recipeClassSummary" }
+        },
+        "summary": { "$ref": "#/definitions/summary" },
+        "digests": { "$ref": "#/definitions/digests" }
+      },
+      "required": [
+        "schemaVersion",
+        "mode",
+        "certification",
+        "runtimePositionAuthority",
+        "repairAuthorized",
+        "t21gStatus",
+        "captureEvidence",
+        "authorityProof",
+        "production",
+        "target",
+        "recipes",
+        "summary",
+        "digests"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

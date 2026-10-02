@@ -1,3 +1,55 @@
+# PR #29 merge with main after T21R-C — 2026-10-02
+
+- [x] Merge `origin/main=5188184` (PR #35) into PR #29; resolve docs prepend conflicts by keeping both histories.
+- [ ] Operator (Actions write + production Environment) must still dispatch `Production D1 Read-Only Diagnostics` on current main if that receipt is still required. Keep 0039, restore, replay, and position invention STOPPED.
+
+---
+
+# T21R-C P1-only remediation — 2026-10-02 UTC
+
+- [x] Verify published reviewed head `32ab51d`, unchanged main and clean tracked
+  tree; preserve `.context/`. Repository `1385308553` / `vn-tako4/Tako-san`.
+- [x] Make exact tuple/membership satisfaction gates explicit; preserve balanced,
+  deficient and mixed duplicate semantics with A1–A3 tests.
+- [x] Prevent bridge rewrite of direct V1 IDs; B1–B3 tests preserve non-V1 bridges.
+- [x] T21R-C 57/57 and focused 73/73 PASS; lint/typecheck/local migration smoke/
+  build/syntax/formatting/diff PASS; old assertions retained.
+- [x] Required full single-worker suite PASS: 226 files / 4,963 tests; one
+  appended remediation checkpoint and normal push authorized for delta review.
+- [ ] Independent delta review; no self-approval, PR, merge or production preparation.
+
+Schema/taxonomy/authority/runtime/workflows/dependencies unchanged; production
+operations 0. `T21G_NOT_READY`; 0039/repair/deploy STOPPED.
+
+---
+
+# T21R-C protected row-level reconciliation evidence — 2026-10-02 UTC
+
+- [x] Verify repository `1385308553`, main/source `a828b6354e29d89268a3d11c874158eb5ecb997c`, run
+  `36943692146/1`, exact-main CI `36933387793`, four sanitized artifacts and hashes.
+- [x] Accept read-only aggregates for review; separately record admin-bypass
+  exception and actual approval history `skipped` by `vn-tako4`.
+- [x] Implement deterministic offline occurrence/multiset classification,
+  exact accounting, explicit unknown/review populations, per-recipe summaries,
+  drift/conflict evidence, private physical handles and no fuzzy/position authority.
+- [x] Close false-absence cases for mixed duplicates, incomplete captures and
+  alternate-ID conflicts; 51 focused T21R-C tests plus 16 regressions PASS.
+- [x] Closed JSON schema, real-source offline CLIs, syntax/formatting/Ajv,
+  lint/typecheck/local migration smoke/build/diff PASS; no dependencies upgraded.
+- [x] Design fixed SELECTs, independent counts, two-read non-atomic stability,
+  0038 ledger/main/normal-review guards, private artifact audience and T19/T20 risks.
+- [x] Final unchanged one-worker full suite PASS: 226 files / 4,957 tests.
+  Verified implementation checkpoint `ec24101`; two-worker timeout retained
+  in the report. No assertion or timeout was weakened.
+- [ ] Independent human review; governance/privacy/operator decision before any
+  additional read. No dispatch, push, PR, merge or production operation authorized.
+
+`T21RC_OFFLINE_DESIGN_READY`; `T21G_NOT_READY`; V1 remains authority.
+0039, repair and production deploy STOPPED. Local only; not pushed or PR-opened.
+Report: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
+---
+
 # PR #29 merge with main after PR #30 — 2026-09-30
 
 - [x] Merge `origin/main=df857a8` (PR #30) into PR #29; resolve docs prepend conflicts by keeping both histories.
@@ -2739,3 +2791,60 @@ rolling `qwen3.7-flash` alias is canary-only.
 - [ ] Push final documentation receipt and require its exact-head CI. Release
   gate remains expected-red; no 0040/final
   manifest/T20 enablement.
+
+---
+
+# T21R-B offline semantic snapshot — 2026-10-01
+
+- [x] Pin certified V1 target release/fingerprint and recompose approved batches.
+- [x] Build offline ingredient multiset comparator with strict bridge, malformed,
+  duplicate and position-unknown handling; 8/8 focused tests PASS.
+- [x] Validate against local 0038 replay: 500 recipes / 2,702 exact ingredient
+  tuples / zero unmatched; full controlled Vitest 4,898/4,898 PASS.
+- [ ] Review and integrate the comparator into a protected runner-local read
+  workflow with an explicit consistency/provenance receipt. Current five SELECTs
+  are not transactionally pinned; existing aggregate artifacts lack raw rows.
+- [ ] Obtain exact-main CI and production Environment approval before any new
+  read-only production dispatch. No dispatch or repair is authorized here.
+- [ ] T21G design remains blocked on individual row evidence, T20 impact,
+  bounded blast radius and isolated rehearsal; 0039/deploy stay stopped.
+
+Implementation checkpoint: `5dd9990` on
+`codex/t21rb-offline-semantic-snapshot`, based on T21R-A `6bcef891`.
+
+---
+
+# T21R-B protected diagnostic integration — 2026-10-02 JST
+
+- [x] Integrate the offline certified-V1 ingredient comparator into the existing
+  manual, production-Environment-gated read-only diagnostic workflow.
+- [x] Reobserve all five catalog SELECT results, require equal ordered result
+  arrays and three matching 0038-prefix ledgers; label only
+  `OBSERVED_STABLE_NON_ATOMIC`.
+- [x] Bind repository/D1/candidate/V1-manifest identity, prior diagnostic and
+  order-coverage evidence; upload allowlisted counts/flags only after the final
+  exact-main check. Raw rows and content digests are not uploaded.
+- [x] Fail closed on invalid raw optional bits, contradictory comparator flags,
+  incomplete captures, capture drift and inconsistent coverage. Focused 23/23,
+  first controlled full Vitest 4,906/4,906, lint, typecheck, migration smoke,
+  build and syntax checks PASS. Implementation checkpoint: `90569fa`.
+- [ ] Obtain independent review, protected merge and exact-main CI before an
+  operator-approved read-only production Environment dispatch. No dispatch in
+  this task and no V1-relative production count yet.
+- [ ] T21G remains blocked pending individual row evidence, T20 impact, bounded
+  blast radius and isolated rehearsal. 0039 and production deploy remain stopped.
+
+---
+
+# T21R-B protected integration merge — 2026-10-02 JST
+
+- [x] Publish and independently review PR #33 at exact head `0b28b48`;
+  hosted `validate` run `36931130799` SUCCESS.
+- [x] Merge through protected main as `483e054`; exact-main `validate` run
+  `36931887016` SUCCESS. See
+  `recipe-catalog/T21RB_PROTECTED_INTEGRATION_MERGE_RECEIPT.md`.
+- [ ] No production diagnostic dispatch yet. A separate operator decision must
+  select an exact current-main SHA and approve the manual read-only workflow.
+- [ ] Review sanitized V1 counts, unresolved rows and T20 impact before a
+  protected row-evidence path or T21G design. `T21G_NOT_READY`; repair, 0039
+  and production deploy remain stopped.

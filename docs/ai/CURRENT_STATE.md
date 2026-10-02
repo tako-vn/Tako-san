@@ -1,3 +1,71 @@
+# PR #29 merge with main after T21R-C — 2026-10-02
+
+Merged `origin/main=5188184` (PR #35 T21R-C) into `hoplite/koroneia-982c5213`. Conflicts were documentation prepends in CURRENT_STATE, TASK_BOARD, and HANDOFF; both histories are kept. No application or production change in this merge. PR #29 remains a historical STOP packet. Keep 0039, restore, and position writes STOPPED.
+
+---
+
+# T21R-C P1 remediation only — 2026-10-02 UTC
+
+**State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; local verification complete
+on `codex/t21rc-row-level-reconciliation`, reviewed parent `32ab51d35976e5174f73a544729f8bd7fd20e02c`,
+repository `1385308553` / `vn-tako4/Tako-san`.
+Exact tuple balance is an explicit satisfaction guard; direct V1 IDs cannot be
+rewritten by reconciliation. A1/A2 already failed closed before this delta;
+B1/B3's production-only/missing misclassification was reproduced and corrected.
+
+**Checks:** 57/57 T21R-C and 73/73 focused regressions PASS; lint, typecheck,
+local migration smoke, build, syntax, formatting and diff PASS. Full
+`pnpm exec vitest run --maxWorkers=1`: PASS, 226 files / 4,963 tests,
+678.21 seconds. Existing two-worker timeout
+and dependency advisories are not being changed or re-audited.
+
+**Boundary / next:** Only classifier/tests and necessary handoff/design docs;
+taxonomy/schema/authorities/runtime/workflows/migrations/dependencies unchanged.
+Production reads/writes/dispatches/approvals/restores/applies/deploys/repair: 0.
+One remediation checkpoint after the reviewed parent; normal push authorized
+for independent delta review. No independent approval, PR, merge or production
+dispatch preparation. `T21G_NOT_READY`; 0039/deploy/repair STOPPED.
+
+---
+
+# T21R-C protected row-level evidence — 2026-10-02 UTC
+
+**State:** `T21RC_OFFLINE_DESIGN_READY`. Offline classifier, closed evidence schema and protected-read design
+implemented on `codex/t21rc-row-level-reconciliation`, based on verified main
+`a828b6354e29d89268a3d11c874158eb5ecb997c` in repository `1385308553` (`vn-tako4/Tako-san`).
+V1 release `rel-bd00a4f53fcaeee4` remains the certified target; V2 is not release
+authority. Verified implementation checkpoint: `ec24101`
+(`ec24101bd906b820d3a6ac29dcc179dd62a1d3fa`); this handoff is a later documentation checkpoint.
+
+**Evidence:** Historical protected run `36943692146/1` succeeded: 500 recipes,
+6,720 occurrences, 26 exact, 1,793 same-ID drift, 20 ID conflicts, 6,694/2,676
+unmatched production/target, ledger 0038, zero order rows and 0/500 hydrated.
+Four sanitized artifacts and their exact GitHub digest metadata were verified.
+Approval history records `skipped` by `vn-tako4`; data remains acceptable for
+review with an admin-bypass governance exception, not normal reviewer approval.
+
+**Executed:** Focused Vitest 3 files / 67 tests (51 T21R-C + 16 existing)
+PASS; both real-source offline CLI smokes PASS on synthetic 500/2,702 data,
+zero approved bridges; Ajv schema/output checks, syntax, formatting, lint,
+typecheck, local in-memory migration smoke, build and diff check PASS.
+Full two-worker Vitest completed 226 files / 4,957 tests with one existing
+5-second certification-pipeline timeout (4,956 passed); final unchanged
+`pnpm exec vitest run --maxWorkers=1` PASS: 226 files / 4,957 tests,
+837.08 seconds. No timeout/assertion weakened. Dependency
+audit separately reports 33 existing advisories: 4 low, 17 moderate, 12 high,
+0 critical; no dependency/lockfile change.
+
+**Boundary / next:** No live T21R-C rows classified or new production read,
+mutation, SQL write, restore, migration/0039 apply, deploy, flag change, push,
+merge or PR. The required SQLite fixture tests are local only. `T21G_NOT_READY`;
+repair, 0039 and production deploy remain stopped. Normal required-reviewer
+approval is mandatory for any future mutation; bypass is forbidden. Independent
+human classifier/schema/query/privacy/stability review and separately approved
+restricted artifact delivery are needed before any separately authorized read.
+See `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
+---
+
 # PR #29 merge with main after PR #30 — 2026-09-30
 
 Merged `origin/main=df857a8` (PR #30 read-only V2 catalog lineage diagnostic) into `hoplite/koroneia-982c5213`. Conflicts were documentation prepends in CURRENT_STATE, TASK_BOARD, and HANDOFF; both histories are kept. No application, workflow, or production change in this merge. Next remains operator-approved Production D1 Read-Only Diagnostics. Keep 0039, restore, and position writes STOPPED.
@@ -4411,3 +4479,98 @@ Next: maintainer merges PR #8 normally, confirms exact-main CI, retargets
 PR #9 to main, certifies its exact-head CI/review and merges normally. Then
 verify staging identity/ledger with authorized credentials before a reviewed
 migration and paired flag-off/flag-on deploy sequence. Do not touch production.
+
+---
+
+# T21R-B offline semantic snapshot preparation — 2026-10-01
+
+Status: `T21RB_OFFLINE_TOOLING_READY`, not a production row classification.
+Branch `codex/t21rb-offline-semantic-snapshot` builds on the separate T21R-A
+certification commit `6bcef891` and has implementation checkpoint `5dd9990`.
+`scripts/t21rb-v1-offline.mjs` recomposes the approved V1 release, checks the
+committed release manifest/migration bytes and T21R-A target fingerprint, then
+compares a saved five-statement catalog read using
+`scripts/t21rb-v1-semantic.mjs`. It emits aggregate counts only and never calls
+D1. Exact tuples retain duplicate multiplicity; a strict reviewed ID bridge
+is identity evidence, not exact V1 runtime parity. Live physical positions
+remain without authority. The design is in
+`recipe-catalog/T21RB_OFFLINE_SEMANTIC_SNAPSHOT_DESIGN.md`.
+
+Offline SQLite replay through 0038 supplied 500 recipes, 2,702 ingredient
+lines and 2,064 steps; the CLI found 2,702 exact V1 ingredient tuples and no
+unmatched lines. This is local replay evidence only. Focused comparator tests
+8/8 and focused comparator plus staging Wrangler test 40/40 passed.
+`WRANGLER_SEND_METRICS=false pnpm check` passed typecheck/lint but failed one
+unrelated staging Wrangler startup test at its 5-second timeout (4,897/4,898
+Vitest); the focused rerun passed. A complete controlled rerun
+`WRANGLER_SEND_METRICS=false pnpm exec vitest run --maxWorkers=2` passed 224
+files / 4,898 tests. `pnpm check:migrations`, `pnpm build`, syntax and diff
+checks passed separately. The combined `pnpm check` is not claimed green.
+
+Existing uploaded production receipts lack raw rows and cannot produce a V1
+row classification. The five existing SELECTs are separate reads; a stable
+ledger cannot prove an atomic snapshot. A future protected read needs exact
+main CI, production Environment approval, account/D1 identity checks, content
+stability assessment and a separate sanitized receipt review. No production
+read, mutation, restore, migration, 0039 apply, flag change or deploy occurred.
+`T21G_NOT_READY`; repair remains unauthorized.
+
+---
+
+# T21R-B protected V1 diagnostic integration — 2026-10-02 JST
+
+Status: `T21RB_PROTECTED_INTEGRATION_PREPARED`; no live V1 row result. On
+`codex/t21rb-offline-semantic-snapshot`, implementation checkpoint `90569fa`
+wires the existing offline V1 ingredient comparator into the manual, protected
+Production D1 Read-Only Diagnostics workflow. The runner now observes the
+five-statement catalog read twice, checks all three migration ledgers against
+the reviewed 0038 prefix, binds the first read to the prior diagnostic and
+order-coverage receipt, and emits `production-t21rb-v1.json` only after the
+final exact-main check. Repository ID, production D1 ID, candidate SHA and V1
+manifest hash are explicit guards. Raw rows remain runner-local; the uploaded
+receipt contains allowlisted identity references, counts and flags, with no
+row digests. Invalid
+raw optional bits, contradictory comparison flags and coverage mismatch fail
+closed.
+
+This is `OBSERVED_STABLE_NON_ATOMIC` evidence. The separate SELECTs do not prove
+an atomic snapshot. The comparison certifies neither steps/metadata/nutrition
+nor physical line IDs or runtime positions. A V1 ingredient match is not a
+release certification or repair instruction. T21G remains `T21G_NOT_READY`;
+repair, 0039 and production deploy remain stopped.
+
+Verification: focused Vitest 3 files / 23 tests PASS; `pnpm lint` PASS;
+`pnpm typecheck` PASS; `pnpm check:migrations` PASS (`migration-smoke=ok`);
+`pnpm build` PASS; `node --check` on both changed scripts PASS. A full
+`pnpm exec vitest run --maxWorkers=2` completed 225 files / 4,906 tests PASS;
+a second run on the frozen implementation checkpoint also passed the same
+225 files and 4,906 tests. `git diff --check` PASS. An exploratory `node --test` invocation
+failed because these are Vitest files; the corrected Vitest command passed.
+An initial receipt fixture had a diagnostic database shape mismatch and was
+corrected before the final focused run.
+
+No production SQL, read dispatch, mutation, restore, migration, 0039 apply,
+flag change or deploy occurred. The next action is independent review, exact
+main CI after a protected merge, and a separately authorized production
+Environment read-only dispatch. Review only the sanitized receipt before any
+row-level evidence path or T21G design decision.
+
+---
+
+# T21R-B protected integration merge — 2026-10-02 JST
+
+PR #33 merged reviewed head `0b28b48e2fbd8f4892ddbf57ae9139d96addc0a3`
+into protected main as `483e054b8ad5e0391aaedfcaf65343ce95949562`.
+Exact-head CI `36931130799` and exact-main CI `36931887016` both passed
+`validate` (lint, typecheck, Vitest, local migration smoke, build). The manual
+read-only V1 diagnostic integration is now on main; no production diagnostic
+was dispatched. Full authority, CI and safety evidence is in
+`recipe-catalog/T21RB_PROTECTED_INTEGRATION_MERGE_RECEIPT.md`.
+
+Current status: `T21RB_PROTECTED_INTEGRATION_MERGED`, with no live V1-relative
+production counts. The two SELECT observations remain non-atomic evidence;
+receipt scope is recipe ID set and V1 ingredient tuples only. T21G remains
+`T21G_NOT_READY`, repair unauthorized, 0039 stopped and production deploy
+stopped. Next: separately authorize a manual production Environment read-only
+diagnostic at an exact current-main SHA, then inspect only the sanitized
+receipt before planning any row-level evidence path.
