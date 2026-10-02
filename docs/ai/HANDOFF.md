@@ -1,3 +1,85 @@
+# T21R-C P1-only remediation handoff — 2026-10-02 UTC
+
+**State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; mandatory local validation PASS.
+Branch `codex/t21rc-row-level-reconciliation`, repository `1385308553` /
+`vn-tako4/Tako-san`, reviewed head `32ab51d35976e5174f73a544729f8bd7fd20e02c`
+(implementation ancestor `ec24101`). One remediation checkpoint follows that
+head without rebase/merge/squash. Its own hash is not embedded in its handoff;
+verify the exact local/remote HEAD with Git. Existing `.context/` is preserved.
+
+**Implemented:** Explicit exact-tuple balance plus membership before satisfaction;
+direct V1 identity precedes bridge lookup, without general registry precedence
+or relaxed bridge predicates. Six new A1–A3/B1–B3 regressions; old tests intact.
+Pre-edit A cases already met fail-closed expectations; B1/B3 reproduced the
+wrong production-only/missing classes. No other implementation semantics changed.
+
+**Executed:** T21R-C 57/57 and regression set 73/73 PASS; lint/typecheck/local
+in-memory migration smoke/build/syntax/formatting/diff PASS. Full
+`pnpm exec vitest run --maxWorkers=1` PASS: 226 files / 4,963 tests,
+678.21 seconds. No timeout/assertion edited, failures encountered in required
+checks, two-worker retry, dependency re-audit or upgrade.
+
+**Production boundary / limits:** No production read/write, workflow dispatch,
+approval, restore, migration/0039 apply, deploy or repair. Schema/taxonomy/V1/V2/
+runtime/privacy unchanged. No live row receipt or independent approval exists.
+
+**Next:** Independently review the single normally published remediation delta
+from `32ab51d` to the exact verified local/remote HEAD. Normal push is authorized
+after these passing checks; no self-approval, PR, merge or production dispatch
+preparation; `T21G_NOT_READY`, repair/0039/deploy STOPPED.
+
+---
+
+# T21R-C protected row-level evidence handoff — 2026-10-02 UTC
+
+**State:** `T21RC_OFFLINE_DESIGN_READY`. Offline implementation/design completed on
+`codex/t21rc-row-level-reconciliation`; base/source main `a828b6354e29d89268a3d11c874158eb5ecb997c`,
+repository `1385308553` / `vn-tako4/Tako-san`. Verified implementation
+`ec24101` (`ec24101bd906b820d3a6ac29dcc179dd62a1d3fa`); this is a later documentation checkpoint,
+not a self-referential commit claim. Existing `.context/` remains untracked
+and untouched; no forensic workspace was reset.
+
+**Implemented:** Pure deterministic occurrence classifier, closed schema,
+shared byte-pinned V1 source loader (existing T21R-B CLI compatible), multiset
+accounting, per-recipe/drift/conflict/review evidence and protected-read/privacy
+design. Names/quantities/physical IDs stay local; no action class or repair SQL.
+Mixed multiplicity, incomplete capture and alternate-ID false absence corrected.
+V1 `rel-bd00a4f53fcaeee4` / 500 / 2,702 remains target; current approved bridges=0.
+
+**Executed:** Focused 3 files / 67 tests PASS (51 new + 16 existing), actual
+offline CLIs on synthetic certified-source 500/2,702 PASS, source proof/Ajv/
+syntax/formatting/lint/typecheck/local migration smoke/build/diff PASS.
+Two-worker full suite: 1 failed / 4,956 passed, 226 files; the unchanged existing
+certification query test hit 5 seconds. Final unchanged
+`pnpm exec vitest run --maxWorkers=1` PASS: 226 files / 4,957 tests in
+837.08 seconds, including both formerly timing-out CLI-heavy cases.
+Earlier 600-second attempt stopped with intermediate fixture/CLI timeouts;
+another was interrupted for the final review fix. No test timeout or assertion
+was relaxed. Dependency audit separately found 33 existing advisories (4 low,
+17 moderate, 12 high, 0 critical); lockfile unchanged.
+
+**Production boundary:** Historical source run `36943692146/1` is live diagnostic
+evidence, not a new dispatch here. Approval GET corroborates `skipped` by admin
+`vn-tako4`, not reviewer `vn-taphoanhatung`; data accepted with a governance
+exception. No live T21R-C row manifest exists. New production reads/mutations,
+operational SQL writes, restores, migrations/0039 applies, deploys and flags: 0.
+Required local SQLite tests use throwaway fixtures only. No workflow/application/
+PayOS/authentication/inventory/Week/T19/T20 code changed. No push, PR or merge.
+
+**Limits:** No actual per-row 1,793 drift/20 conflict breakdown, no atomic
+snapshot, physical position authority or stored-reference/nutrition certification.
+Public Actions artifacts are not private; row delivery needs explicit privacy
+approval. Fixed-query code is not proof of a read-only underlying token scope.
+
+**Next:** Independent human review of classifier, schema, query fields, workflow permissions,
+artifact audience and stability. A separately approved normal-reviewer read
+packet is required for any future dispatch. Never use admin bypass for T21G,
+migration or deployment. Keep `T21G_NOT_READY`, repair/0039/deploy STOPPED.
+Report/schema: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md` and
+`recipe-catalog/T21RC_ROW_RECONCILIATION_SCHEMA.json`.
+
+---
+
 # Production V2 existing_canonical_id review fail-closed handoff — 2026-09-30
 
 Final P1 on PR #30: `existing_canonical_id` fails closed if `review` is present. Reviewed-new contract, recipe-id gate, and forensic flags unchanged. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
