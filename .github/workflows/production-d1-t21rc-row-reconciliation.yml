@@ -1,0 +1,104 @@
+name: Production D1 T21R-C Row Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full immutable current-main SHA with successful exact-main push CI
+        type: string
+        required: true
+      reviewed_sha:
+        description: Full independently reviewed implementation SHA contained in current main
+        type: string
+        required: true
+      confirm_t21rc_read_only_capture:
+        description: Confirm separately authorized read-only capture; no repair or row delivery
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: frigo-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_t21rc_read_only_capture == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      candidate_sha: ${{ steps.gate.outputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require exact current main, reviewed ancestor and exact-main CI
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ inputs.ref }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          CONFIRM_T21RC_READ_ONLY_CAPTURE: ${{ inputs.confirm_t21rc_read_only_capture }}
+        run: node scripts/t21rc2-production-approval.mjs gate
+
+  capture:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      RELEASE_REF: ${{ needs.gate.outputs.candidate_sha }}
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      CONFIRM_T21RC_READ_ONLY_CAPTURE: ${{ inputs.confirm_t21rc_read_only_capture }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install pinned capture and schema tooling
+        run: pnpm install --frozen-lockfile
+      - name: Require normal independent production approval before credential use
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/t21rc2-production-approval.mjs approve
+      - name: Capture fixed SELECTs with identity, ledger, counts and stability guards
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: node scripts/t21rc2-production-capture.mjs capture
+      - name: Classify and validate runner-local evidence without credentials
+        run: node scripts/t21rc2-production-capture.mjs classify
+      - name: Reject main or approval changes before aggregate publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/t21rc2-production-approval.mjs recheck
+      - name: Generate allowlisted public-safe aggregate receipt
+        run: node scripts/t21rc2-production-receipt.mjs publish
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: production-t21rc2-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/t21rc2-public-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove private runner-local capture and manifest files
+        if: always()
+        run: node scripts/t21rc2-production-capture.mjs cleanup

@@ -1,5 +1,30 @@
 # Architecture Decisions
 
+## ADR-040 — T21R-C2 captures protected occurrence evidence and publishes aggregate-only receipts
+
+**Status:** Proposed 2026-10-02 for independent implementation review. Local
+code/tests and normal branch publication only; no production execution or delivery.
+
+**Context:** Merged T21R-C provides an offline classifier/schema, not an executable
+protected capture. T21R-B's documented admin-bypass aggregate evidence cannot
+authorize a more sensitive row read. Public Actions artifacts cannot safely carry
+the full row manifest even when names and physical IDs are pseudonymized.
+
+**Decision:** Add a dedicated manual-only workflow reusing hardened release/main/CI
+and certified V1 authority. Independently validate normal production approval
+before credential use; reject bypass, self-approval and unbound rerun history.
+Execute only four reviewed SELECTs with exact account/database, 0038 ledger,
+independent counts/rosters and two-read digest guards. Classify credential-free
+with the merged implementation/schema. Keep raw/full evidence outside checkout
+in restrictive runner-local files, and upload only an explicit aggregate receipt
+on success. Secure row delivery remains unconfigured and separately unauthorized.
+
+**Consequences:** A later separately authorized capture can establish only
+`OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
+runtime, migration, database, catalog, deployment or Environment policy changes.
+See `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md` for executable scope,
+privacy, delivery tradeoffs, exact checks and outstanding authorization.
+
 ## ADR-039 — Production V2 catalog lineage is a read-only semantic comparison, not position repair
 
 **Status:** Accepted 2026-09-30 for the additive diagnostic. No production mutation, migration, restore, deploy, recipe-authority change or T20 enablement is authorized.
