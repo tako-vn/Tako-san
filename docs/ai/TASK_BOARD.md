@@ -1,3 +1,10 @@
+# PR #29 merge with main after T21R-C — 2026-10-02
+
+- [x] Merge `origin/main=5188184` (PR #35) into PR #29; resolve docs prepend conflicts by keeping both histories.
+- [ ] Operator (Actions write + production Environment) must still dispatch `Production D1 Read-Only Diagnostics` on current main if that receipt is still required. Keep 0039, restore, replay, and position invention STOPPED.
+
+---
+
 # T21R-C P1-only remediation — 2026-10-02 UTC
 
 - [x] Verify published reviewed head `32ab51d`, unchanged main and clean tracked
@@ -43,6 +50,13 @@ Report: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
 
 ---
 
+# PR #29 merge with main after PR #30 — 2026-09-30
+
+- [x] Merge `origin/main=df857a8` (PR #30) into PR #29; resolve docs prepend conflicts by keeping both histories.
+- [ ] Operator (Actions write + production Environment) must still dispatch `Production D1 Read-Only Diagnostics` on current main. Keep 0039, restore, replay, and position invention STOPPED.
+
+---
+
 # Production V2 existing_canonical_id review fail-closed — 2026-09-30
 
 - [x] existing_canonical_id + any review (object or `{}`) has no bridge authority.
@@ -79,6 +93,20 @@ Report: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
 - [x] Cover exact match, 6720-style subset/missing, production-only, drift, duplicates, ambiguity, normalization, runtime quantity, recipe-id drift, malformed input, CLI privacy.
 - [ ] Obtain hosted PR CI and independent review; protected merge; new exact-main CI.
 - [ ] Dispatch Environment-approved read-only diagnostics on the new main SHA and inspect the V2 lineage artifact. Keep 0039 and repair STOPPED.
+
+---
+
+# Production catalog lineage investigation STOP — 2026-09-29
+
+- [x] Verify canonical repo `vn-tako4/Tako-san` (id 1385308553), `origin/main=252096cccf602d07d6e33067024c5df2d6ba8a3e`, exact-main CI `36640577701` SUCCESS.
+- [x] Confirm staging→main delta is diagnostics/docs/tests only (no application runtime surfaces).
+- [x] Refresh public production/staging `/api/v1/health/ready`: production still `CATALOG_DIAGNOSTICS` / static fallback; staging still D1 with no fallback.
+- [x] Confirm last protected D1 receipt `36577380500` (6720/0/0 hydrated) did not include PR #28 lineage comparison.
+- [x] Replay immutable 0038 locally: 500 recipes, 2702 lines, 2702 positions (lineage unit tests 15/15).
+- [x] Assess Content Refresh V2: 6766 canonical ≠ 6720 live; `productionReleaseReady=false`; `researchV2LineageProven=false`.
+- [x] Attempt required read-only diagnostic dispatch on current main: HTTP 403, no mutation.
+- [ ] Operator (Actions write + production Environment) must dispatch `Production D1 Read-Only Diagnostics` on main with `ref=252096cccf602d07d6e33067024c5df2d6ba8a3e`, `hardened_sha=136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, `confirm_read_only_diagnostics=true`.
+- [ ] Inspect the sanitized lineage artifact before any recovery design. Keep 0039, restore, replay, and position invention STOPPED.
 
 ---
 

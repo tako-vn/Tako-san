@@ -1,3 +1,9 @@
+# PR #29 merge with main after T21R-C — 2026-10-02
+
+PR #29 now includes merged main `5188184` (PR #35). Investigation STOP packet is preserved: last required diagnostic dispatch was HTTP 403; no production mutation from this PR. `FINAL_RELEASE_SHA=UNSET`.
+
+---
+
 # T21R-C P1-only remediation handoff — 2026-10-02 UTC
 
 **State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; mandatory local validation PASS.
@@ -80,6 +86,12 @@ Report/schema: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md` and
 
 ---
 
+# PR #29 merge with main after PR #30 — 2026-09-30
+
+PR #29 now includes merged main `df857a8` (PR #30). Investigation STOP packet is preserved: last required diagnostic dispatch was HTTP 403; no production mutation. Next: operator-approved read-only diagnostics on current main. `FINAL_RELEASE_SHA=UNSET`.
+
+---
+
 # Production V2 existing_canonical_id review fail-closed handoff — 2026-09-30
 
 Final P1 on PR #30: `existing_canonical_id` fails closed if `review` is present. Reviewed-new contract, recipe-id gate, and forensic flags unchanged. No production diagnostic, merge, 0039, restore, or deploy. Next: hosted CI on the new head, then independent approval.
@@ -103,6 +115,18 @@ PR #30 remediates forensic overclaims on the additive read-only V2 diagnostic. I
 Main `252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) remains current; exact-main CI `36640577701` SUCCESS. Protected run `36653466481` confirmed production D1 `frigo-db` ledger 38/0038, 6720 ingredient rows, zero positions, 0/500 hydrated, and complete V1 line-ID mismatch. This documentation checkpoint follows the additive V2 diagnostic implementation. No production mutation, migration, restore or deploy. `FINAL_RELEASE_SHA=UNSET`.
 
 Next: review/merge this PR, require new exact-main CI, then dispatch `Production D1 Read-Only Diagnostics` with production Environment approval. Use `production-catalog-v2-lineage-<run>-<attempt>` only as forensic evidence. Do not grant position writes from tooling alone. See `recipe-catalog/PRODUCTION_CATALOG_V2_LINEAGE_DIAGNOSTIC.md`.
+
+---
+
+# Production catalog lineage investigation handoff — 2026-09-29
+
+Main `252096cccf602d07d6e33067024c5df2d6ba8a3e` (PR #28) passed exact-main CI `36640577701`. No application runtime delta vs certified staging `8072e0fea9f8f3588426969007dda06cadbbfbb7`. Fresh public production readiness: Worker `136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, D1/0/cutover true, global static, `CATALOG_DIAGNOSTICS`. Staging public readiness: Worker `8072e0fea9f8f3588426969007dda06cadbbfbb7`, global D1, fallback null, 500 recipes.
+
+First required action failed: `gh workflow run "Production D1 Read-Only Diagnostics"` returned HTTP 403 `Resource not accessible by integration`. Cloudflare tokens MISSING locally. Last production D1 counts remain run `36577380500` on `d0c670289534c33187181b2eb7192c05a2962e22` (6720 ingredient rows, 0 order rows, 0/500 hydrated) without a lineage artifact. Local 0038 source is 2702/2702. V2 canonical is 6766 lines and not release-ready. Do not treat 6720 as V1 or V2.
+
+`FINAL_STATUS=PRODUCTION_DIAGNOSTIC_FAILED`. Lineage `CATALOG_LINEAGE_UNRESOLVED`. `researchV2LineageProven=false`. `positionAuthority=NONE`. Recovery design not possible. `production_mutations=[]`. Do not apply 0039. PR #20 is obsolete.
+
+Next: a human with Actions write and production Environment approval dispatches the read-only diagnostic on exact current main using `ref=252096cccf602d07d6e33067024c5df2d6ba8a3e`, `hardened_sha=136cb6ff3d2921eac237c7b106b37ab5ee12a13f`, `confirm_read_only_diagnostics=true`, then reviews `production-catalog-lineage-<run>-<attempt>`. See `recipe-catalog/PRODUCTION_CATALOG_LINEAGE_INVESTIGATION.md`. `FINAL_RELEASE_SHA=UNSET`.
 
 ---
 
