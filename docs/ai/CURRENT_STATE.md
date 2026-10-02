@@ -1,3 +1,120 @@
+# T21R-C2 PR #36 CI-history remediation — 2026-10-02 UTC
+
+**State:** Local CI-history correction on the same C2 branch; renewed exact-head
+independent review required. Repository `1385308553` / `vn-tako4/Tako-san`,
+PR #36 OPEN/unmerged; pre-remediation head `3e1bb60b7afa9706fca6bfed41252bfd4d421cdd`,
+base main `518818458a354c5e180da52ae9bb73c9d3c1af78`. One narrow normal-push
+checkpoint after that head; no rebase/force push/merge.
+
+**Diagnosis / change:** Failed hosted run `37002486858` / job `110823126447`
+used checkout depth 1 and synthetic PR merge `db7728d0203089e8f35897f2fff2f2e35437e026`.
+Historical reviewed/main Git object was unavailable to capture-suite setup,
+surfacing the safe `T21RC2_LEDGER_CHANGED`. Full local history proves the 39-file
+repository contract and exact first 38 live-ledger names unchanged. Offline
+depth-1 clone reproduces the missing-object failure. CI checkout now uses
+`fetch-depth: 0`; one static workflow regression requires it. No ledger/count/
+tip/name guard, capture/classifier/production workflow/configuration, version,
+timeout/assertion or 73-entry review-bound list change.
+
+**Executed:** C2 4 files / 229 tests PASS (capture 70, approval 143, receipt 8,
+workflow 8); requested focused regressions 8 files / 538 PASS. Lint/typecheck/
+local SQLite migration smoke/build PASS. Full single-worker result and exact
+commands are recorded in the scoped report: 230 files / 5,192 PASS, 701.72 seconds.
+Hosted-success evidence is not
+available at this pre-publication checkpoint; check the automatically triggered
+new PR run on the exact new head, not an old-head rerun.
+
+**Boundary / next:** CI workflow bytes are review-bound, so the old head's
+independent approval is not current for this delta. After local gates pass,
+normal push, verify new-head hosted ESLint/typecheck/Vitest/migration smoke/build;
+stop if that run fails. Final per-head evidence lives with PR checks and ignored
+`.hoplite/artifacts/t21rc2-pr36-ci/`. Obtain independent delta review and renewed
+PR approval before merge. No production dispatch/approval/Cloudflare/read/write/
+restore/migration/0039 apply/deploy. `T21G_NOT_READY`, repair NOT_AUTHORIZED,
+0039/deploy STOPPED, row delivery UNCONFIGURED / DELIVERY_NOT_AUTHORIZED.
+Report: `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# T21R-C2 review-binding remediation only — 2026-10-02 UTC
+
+**State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`; not independently re-approved
+or production-ready. Repository `1385308553` / `vn-tako4/Tako-san`, same branch
+`codex/t21rc2-protected-production-row-read`, reviewed parent
+`8d8028f3e3358655b19fa2dd02ba883e57c52204`, prior implementation `ad7b3012`;
+base main `518818458a354c5e180da52ae9bb73c9d3c1af78`. One logical remediation
+checkpoint follows the reviewed parent; no rebase, squash or force push.
+
+**Changed:** P1 adds immutable 73-entry execution-closure byte equality to the
+existing ancestry gate, rejects `reviewed_sha=ref`, and repeats binding through
+capture reauthorization and final recheck. Actual local Vite/import/source tracing
+documents the added dependency paths; configs absent at review remain bound
+against later introduction. P2 adds success fields `queryPathSelectOnly=true` /
+`tokenScopeReadOnlyProven=false`; failure receipts do not claim completed query
+attestation. Workflow, classifier/schema/target, capture, T19/T20 and privacy unchanged.
+
+**Executed:** Requested focused `--maxWorkers=1` command PASS, 8 files / 537
+tests: C2 228 (approval 143, capture 70, receipt 8, workflow 7), T21R-C 57,
+T21R-B 16 and release-check 236. Full `pnpm exec vitest run --maxWorkers=1`
+PASS, 230 files / 5,191 tests, 608.00 seconds. `pnpm lint`, `pnpm typecheck`,
+`pnpm check:migrations`, `pnpm build`, modified script syntax and diff checks PASS.
+All A–L and gate/pre-credential/final binding regressions use real temporary Git
+objects plus mocked API responses. Initial helper-import/scope test errors fixed;
+no assertion/timeout weakened. Scoped agent review passed 151 approval/receipt
+tests with no material finding; not human approval of the full closure/delta.
+
+**Boundary / next:** Production dispatch/read/Cloudflare call/mutation/approval/
+SQL write/restore/migration/0039 apply/deploy: 0; local SQLite fixtures only.
+No secrets used, PR, merge, delivery/storage/configuration or dependency change.
+Normal push of this one tested delta is authorized; verify exact local/provider
+HEAD and seek independent delta review from `8d8028f3` before opening any PR.
+`ROW_LEVEL_DELIVERY=UNCONFIGURED`, `T21G_NOT_READY`; repair NOT_AUTHORIZED,
+0039/deploy STOPPED. Exact path list, reasons, checks, failures and next action:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# T21R-C2 executable protected row-read — 2026-10-02 UTC
+
+**State:** `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`. Correct branch
+`codex/t21rc2-protected-production-row-read` starts exactly at certified main
+`518818458a354c5e180da52ae9bb73c9d3c1af78` in repository `1385308553` /
+`vn-tako4/Tako-san`; base exact-main push CI `36972970904` SUCCESS. Wrong-direction
+local `9542e112` remains only on the old branch and is not C2 ancestry.
+Verified executable checkpoint `ad7b3012` (`ad7b3012fc13c53948cdf7cbac4362df2662dee5`)
+was normally pushed; GitHub branch HEAD equaled local implementation HEAD.
+No PR/merge. This handoff follows that implementation checkpoint.
+
+**Implemented:** Dedicated manual workflow; full-SHA/current-main/reviewed-ancestor/
+exact-push-CI guards; API-shaped independent normal approval, skipped/bypass/self
+rejection and fresh remote-main rechecks; pinned account/database/config; four
+fixed SELECTs; exact 0038 ledger, independent counts/certified rosters and two-read
+non-atomic digest stability. Reuse merged classifier/schema credential-free;
+restrictive runner-temp raw/full evidence, private Wrangler logs, redacted failure
+codes and aggregate-only success artifact. Row delivery `UNCONFIGURED`.
+
+**Executed:** Focused C2 + T21R-C/B + release-check command (`--maxWorkers=1`)
+PASS, 8 files / 455 tests: new C2 146 (approval 62, capture/privacy 70, receipt 7,
+workflow 7), predecessor 73, release-check 236. Full
+`pnpm exec vitest run --maxWorkers=1` PASS, 230 files / 5,109 tests, 525.17 seconds.
+`pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, all C2 script
+syntax and working/staged diff checks PASS. Initial fixture/integration failures
+and the unchanged 5-second synthetic setup timeout are recorded in the report;
+source fixture moved to `beforeAll`, no timeout/assertion weakened. Independent
+agent review found no material defect; not human/Environment authorization.
+
+**Boundary / next:** No production read/Cloudflare call/dispatch/approval/mutation/
+SQL write/restore/migration/0039 apply/deploy. SQLite smoke is local throwaway
+fixtures. T19/T20/runtime/legacy classifier/schema/workflows/migrations/dependencies
+unchanged except the new dedicated C2 workflow. No hosted C2-head CI or live
+receipt exists; no delivery/storage/settings provisioned. Independent review of
+the published executable implementation before any production authorization.
+`T21G_NOT_READY`; repair NOT_AUTHORIZED; 0039/deploy STOPPED.
+Exact commands, failure history and delivery options:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C P1 remediation only — 2026-10-02 UTC
 
 **State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; local verification complete

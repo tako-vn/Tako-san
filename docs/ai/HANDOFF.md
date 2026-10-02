@@ -1,3 +1,134 @@
+# T21R-C2 PR #36 CI-history remediation handoff — 2026-10-02 UTC
+
+**State:** Narrow local Git-history environment correction; not new independent
+approval, merge readiness or production authorization. Same C2 branch, PR #36
+OPEN/unmerged, repository `1385308553` / `vn-tako4/Tako-san`; verified reviewed
+pre-fix head `3e1bb60b7afa9706fca6bfed41252bfd4d421cdd` and base main
+`518818458a354c5e180da52ae9bb73c9d3c1af78`. This checkpoint cannot embed its own hash
+or future hosted run ID; final exact-head results are retained in PR checks and
+`.hoplite/artifacts/t21rc2-pr36-ci/`.
+
+**Implemented:** CI checkout now `fetch-depth: 0`, plus one regression in the
+existing C2 static workflow suite requiring historical Git objects. Hosted old
+run `37002486858` / job `110823126447` had depth 1 and fetched only synthetic
+merge `db7728d0203089e8f35897f2fff2f2e35437e026`. Offline shallow fixture reproduces
+missing certified-main object -> `T21RC2_LEDGER_CHANGED`; full-history helper
+still yields exact first 38 of 39 repository names through 0038. No actual ledger
+drift, guard relaxation, authority substitution or unit-test network call.
+
+**Executed:** C2 command PASS, 4 files / 229 tests; focused C2/T21R-C/B/release
+command PASS, 8 files / 538. `pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`,
+`pnpm build` PASS. Full single-worker 230 files / 5,192 PASS, 701.72 seconds.
+Exact commands and syntax/diff checks are
+in `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`. Initial direct-path
+shallow clone ignored depth/failed hardlink; corrected offline file-transport
+clone proved diagnosis and was removed. No timeout/assertion changes.
+
+**Production boundary / limits:** No production dispatch/Environment approval/
+Cloudflare call/D1 read/mutation/restore/migration/0039 apply/deploy. Local smoke
+fixtures only. No production workflow, versions, config, classifier/schema/target,
+73-entry closure or ledger policy change. Old independent review of `3e1bb60b`
+does not authorize new CI bytes. Delivery UNCONFIGURED / DELIVERY_NOT_AUTHORIZED;
+T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+
+**Next:** Normal push of one narrow commit, inspect automatically triggered PR36
+CI at its exact new head, require all five hosted gates PASS; if it fails, stop
+INCOMPLETE with run/job/failure. Then independent delta review from `3e1bb60b`
+and renewed approval before merge. Do not close/create another PR or dispatch.
+PR auto-fix subscription is enabled; this packet's no-fix-piling stop remains.
+
+---
+
+# T21R-C2 review-binding remediation handoff — 2026-10-02 UTC
+
+**State:** `T21RC2_REMEDIATION_READY_FOR_REVIEW`, not re-approved or production-ready.
+Repository `1385308553` / `vn-tako4/Tako-san`; same
+`codex/t21rc2-protected-production-row-read`, reviewed parent
+`8d8028f3e3358655b19fa2dd02ba883e57c52204`, verified prior implementation
+`ad7b3012`, certified base main `518818458a354c5e180da52ae9bb73c9d3c1af78`.
+One logical remediation commit follows that reviewed head without rebase/squash;
+its own hash is resolved by final Git/provider verification, not embedded here.
+
+**Implemented:** P1 binds the current ref's 73-entry security/execution closure
+to the exact reviewed implementation bytes in addition to preserved ancestry/
+main/CI/normal approval guards, rejects equal SHAs, and gates candidate output,
+pre-Cloudflare capture and final publication recheck. Full dependency tracing and
+optional auto-config absence/addition semantics are documented. P2 success
+receipt: `queryPathSelectOnly=true`, `tokenScopeReadOnlyProven=false`; no token
+introspection or override. Failure omits both because path attestation can fail
+before execution. No workflow/capture/classifier/schema/target/runtime redesign.
+
+**Executed:** `pnpm exec vitest run tests/unit/t21rc2-*.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/release-check.test.mjs --maxWorkers=1`
+PASS, 8 files / 537 tests (C2 228, T21R-C/B 73, release 236).
+`pnpm exec vitest run --maxWorkers=1` PASS, 230 files / 5,191, 608.00 seconds.
+`pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, script
+syntax, diff and protected-path checks PASS. Real temporary Git A–L/binding/
+addition regressions and API mocks only. Initial test-helper import/scope errors
+were fixed; no timeout/assertion weakened. Bounded agent review found no material
+issue in guard/P2 logic and passed 151 tests; it did not re-audit the full closure.
+
+**Production boundary / limits:** Zero production read/Cloudflare call/dispatch/
+mutation/SQL write/Environment approval/restore/migration/0039 apply/deploy; no
+production secrets, PR or merge. SQLite smoke writes throwaway local fixtures
+only. Approval history, fixed SELECTs, two-read stability, row privacy and no
+row-manifest upload remain unchanged. Row delivery `UNCONFIGURED` /
+`DELIVERY_NOT_AUTHORIZED`. No human re-approval or hosted delta-head CI is claimed.
+
+**Next:** Normally publish exactly one logical remediation commit after the
+reviewed head, verify remote/local equality, then stop for independent delta
+review from `8d8028f3` to that published HEAD **before opening any PR**. No
+production authorization or delivery configuration. `T21G_NOT_READY`, repair
+NOT_AUTHORIZED, 0039/deploy STOPPED. Closure/checks/failures:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# T21R-C2 executable protected row-read handoff — 2026-10-02 UTC
+
+**State:** `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`, not production-ready.
+Repository `1385308553` / `vn-tako4/Tako-san`; correct branch
+`codex/t21rc2-protected-production-row-read`, exact base/start
+`518818458a354c5e180da52ae9bb73c9d3c1af78`, exact-main CI `36972970904` SUCCESS.
+Verified executable implementation `ad7b3012` (`ad7b3012fc13c53948cdf7cbac4362df2662dee5`)
+normally pushed; provider HEAD equaled local implementation. Old wrong-direction
+`9542e112` preserved on its old local branch, excluded from C2 and never pushed.
+This handoff is a later documentation checkpoint, not its own hash claim.
+
+**Implemented:** Dispatch-only C2 workflow and four scripts for hardened main/CI/
+ancestry and normal independent approval, exact account/database/config identity,
+fixed SELECT execution, complete ledger/count/roster/two-read capture, credential-free
+original classifier/schema, private runner-temp files/logs and aggregate-only
+success receipt. Skipped/admin-bypass/self approvals and unbound reruns fail.
+Actual approval API shape is tested; current bypass availability is not bypass
+use. Fresh main is queried before credential use and final aggregate publication.
+Row delivery remains `UNCONFIGURED` / `DELIVERY_NOT_AUTHORIZED`; no storage built.
+
+**Executed:** `pnpm exec vitest run tests/unit/t21rc2-*.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/release-check.test.mjs --maxWorkers=1`
+PASS, 8 files / 455 tests (C2 146, T21R-C/B 73, release 236).
+`pnpm exec vitest run --maxWorkers=1` PASS, 230 files / 5,109, 525.17 seconds.
+`pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, C2 syntax,
+working/staged diff and protected-path reviews PASS. Initial fixture/module
+integration failures and synthetic 5-second setup timeout are recorded, not hidden;
+fixture preparation moved to `beforeAll`, assertions/timeouts unchanged. Independent
+agent review found no material defect. Exact logs/checks are in the report.
+
+**Production boundary / limits:** No production read, Cloudflare production call,
+dispatch, Environment approval, mutation, operational SQL write, restore,
+migration/0039 apply, deploy or flags; no PR/merge. Local SQLite tests use
+throwaway fixtures, including their existing schema replay. No T19/T20/household/
+inventory/Week, original classifier/schema, dependency or existing workflow change.
+No live row receipt, hosted C2-head CI or human approval; normal code publication
+does not authorize production. Raw/full manifests are never Actions artifacts.
+Same observed A/B permits only `OBSERVED_STABLE_NON_ATOMIC`, not atomicity.
+
+**Next:** Independent review of the actual published C2 executable workflow,
+approval, query, schema binding, privacy/failure path and receipt before any
+production authorization. Do not dispatch or configure row delivery in this task.
+Keep `T21G_NOT_READY`, repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+Report: `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C P1-only remediation handoff — 2026-10-02 UTC
 
 **State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; mandatory local validation PASS.

@@ -1,3 +1,83 @@
+# T21R-C2 PR #36 hosted CI-history correction — 2026-10-02 UTC
+
+- [x] Verify PR36 OPEN, head `3e1bb60b`, failed run `37002486858` / job
+  `110823126447`; actual checkout `fetch-depth: 1`, fetched synthetic merge
+  `db7728d0203089e8f35897f2fff2f2e35437e026`, failure `T21RC2_LEDGER_CHANGED` in setup.
+- [x] Resolve certified-main 0038 blob and exact 39 repository migrations;
+  existing helper returns the exact first 38 production names. No ledger drift.
+- [x] Reproduce missing historical-object error in an offline throwaway shallow
+  clone; full-history helper succeeds. No tests fetch Git or substitute authority.
+- [x] CI checkout full history and static regression; other CI/runtime/production
+  guards/versions and 73-entry review-bound closure unchanged.
+- [x] C2 229 and focused 538 PASS; lint/types/local migration smoke/build PASS.
+  Full single-worker 230 files / 5,192 PASS (701.72 seconds), syntax/diff PASS.
+  Exact command list and limitations are in the scoped report.
+
+**Publication/review handoff:** One narrow normal-push commit after `3e1bb60b`,
+not a history rewrite. Confirm new-head hosted PR CI via the actual provider
+run/job; if it fails, stop and report INCOMPLETE, do not expand fixes. Prior review
+is invalidated by the bound CI change; independent delta review/renewed PR
+approval required. No merge or production/Cloudflare/approval/apply/deploy;
+`T21G_NOT_READY`, repair NOT_AUTHORIZED, 0039/deploy STOPPED, delivery UNCONFIGURED.
+Report: `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# T21R-C2 review-binding remediation — 2026-10-02 UTC
+
+- [x] Verify reviewed local/remote head `8d8028f3`, base main `51881845`, clean
+  same branch `codex/t21rc2-protected-production-row-read`; no history rewrite.
+- [x] Trace direct imports, Vite SSR evaluation, canonical sources/configs and
+  ledger reads; bind 73 explicit path entries without shrinking the proposed 14.
+- [x] Gate requires reviewed ancestry plus byte-equivalent closure and distinct
+  SHAs; capture independent authorization and final recheck enforce the same guard.
+- [x] Real-Git merge/docs-only pass; all bound changes fail. A–L plus missing
+  required file, auto-config addition, migration addition and execution-point tests PASS.
+- [x] Success receipt explicitly distinguishes fixed SELECT path from unknown
+  token permissions; input cannot override fields. Failure/privacy unchanged.
+- [x] Focused 537/537, C2 228/228, full 230 files / 5,191 PASS; lint/typecheck/
+  local migration smoke/build/syntax/diff PASS. Initial new-test helper errors fixed,
+  no timeout/assertion reduced. Scoped agent review found no material delta issue.
+- [ ] Independently review the one normally published remediation commit after
+  `8d8028f3`; no self-approval, PR opening, merge or production preparation.
+
+`T21RC2_REMEDIATION_READY_FOR_REVIEW`; normal push authorized after final checks,
+not independent review approval. No production/Cloudflare/approval/apply/deploy
+operations or workflow/classifier/T19/T20 changes. Delivery `UNCONFIGURED`,
+`T21G_NOT_READY`; repair/0039/deploy STOPPED. Full bound list/check evidence:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# T21R-C2 protected production row-read implementation — 2026-10-02 UTC
+
+- [x] Start `codex/t21rc2-protected-production-row-read` exactly at certified
+  `518818458a354c5e180da52ae9bb73c9d3c1af78`; repository `1385308553` / `vn-tako4/Tako-san`,
+  exact-main CI `36972970904` SUCCESS. Exclude and preserve old local `9542e112`.
+- [x] Implement dispatch-only workflow, minimal permissions, production
+  Environment, hardened full-SHA/current-main/ancestor/CI gate and fresh main checks.
+- [x] Normal reviewer `vn-taphoanhatung`; reject skipped/bypass/wrong/self
+  approval and reruns. Use real GitHub API record shape, not invented approval IDs.
+- [x] Pin account/database/config; fixed SELECT executable guard; exact reviewed
+  38-name ledger, four counts, two certified rosters and two-read non-atomic digest.
+- [x] Reuse original classifier/schema; private runner-temp capture/manifest/logs,
+  restrictive modes, safe errors/failure receipt and exact success-only aggregate upload.
+- [x] C2 146/146, combined focused 455/455 and full 230 files / 5,109 PASS;
+  lint/typecheck/local migration smoke/build/syntax/diff PASS. Failure resolutions
+  retain assertions/timeouts; independent agent review found no material defect.
+- [x] Normally publish executable checkpoint `ad7b3012`; provider/local SHA
+  equality verified, main unchanged. Completion docs follow; no force push or PR.
+- [ ] Independent human implementation/query/privacy/approval/stability review.
+- [ ] Any separately authorized production read, normal Environment approval,
+  live evidence receipt or secure row delivery. None authorized/executed here.
+
+`T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`; no production/Cloudflare operations,
+no T19/T20/0039/runtime/dependency edits, no merge. `ROW_LEVEL_DELIVERY=UNCONFIGURED`,
+`T21G_NOT_READY`, repair/0039/deploy STOPPED. Exact checks/failures/options:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C P1-only remediation — 2026-10-02 UTC
 
 - [x] Verify published reviewed head `32ab51d`, unchanged main and clean tracked

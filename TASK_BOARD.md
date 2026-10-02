@@ -1,3 +1,64 @@
+# Current — T21R-C2 PR #36 hosted CI-history remediation (2026-10-02 UTC)
+
+Same branch/PR36, verified pre-fix head `3e1bb60b`. Actual old run `37002486858`
+/ job `110823126447` used depth-1 synthetic-merge checkout; missing historical
+Git object caused capture test setup `T21RC2_LEDGER_CHANGED`. Offline reproduction
+confirms it; full local history meets the unchanged 39-repository/38-production
+ledger contract. CI now `fetch-depth: 0` with a static regression, no guard,
+version, production workflow or bound-path-list changes.
+
+C2 229 / focused 538 / full 230 files, 5,192 PASS; lint/typecheck/local migration
+smoke/build/syntax/diff PASS. Exact commands are in the scoped report. One narrow
+normal push authorized, then verify the new exact-head hosted run; stop if it
+fails. Bound CI change invalidates the old review: independent delta review and
+renewed PR approval required before merge. No production/Cloudflare/approval/
+apply/deploy, T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+Report: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# Current — T21R-C2 review-binding remediation only (2026-10-02 UTC)
+
+**Status: `T21RC2_REMEDIATION_READY_FOR_REVIEW`.** Same published C2 branch,
+reviewed parent `8d8028f3`, repository `1385308553` / `vn-tako4/Tako-san`.
+P1 adds ancestry + exact reviewed byte closure (73 paths), rejects reviewed SHA
+equal to ref, and rechecks before capture credentials/final publication. P2
+receipt clarifies SELECT-only execution versus unproven token permissions.
+Workflow/classifier/schema/target/capture/T19/T20/runtime unchanged.
+
+Focused PASS: 537 tests, C2 228; full single-worker PASS: 230 files / 5,191.
+Lint/typecheck/local migration smoke/build/syntax/diff PASS. Real-Git A–L and
+all 73 bound changes tested; no timeout/assertion weakened. No production,
+Cloudflare, approval, apply, restore or deploy; no PR/merge/delivery configuration.
+Normal push of one tested remediation commit is authorized, then independent
+delta review before opening any PR. `T21G_NOT_READY`; repair NOT_AUTHORIZED,
+0039/deploy STOPPED; delivery `UNCONFIGURED`.
+Exact closure/rationale/failures: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
+# Current — T21R-C2 executable protected row-read (2026-10-02 UTC)
+
+**Status: `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`.** Correct branch
+`codex/t21rc2-protected-production-row-read`, certified base
+`518818458a354c5e180da52ae9bb73c9d3c1af78`, repository `1385308553` / `vn-tako4/Tako-san`.
+Actual dispatch-only workflow/four scripts/four suites implemented; existing
+classifier/schema and T19/T20 untouched. Verified executable checkpoint `ad7b3012`
+normally published with exact local/provider equality; no PR or merge.
+Old local `9542e112` is preserved and excluded, not C2 implementation or ancestry.
+
+Focused PASS: 8 files / 455 tests (C2 146, predecessor 73, release-check 236).
+Full `pnpm exec vitest run --maxWorkers=1` PASS: 230 files / 5,109 tests.
+Lint/typecheck/local migration smoke/build/syntax/diff PASS; independent agent
+review found no material defect. Initial setup/integration failures are recorded;
+no timeout/assertion weakened. Production/Cloudflare calls/dispatches/approvals/
+mutations/applies/restores/deploys: 0. Row delivery `UNCONFIGURED`.
+Next: independent review of the actual executable implementation before any
+production authorization. `T21G_NOT_READY`; repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+Exact checks/options/failures: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # Current — T21R-C P1-only remediation (2026-10-02 UTC)
 
 Reviewed parent `32ab51d`, branch `codex/t21rc-row-level-reconciliation`;

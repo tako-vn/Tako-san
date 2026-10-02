@@ -1,5 +1,43 @@
 # Architecture Decisions
 
+## ADR-040 — T21R-C2 captures protected occurrence evidence and publishes aggregate-only receipts
+
+**Status:** Proposed 2026-10-02 for independent implementation review. Local
+code/tests and normal branch publication only; no production execution or delivery.
+
+**Context:** Merged T21R-C provides an offline classifier/schema, not an executable
+protected capture. T21R-B's documented admin-bypass aggregate evidence cannot
+authorize a more sensitive row read. Public Actions artifacts cannot safely carry
+the full row manifest even when names and physical IDs are pseudonymized.
+
+**Decision:** Add a dedicated manual-only workflow reusing hardened release/main/CI
+and certified V1 authority. Independently validate normal production approval
+before credential use; reject bypass, self-approval and unbound rerun history.
+Execute only four reviewed SELECTs with exact account/database, 0038 ledger,
+independent counts/rosters and two-read digest guards. Classify credential-free
+with the merged implementation/schema. Keep raw/full evidence outside checkout
+in restrictive runner-local files, and upload only an explicit aggregate receipt
+on success. Secure row delivery remains unconfigured and separately unauthorized.
+
+**Review-binding remediation:** The reviewed feature SHA must differ from the
+dispatch main SHA, remain its ancestor, and have byte-identical security/execution
+closure at gate, capture reauthorization and final recheck. Unrelated main
+advancement is allowed only outside that traced closure and with current exact-main
+CI. The success receipt distinguishes SELECT-only code from unproven credential
+scope (`queryPathSelectOnly=true`, `tokenScopeReadOnlyProven=false`); failure does
+not claim completed path attestation. This additive hardening changes no workflow,
+classifier, target, production permission or row-delivery policy.
+
+**Hosted CI environment:** PR36's depth-1 checkout omitted historical authority
+objects needed by ledger tests. CI must provide full Git history; preserve exact
+ledger semantics. Changing this review-bound CI file requires renewed review.
+
+**Consequences:** A later separately authorized capture can establish only
+`OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
+runtime, migration, database, catalog, deployment or Environment policy changes.
+See `recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md` for executable scope,
+privacy, delivery tradeoffs, exact checks and outstanding authorization.
+
 ## ADR-039 — Production V2 catalog lineage is a read-only semantic comparison, not position repair
 
 **Status:** Accepted 2026-09-30 for the additive diagnostic. No production mutation, migration, restore, deploy, recipe-authority change or T20 enablement is authorized.
