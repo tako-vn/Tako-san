@@ -1,8 +1,48 @@
 # T21R-C — Protected row-level reconciliation evidence
 
-Status: `T21RC_OFFLINE_DESIGN_READY`. This is an offline evidence contract,
+Status: `T21RC_REMEDIATION_READY_FOR_REVIEW`. This is an offline evidence contract,
 not repair, a release certification, or authorization for another production read.
 `T21G_NOT_READY`; repair, 0039 and production deployment remain stopped.
+
+## P1 remediation delta — 2026-10-02 UTC
+
+Reviewed head: `32ab51d35976e5174f73a544729f8bd7fd20e02c`; repository
+`1385308553` / `vn-tako4/Tako-san`. Only the two requested P1s are addressed.
+
+- **A:** Exact target satisfaction now explicitly gates on
+  `exactTupleMultiplicityMatch = liveTuple.length === exactContent.length`
+  **and** identity membership. A deficient identical target bag stays wholly
+  ambiguous; balanced duplicates remain `MULTISET_ONLY` / `REVIEW_REQUIRED`,
+  with no physical pairing. Pre-edit A1/A2 already returned all target members
+  ambiguous, and A3 left the 4 g target ambiguous on this exact reviewed head;
+  the delta makes that existing gate explicit and adds dedicated regressions,
+  rather than claiming an observed false-satisfaction repro.
+- **B:** Raw certified V1 IDs take precedence over reconciliation rewriting.
+  Before editing, B1/B3 reproduced `PRODUCTION_ONLY_KNOWN_ID` plus
+  `TARGET_ONLY_MISSING`. Bridge lookup is now skipped only for `v1Ids`;
+  registry-known non-V1 sources still bridge normally. Existing strict
+  existing-canonical/reviewed-new predicates remain unchanged.
+
+Executed remediation checks:
+
+- `pnpm exec vitest run tests/unit/t21rc-row-reconciliation.test.mjs --maxWorkers=1`:
+  PASS, 57/57, including all six A1–A3/B1–B3 cases.
+- `pnpm exec vitest run tests/unit/t21rb-v1-semantic.test.mjs tests/unit/t21rb-v1-production.test.mjs tests/unit/t21rc-row-reconciliation.test.mjs --maxWorkers=1`:
+  PASS, 3 files / 73 tests; balanced/deficient duplicates and strict bridges retained.
+- `pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`,
+  `git diff --check`: PASS; migration smoke is throwaway in-memory SQLite only.
+- `pnpm exec vitest run --maxWorkers=1`: PASS, 226 files / 4,963 tests,
+  678.21 seconds. Syntax and focused-test formatting also PASS.
+
+Taxonomy, schema, name authority, position exclusion, privacy and repair
+boundaries are unchanged. Historical evidence and earlier checks below are
+preserved. Independent delta review is still required: no merge or production
+dispatch preparation approval; `T21G_NOT_READY`, 0039/deploy/repair STOPPED.
+Existing two-worker timeout and dependency advisories remain separate and
+unchanged; no retry/tuning, upgrade or re-audit in this remediation. One appended
+remediation commit and a normal push of this branch are authorized by this
+packet; its exact commit/publication SHA is verified through Git, not embedded
+in its own report. No PR, workflow dispatch or production operation is authorized.
 
 ## Repository and source authority
 

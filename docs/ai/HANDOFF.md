@@ -1,3 +1,35 @@
+# T21R-C P1-only remediation handoff — 2026-10-02 UTC
+
+**State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; mandatory local validation PASS.
+Branch `codex/t21rc-row-level-reconciliation`, repository `1385308553` /
+`vn-tako4/Tako-san`, reviewed head `32ab51d35976e5174f73a544729f8bd7fd20e02c`
+(implementation ancestor `ec24101`). One remediation checkpoint follows that
+head without rebase/merge/squash. Its own hash is not embedded in its handoff;
+verify the exact local/remote HEAD with Git. Existing `.context/` is preserved.
+
+**Implemented:** Explicit exact-tuple balance plus membership before satisfaction;
+direct V1 identity precedes bridge lookup, without general registry precedence
+or relaxed bridge predicates. Six new A1–A3/B1–B3 regressions; old tests intact.
+Pre-edit A cases already met fail-closed expectations; B1/B3 reproduced the
+wrong production-only/missing classes. No other implementation semantics changed.
+
+**Executed:** T21R-C 57/57 and regression set 73/73 PASS; lint/typecheck/local
+in-memory migration smoke/build/syntax/formatting/diff PASS. Full
+`pnpm exec vitest run --maxWorkers=1` PASS: 226 files / 4,963 tests,
+678.21 seconds. No timeout/assertion edited, failures encountered in required
+checks, two-worker retry, dependency re-audit or upgrade.
+
+**Production boundary / limits:** No production read/write, workflow dispatch,
+approval, restore, migration/0039 apply, deploy or repair. Schema/taxonomy/V1/V2/
+runtime/privacy unchanged. No live row receipt or independent approval exists.
+
+**Next:** Independently review the single normally published remediation delta
+from `32ab51d` to the exact verified local/remote HEAD. Normal push is authorized
+after these passing checks; no self-approval, PR, merge or production dispatch
+preparation; `T21G_NOT_READY`, repair/0039/deploy STOPPED.
+
+---
+
 # T21R-C protected row-level evidence handoff — 2026-10-02 UTC
 
 **State:** `T21RC_OFFLINE_DESIGN_READY`. Offline implementation/design completed on

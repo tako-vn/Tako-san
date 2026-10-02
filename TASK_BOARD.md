@@ -1,3 +1,18 @@
+# Current — T21R-C P1-only remediation (2026-10-02 UTC)
+
+Reviewed parent `32ab51d`, branch `codex/t21rc-row-level-reconciliation`;
+repository `1385308553` / `vn-tako4/Tako-san`. Explicit balanced-tuple
+satisfaction and direct V1-over-bridge precedence; six regression cases added.
+`T21RC_REMEDIATION_READY_FOR_REVIEW`: 57 T21R-C / 73 focused PASS, all other
+required local gates PASS; full single-worker suite PASS, 226 files / 4,963 tests.
+No schema/taxonomy/runtime/authority/workflow/
+migration/dependency change, PR or production operation.
+Next: independent delta review of the single normally published remediation
+checkpoint after `32ab51d`; no self-approval or production preparation.
+`T21G_NOT_READY`; repair/0039/deploy STOPPED.
+
+---
+
 # Current — T21R-C protected row evidence (2026-10-02 UTC)
 
 **Status: `T21RC_OFFLINE_DESIGN_READY`.** Offline classifier/schema/read design completed on

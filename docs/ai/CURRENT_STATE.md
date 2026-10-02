@@ -1,3 +1,27 @@
+# T21R-C P1 remediation only — 2026-10-02 UTC
+
+**State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; local verification complete
+on `codex/t21rc-row-level-reconciliation`, reviewed parent `32ab51d35976e5174f73a544729f8bd7fd20e02c`,
+repository `1385308553` / `vn-tako4/Tako-san`.
+Exact tuple balance is an explicit satisfaction guard; direct V1 IDs cannot be
+rewritten by reconciliation. A1/A2 already failed closed before this delta;
+B1/B3's production-only/missing misclassification was reproduced and corrected.
+
+**Checks:** 57/57 T21R-C and 73/73 focused regressions PASS; lint, typecheck,
+local migration smoke, build, syntax, formatting and diff PASS. Full
+`pnpm exec vitest run --maxWorkers=1`: PASS, 226 files / 4,963 tests,
+678.21 seconds. Existing two-worker timeout
+and dependency advisories are not being changed or re-audited.
+
+**Boundary / next:** Only classifier/tests and necessary handoff/design docs;
+taxonomy/schema/authorities/runtime/workflows/migrations/dependencies unchanged.
+Production reads/writes/dispatches/approvals/restores/applies/deploys/repair: 0.
+One remediation checkpoint after the reviewed parent; normal push authorized
+for independent delta review. No independent approval, PR, merge or production
+dispatch preparation. `T21G_NOT_READY`; 0039/deploy/repair STOPPED.
+
+---
+
 # T21R-C protected row-level evidence — 2026-10-02 UTC
 
 **State:** `T21RC_OFFLINE_DESIGN_READY`. Offline classifier, closed evidence schema and protected-read design

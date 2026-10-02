@@ -204,7 +204,7 @@ export function reconcileIngredientOccurrences({
       if (recipeId !== null && capturedIds.has(recipeId)) taintedRecipes.add(recipeId);
       else globalTaint = true;
     }
-    const bridge = bridges.get(ingredientId);
+    const bridge = v1Ids.has(ingredientId) ? undefined : bridges.get(ingredientId);
     return {
       recipeId, ingredientId, canonicalId: bridge?.canonicalId ?? ingredientId,
       name: row?.name, quantity: row?.required_quantity, unit: row?.unit,
@@ -257,7 +257,8 @@ export function reconcileIngredientOccurrences({
       evidence.confidence = 'REVIEW_REQUIRED'; evidence.authority = ['V1_RELEASE', 'SCHEMA_CONTRACT'];
       evidence.reviewReason = 'MALFORMED_INPUT_PREVENTS_MEMBERSHIP_PROOF';
     } else if (exactContent.length > 0) {
-      compare(exactContent, membership && liveTuple.length === exactContent.length);
+      const exactTupleMultiplicityMatch = liveTuple.length === exactContent.length;
+      compare(exactContent, membership && exactTupleMultiplicityMatch);
       const nonuniqueBridge = liveTuple.some((candidate) => candidate.bridge)
         && (liveTuple.length !== 1 || exactContent.length !== 1);
       if (liveTuple.length > exactContent.length) {
@@ -268,7 +269,7 @@ export function reconcileIngredientOccurrences({
         compare(sameIdentity, evidence.comparison.membership);
         evidence.confidence = 'REVIEW_REQUIRED'; evidence.authority.push('REVIEWED_RECONCILIATION');
         evidence.reviewReason = 'NON_UNIQUE_REVIEWED_COUNTERPART';
-      } else if (!evidence.comparison.membership) {
+      } else if (!membership || !exactTupleMultiplicityMatch) {
         compare(sameIdentity, false);
         evidence.classification = 'SAME_ID_CONTENT_DRIFT'; evidence.confidence = 'REVIEW_REQUIRED';
         evidence.driftKind = driftKind(evidence.comparison);

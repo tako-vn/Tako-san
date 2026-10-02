@@ -117,6 +117,159 @@ function expectAccounting(result) {
 }
 
 describe('T21R-C offline occurrence reconciliation', () => {
+  it.each([
+    ['A1', 2],
+    ['A2', 3],
+  ])('P1 %s: equal identity counts cannot satisfy a deficient exact duplicate bag', (_, count) => {
+    const result = runFixture({
+      targetRecipes: [
+        { id: RECIPE_ID, ingredients: Array.from({ length: count }, () => targetIngredient()) },
+      ],
+      productionRows: Array.from({ length: count }, (_, index) =>
+        productionRow({
+          id: `mixed-row-${index}`,
+          required_quantity: index === count - 1 ? 3 : 2,
+        }),
+      ),
+    });
+
+    expect(result.production).toHaveLength(count);
+    expect(result.target).toHaveLength(count);
+    expect(result.summary.targetClassCounts.SATISFIED_EXACT).toBe(0);
+    expect(result.summary.targetClassCounts.AMBIGUOUS).toBe(count);
+    expect(result.summary.productionClassCounts.EXACT_V1_MATCH).toBe(0);
+    const targetKeys = result.target.map((row) => row.occurrenceKey).sort();
+    for (const row of result.production) {
+      expect(row).toMatchObject({
+        classification: 'SAME_ID_CONTENT_DRIFT',
+        confidence: 'REVIEW_REQUIRED',
+        mapping: 'UNRESOLVED',
+      });
+      expect(row.candidateTargetOccurrenceKeys).toEqual(targetKeys);
+    }
+    const exactLooking = result.production.filter((row) => row.comparison.quantity === true);
+    expect(exactLooking).toHaveLength(count - 1);
+    expect(exactLooking.every((row) => row.comparison.membership === false)).toBe(true);
+    expect(result.production.find((row) => row.comparison.quantity === false).driftKind).toBe(
+      'quantity_only',
+    );
+    expect(result.target.every((row) => row.classification === 'AMBIGUOUS')).toBe(true);
+    expectAccounting(result);
+  });
+
+  it('P1 A3: equal identity counts do not satisfy a different unmatched tuple', () => {
+    const result = runFixture({
+      targetRecipes: [
+        {
+          id: RECIPE_ID,
+          ingredients: [targetIngredient(), targetIngredient({ requiredQuantity: 4 })],
+        },
+      ],
+      productionRows: [
+        productionRow({ id: 'exact-row' }),
+        productionRow({ id: 'drift-row', required_quantity: 3 }),
+      ],
+    });
+
+    expect(result.summary.targetClassCounts.SATISFIED_EXACT).toBe(1);
+    expect(result.summary.targetClassCounts.AMBIGUOUS).toBe(1);
+    const exact = result.production.find((row) => row.classification === 'EXACT_V1_MATCH');
+    const drift = result.production.find((row) => row.classification === 'SAME_ID_CONTENT_DRIFT');
+    expect(exact).toMatchObject({ mapping: 'UNIQUE', comparison: { membership: true } });
+    expect(exact.candidateTargetOccurrenceKeys).toHaveLength(1);
+    expect(drift).toMatchObject({ mapping: 'UNRESOLVED', comparison: { quantity: false } });
+    expect(drift.candidateTargetOccurrenceKeys).toHaveLength(2);
+    const unmatched = result.target.find(
+      (row) => !exact.candidateTargetOccurrenceKeys.includes(row.occurrenceKey),
+    );
+    expect(unmatched).toMatchObject({ classification: 'AMBIGUOUS', mapping: 'UNRESOLVED' });
+    expect(unmatched.candidateProductionOccurrenceKeys).toContain(drift.occurrenceKey);
+    expectAccounting(result);
+  });
+
+  it('P1 B1: a reviewed bridge cannot override an exact direct V1 ingredient ID', () => {
+    const result = runFixture({
+      canonicalIngredientIds: [INGREDIENT_ID, 'ING_BETA'],
+      reconciliation: [
+        {
+          sourceId: INGREDIENT_ID,
+          canonicalId: 'ING_BETA',
+          resolution: 'existing_canonical_id',
+          review: null,
+        },
+      ],
+    });
+
+    expect(result.production[0]).toMatchObject({
+      classification: 'EXACT_V1_MATCH',
+      targetIngredientId: INGREDIENT_ID,
+      authority: ['V1_RELEASE'],
+      bridgeEvidenceSha256: null,
+      comparison: { ingredientId: true, canonicalIdentity: true },
+    });
+    expect(result.target[0].classification).toBe('SATISFIED_EXACT');
+    expect(result.summary.productionClassCounts.PRODUCTION_ONLY_KNOWN_ID).toBe(0);
+    expect(result.summary.targetClassCounts.TARGET_ONLY_MISSING).toBe(0);
+    expectAccounting(result);
+  });
+
+  it('P1 B2: a registry-known non-V1 source still uses its strict approved bridge', () => {
+    const result = runFixture({
+      productionRows: [productionRow({ ingredient_id: 'ING_SOURCE' })],
+      canonicalIngredientIds: [INGREDIENT_ID, 'ING_SOURCE'],
+      reconciliation: [
+        {
+          sourceId: 'ING_SOURCE',
+          canonicalId: INGREDIENT_ID,
+          resolution: 'existing_canonical_id',
+          review: null,
+        },
+      ],
+    });
+
+    expect(result.production[0]).toMatchObject({
+      classification: 'DETERMINISTIC_V1_COUNTERPART',
+      targetIngredientId: INGREDIENT_ID,
+      mapping: 'UNIQUE',
+      comparison: { ingredientId: false, canonicalIdentity: true },
+    });
+    expect(result.production[0].authority).toContain('REVIEWED_RECONCILIATION');
+    expect(result.production[0].bridgeEvidenceSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.target[0].classification).toBe('SATISFIED_DETERMINISTICALLY');
+    expectAccounting(result);
+  });
+
+  it('P1 B3: direct V1 content drift cannot escape through a conflicting reviewed bridge', () => {
+    const result = runFixture({
+      productionRows: [productionRow({ required_quantity: 3 })],
+      canonicalIngredientIds: [INGREDIENT_ID, 'ING_BETA'],
+      reconciliation: [
+        {
+          sourceId: INGREDIENT_ID,
+          canonicalId: 'ING_BETA',
+          resolution: 'existing_canonical_id',
+          review: null,
+        },
+      ],
+    });
+
+    expect(result.production[0]).toMatchObject({
+      classification: 'SAME_ID_CONTENT_DRIFT',
+      targetIngredientId: INGREDIENT_ID,
+      driftKind: 'quantity_only',
+      authority: ['V1_RELEASE'],
+      bridgeEvidenceSha256: null,
+      comparison: { ingredientId: true, canonicalIdentity: true, quantity: false },
+    });
+    expect(result.target[0].classification).toBe('AMBIGUOUS');
+    expect(result.production[0].candidateTargetOccurrenceKeys).toEqual([
+      result.target[0].occurrenceKey,
+    ]);
+    expect(result.summary.productionClassCounts.PRODUCTION_ONLY_KNOWN_ID).toBe(0);
+    expect(result.summary.targetClassCounts.TARGET_ONLY_MISSING).toBe(0);
+    expectAccounting(result);
+  });
+
   it('requires explicit count-consistent capture evidence before proving target absence', () => {
     const result = runFixture({ productionRows: [], captureCounts: null });
     expect(result.captureEvidence).toEqual({

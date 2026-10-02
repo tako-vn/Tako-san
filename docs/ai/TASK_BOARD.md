@@ -1,3 +1,21 @@
+# T21R-C P1-only remediation — 2026-10-02 UTC
+
+- [x] Verify published reviewed head `32ab51d`, unchanged main and clean tracked
+  tree; preserve `.context/`. Repository `1385308553` / `vn-tako4/Tako-san`.
+- [x] Make exact tuple/membership satisfaction gates explicit; preserve balanced,
+  deficient and mixed duplicate semantics with A1–A3 tests.
+- [x] Prevent bridge rewrite of direct V1 IDs; B1–B3 tests preserve non-V1 bridges.
+- [x] T21R-C 57/57 and focused 73/73 PASS; lint/typecheck/local migration smoke/
+  build/syntax/formatting/diff PASS; old assertions retained.
+- [x] Required full single-worker suite PASS: 226 files / 4,963 tests; one
+  appended remediation checkpoint and normal push authorized for delta review.
+- [ ] Independent delta review; no self-approval, PR, merge or production preparation.
+
+Schema/taxonomy/authority/runtime/workflows/dependencies unchanged; production
+operations 0. `T21G_NOT_READY`; 0039/repair/deploy STOPPED.
+
+---
+
 # T21R-C protected row-level reconciliation evidence — 2026-10-02 UTC
 
 - [x] Verify repository `1385308553`, main/source `a828b6354e29d89268a3d11c874158eb5ecb997c`, run
