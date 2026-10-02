@@ -255,6 +255,11 @@ beforeAll(() => {
 afterAll(() => rmSync(fixtureRoot, { recursive: true, force: true }));
 
 describe('T21R-C2 repository and exact-main gate', () => {
+  it('binds the transferred repository name to the unchanged repository ID', () => {
+    expect(T21RC2_REPOSITORY).toBe('vn-tak/Tako-san');
+    expect(T21RC2_REPOSITORY_ID).toBe(1385308553);
+  });
+
   it('reuses release source ancestry validation and exact-main successful CI', () => {
     const proof = validateT21RC2Gate(gateInput());
     expect(proof).toEqual({
@@ -277,7 +282,10 @@ describe('T21R-C2 repository and exact-main gate', () => {
 
   it.each([
     ['repository id', { repositoryId: '1' }],
-    ['repository name', { repository: 'vn-tako4/other' }],
+    ['repository name', { repository: 'vn-tak/other' }],
+    ['former repository name', { repository: 'vn-tako4/Tako-san' }],
+    ['former run repository despite unchanged id', () => ({ run: runMetadata({ repository: { id: T21RC2_REPOSITORY_ID, full_name: 'vn-tako4/Tako-san' } }) })],
+    ['former CI repository', () => ({ ciRuns: [ciRun(mainSha, { repository: { full_name: 'vn-tako4/Tako-san' }, head_repository: { full_name: 'vn-tako4/Tako-san' } })] })],
     ['uppercase SHA', () => ({ ref: mainSha.toUpperCase() })],
     ['stale main SHA', () => ({ mainSha: reviewedSha })],
     ['missing confirmation', { confirmation: false }],
@@ -340,6 +348,21 @@ describe('T21R-C2 reviewed execution closure (real Git objects)', () => {
       expect(() => assertReviewedExecutionClosure(reviewedSha, changedSha, { cwd })).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
       expect(() => validateT21RC2Gate(candidateInput(changedSha))).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
     });
+  });
+
+  it('rejects a workflow delta that changes only one immutable Action pin', () => {
+    git('checkout', '--quiet', '--detach', mainSha);
+    try {
+      const pinnedWorkflow = readFileSync(T21RC2_WORKFLOW_PATH, 'utf8');
+      const reviewedPinsSha = commit(T21RC2_WORKFLOW_PATH, pinnedWorkflow, 'review immutable Action pins');
+      const changedWorkflow = pinnedWorkflow.replace(/actions\/checkout@[a-f0-9]{40}/, `actions/checkout@${'f'.repeat(40)}`);
+      expect(changedWorkflow).not.toBe(pinnedWorkflow);
+      const changedPinSha = commit(T21RC2_WORKFLOW_PATH, changedWorkflow, 'change one immutable pin');
+      expect(git('merge-base', '--is-ancestor', reviewedPinsSha, changedPinSha)).toBe('');
+      expect(() => assertReviewedExecutionClosure(reviewedPinsSha, changedPinSha, { cwd })).toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+    } finally {
+      git('checkout', '--quiet', 'main');
+    }
   });
 
   it('rejects equality, unresolved SHAs and shell-like arguments without exposing them', () => {

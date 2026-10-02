@@ -32,7 +32,7 @@ const database = { ...PRODUCTION_D1, accountVerified: true };
 function actionFixture() {
   const actor = 'dispatch-user';
   const authorized = {
-    schemaVersion: 1, repositoryId: 1385308553, repository: 'vn-tako4/Tako-san',
+    schemaVersion: 1, repositoryId: 1385308553, repository: 'vn-tak/Tako-san',
     mainSha: base, reviewedSha: base, runId: '42', runAttempt: '1', actor, triggeringActor: actor,
     ci: { id: 400, attempt: 1, headSha: base },
     approval: { environment: 'production', state: 'approved', reviewer: 'vn-taphoanhatung', actor, historySha256: 'a'.repeat(64), policySha256: 'b'.repeat(64) },

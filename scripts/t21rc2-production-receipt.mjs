@@ -22,7 +22,9 @@ import {
 const nodeRequire = createRequire(import.meta.url);
 const Ajv = createRequire(nodeRequire.resolve('eslint/package.json'))('ajv');
 const REPOSITORY_ID = 1385308553;
-const REPOSITORY = 'vn-tako4/Tako-san';
+const REPOSITORY = 'vn-tak/Tako-san';
+// The certified target's recorded review-time name remains historical authority.
+const TARGET_REPOSITORY_AT_REVIEW = 'vn-tako4/Tako-san';
 const REVIEWER = 'vn-taphoanhatung';
 const LEDGER_COUNT = 38;
 const LEDGER_TIP = '0038_auth_onboarding_completion.sql';
@@ -66,7 +68,7 @@ try {
 const target = targetSpec?.target;
 if (targetSpec?.status !== 'T21RA_CANONICAL_TARGET_CERTIFIED'
     || targetSpec?.repository?.id !== REPOSITORY_ID
-    || targetSpec?.repository?.resolvedNameAtReview !== REPOSITORY
+    || targetSpec?.repository?.resolvedNameAtReview !== TARGET_REPOSITORY_AT_REVIEW
     || targetSpec?.runtimePositionAuthority !== false
     || targetSpec?.productionMutations !== 0
     || target?.recipeCount !== 500

@@ -204,7 +204,7 @@ describe('vision provider recovery contract', () => {
   });
 
   it('does not activate legacy or future providers from stored keys alone', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('invalid api key', { status: 401 }));
     const router = new AIRouter({
       aiMockMode: false,
       qwenApiKey: 'qwen-key',

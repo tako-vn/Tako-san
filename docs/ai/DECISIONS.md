@@ -32,6 +32,19 @@ classifier, target, production permission or row-delivery policy.
 objects needed by ledger tests. CI must provide full Git history; preserve exact
 ledger semantics. Changing this review-bound CI file requires renewed review.
 
+**C3 dispatch dependency hardening:** Pin the dedicated production workflow's
+external Actions to verified upstream commit SHAs without changing its semantics
+or CI workflow. The repository transferred to `vn-tak/Tako-san` with ID
+`1385308553` unchanged; current-run gate/receipt guards use that exact name while
+the certified V1 target's `resolvedNameAtReview` remains historical. All 73 bound
+entries are retained. These new executable bytes require independent review of
+the final C3 feature head and matching post-merge main/CI before any capture.
+Environment self-review/bypass availability is recorded separately from rejected
+self/bypass approval use; token read-only permission remains unproven. C3 changes
+no Environment policy, production credential, live database or row delivery.
+See `recipe-catalog/T21RC3_PRODUCTION_DISPATCH_READINESS.md` for source evidence,
+the credential-free future packet and fixture-only validation.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.

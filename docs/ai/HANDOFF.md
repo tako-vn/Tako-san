@@ -1,3 +1,94 @@
+# T21R-C3 dispatch readiness handoff — 2026-10-03 JST
+
+**State:** `T21RC3_IMPLEMENTATION_READY_FOR_REVIEW`;
+code, local checks and approved documentation publication complete, not production
+ready. Owner login/write access works.
+Repository `1385308553` / `vn-tak/Tako-san`; branch
+`codex/t21rc3-production-dispatch-readiness`, exact starting main
+`0d4fe89b7ccc72e013aafe53665059d0e62bd3b4`. Historical PR36/C2 protection and
+exact-main push CI `37008867187` are verified. Tested code checkpoints
+`57edc3ac9c2b3f86d28774c0c26bb1e9a961746e` and
+`a34ec5e3245b5fdc6718c611ae23dcea6f56eb4c`; final documentation follows, so its
+own/future publication SHA is not embedded here. The recovery receipt records the
+historical local-only head. GitData publication code checkpoint
+`e49c60a176cec80593e8b8644d058341cfeca720` has the certified base as parent and
+exact tested executable tree `5b20d72eeb4f0077ac17b0d0e8584e4596292fb3`.
+API commit metadata changes its SHA; original local checkpoint history is kept.
+Final docs-inclusive remote head must be fetched/verified and reported externally.
+
+**Implemented:** Official upstream commit pins for checkout/setup-node/pnpm/
+upload-artifact, six external uses, no mutable refs. Production workflow only
+changes Action identity; CI remains unchanged/full history. Gate and receipt's
+current repository guards use the transferred name; the certified target's
+review-time name/bytes remain intact. Static mutation tests and real-Git pin
+binding tests preserve all 73 closure entries. Documentation supplies the future
+operator packet and metadata governance/token-scope results; no dispatch helper.
+One AI test's accidental call-through fetch is replaced by a synthetic 401,
+with existing assertions intact, to make required full validation fixture-only.
+
+**Executed:** Focused C3/C2/C/B/release command 8 files / 556 PASS; C2 suite counts
+148 approval, 70 capture, 8 receipt, 21 workflow. Guarded provider/governance/scan
+and local D1 6 files / 128 PASS. Final full `vitest run --maxWorkers=1` with
+default/JSON reporting: 230 files / 5,210 PASS, zero skips, exit 0. Lint/typecheck/
+local SQLite migration smoke/build/syntax/diff PASS. pnpm 10.34.6 and extracted
+real SQLite 3.45.1 CLI; package/lockfile unchanged. Test proxy variables cleared,
+temporary Node loopback-only preload outside repo; one remote transport attempt denied
+before network use. Earlier partial full runs are not passing receipts. Exact
+commands, installer/proxy/name-guard failures and automatic egress-review
+rejection/resolution are in the scoped report.
+The exact published code checkpoint was rechecked with the existing local Vitest:
+C2 4 files / 247 PASS, 11.39 seconds, under the same loopback-only/proxy-cleared
+environment. The first attempt failed only because the prior scratch pnpm.cjs
+entrypoint no longer existed; no installation or dependency change was needed.
+
+**Governance / limits:** Public GitHub Environment GET at 2026-10-02T18:22:04Z:
+production `22649920074`, exact User reviewer `vn-taphoanhatung` / `329713999`,
+self-review prevention false, admin bypass available true, branch policy null.
+No policy change; availability is not use. Existing normal-approval validator
+still rejects self/skipped/bypass/wrong reviewer or Environment and reruns.
+Metadata-only audit PASS; live approval unverified/NOT_RUN. SELECT-only path true;
+Cloudflare read-only token scope unproven/UNKNOWN. No token metadata call/mutation.
+Application/T19/T20/config/canonical/migrations/CI and 73-path list unchanged.
+
+**Publication access:** Earlier normal Git push failed because no CLI credential was
+available. First workflow-blob write through the `takovn2` connection returned
+403 `Resource not accessible by integration`; no remote blob/tree/commit/ref or
+PR was created. Installation metadata for `takovn2` and `tako-vn` lists only
+those respective owners, not `vn-tak`. No write via the second connection or
+reviewer account, permission mutation or bypass was attempted. The generic error
+did not prove a particular missing scope. The current `vn-tak` connection now
+verifies profile/owner `335007142`, installation `167341024` and actual workflow
+blob writes. Use normal GitData publication with this selected connection;
+preserve original local history, check trees, fetch and compare exact final heads.
+No login, permission mutation or reviewer-account write is needed. The earlier
+recovery ZIP remains historical and is superseded for current status.
+C3 hosted CI has not run.
+
+**Publication:** Earlier automatic approval review rejected the full historical
+CURRENT_STATE payload, its evidence-based retry, and the compact C3 report for
+public operational metadata without explicit payload/destination consent. The
+user confirmed all five documents from the preserved approval packet for public
+`vn-tak/Tako-san` on 2026-10-03 JST, including completion status updates.
+Their documentation checkpoint follows `e49c60a176cec80593e8b8644d058341cfeca720`
+through a normal feature-ref update. All tested executable bytes and original
+local history are preserved. Final documentation-inclusive local/remote SHA and
+tree equality are in the external completion receipt, avoiding a self-hash.
+No login, permission expansion or production operation was required.
+
+**Boundary / next:** Obtain independent review of the final published C3 head
+**before opening a PR**.
+Old reviewed head `63739c56` is invalid for a post-C3 main: future `reviewed_sha`
+is the independently approved final C3 head; future `ref` is exact post-merge
+current main with successful push CI and byte-identical closure. Complete safe
+metadata placeholders and the operator's unresolved token-scope risk decision.
+Require fresh normal independent production approval only for a separately
+authorized new attempt-1 capture. No PR/merge/dispatch/approval/D1 read/write/
+Cloudflare SQL/restore/0039 apply/deploy in C3. LIVE capture NOT_RUN, T21G_NOT_READY,
+repair NOT_AUTHORIZED, 0039/deploy STOPPED, row delivery UNCONFIGURED.
+Report: `recipe-catalog/T21RC3_PRODUCTION_DISPATCH_READINESS.md`.
+
+---
+
 # T21R-C2 PR #36 CI-history remediation handoff — 2026-10-02 UTC
 
 **State:** Narrow local Git-history environment correction; not new independent

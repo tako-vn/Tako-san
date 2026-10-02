@@ -54,7 +54,7 @@ function authorization() {
   return {
     schemaVersion: 1,
     repositoryId: 1385308553,
-    repository: 'vn-tako4/Tako-san',
+    repository: 'vn-tak/Tako-san',
     mainSha,
     reviewedSha: 'b'.repeat(40),
     runId: '1234567890',
@@ -249,7 +249,7 @@ describe('T21R-C2 aggregate production receipt', () => {
       status: 'OBSERVED_STABLE_NON_ATOMIC',
       certification: 'NOT_A_RELEASE_CERTIFICATION',
       repositoryId: 1385308553,
-      repository: 'vn-tako4/Tako-san',
+      repository: 'vn-tak/Tako-san',
       counts: { recipeCount: 500, productionOccurrenceCount: 1, targetOccurrenceCount: 2702 },
       database: { name: 'frigo-db', accountVerified: true },
       productionMutations: 0,
@@ -292,6 +292,13 @@ describe('T21R-C2 aggregate production receipt', () => {
   });
 
   it('rejects forged authorization, identity, stability, ledger, digest, and source proof inputs', () => {
+    const formerRepository = receiptInput(validFixture);
+    formerRepository.authorization.repository = 'vn-tako4/Tako-san';
+    expectSafeRejection(
+      () => buildT21RC2ProductionReceipt(formerRepository),
+      'T21RC2_IDENTITY_REJECTED',
+    );
+
     const wrongReviewer = receiptInput(validFixture);
     wrongReviewer.authorization.approval.reviewer = 'unreviewed-user';
     expectSafeRejection(

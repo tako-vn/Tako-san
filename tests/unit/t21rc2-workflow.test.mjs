@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
@@ -12,6 +13,72 @@ const ciText = readFileSync(ciFile, 'utf8');
 const ci = load(ciText);
 const steps = workflow.jobs.capture.steps;
 const find = (command) => steps.find((step) => step.run === command);
+
+function requireImmutableExternalActions(document) {
+  const refs = [];
+  const visit = (node) => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== 'object') return;
+    if (Object.hasOwn(node, 'uses')) {
+      if (typeof node.uses !== 'string') throw new Error('T21RC3_MUTABLE_ACTION_REF');
+      if (!node.uses.startsWith('./')) {
+        if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[a-f0-9]{40}$/.test(node.uses)) {
+          throw new Error('T21RC3_MUTABLE_ACTION_REF');
+        }
+        refs.push(node.uses);
+      }
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(document);
+  return refs;
+}
+
+describe('T21R-C3 immutable production Action dependencies', () => {
+  it('pins every external uses entry in every job to a full lowercase commit SHA', () => {
+    const refs = requireImmutableExternalActions(workflow);
+    expect(refs).toHaveLength(6);
+    expect(new Set(refs)).toEqual(new Set([
+      'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+      'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+      'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1',
+      'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+    ]));
+  });
+
+  it.each(['v4', 'v4.4.0', 'main', 'master', 'latest', 'feature/readiness', 'abc123', 'a'.repeat(39), 'A'.repeat(40)])(
+    'rejects a production workflow mutated to @%s', (ref) => {
+      const mutated = load(text.replace(/actions\/checkout@[a-f0-9]{40}/, `actions/checkout@${ref}`));
+      expect(() => requireImmutableExternalActions(mutated)).toThrow('T21RC3_MUTABLE_ACTION_REF');
+    },
+  );
+
+  it('also rejects a mutable action appended after all six immutable actions', () => {
+    const mutated = structuredClone(workflow);
+    mutated.jobs.capture.steps.push({ uses: 'other/action@main' });
+    expect(() => requireImmutableExternalActions(mutated)).toThrow('T21RC3_MUTABLE_ACTION_REF');
+  });
+
+  it('checks job-level uses and treats local composite paths separately', () => {
+    const mutated = structuredClone(workflow);
+    mutated.jobs.additional = { uses: 'other/workflow@main' };
+    expect(() => requireImmutableExternalActions(mutated)).toThrow('T21RC3_MUTABLE_ACTION_REF');
+    expect(requireImmutableExternalActions({ jobs: { local: { steps: [{ uses: './.github/actions/local' }] } } })).toEqual([]);
+  });
+
+  it('changes only Action identity in the certified production workflow', () => {
+    const before = load(execFileSync('git', [
+      'show', `0d4fe89b7ccc72e013aafe53665059d0e62bd3b4:${file}`,
+    ], { encoding: 'utf8' }));
+    const after = structuredClone(workflow);
+    for (const job of Object.values(after.jobs)) {
+      for (const step of job.steps) {
+        if (step.uses) step.uses = step.uses.replace(/@[a-f0-9]{40}$/, '@v4');
+      }
+    }
+    expect(after).toEqual(before);
+  });
+});
 
 describe('T21R-C2 production workflow static safety contract', () => {
   it('is dedicated, manual-only, minimally permissioned, and shares the production lock', () => {
