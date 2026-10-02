@@ -13,7 +13,7 @@ import {
 } from './t21rc2-production-files.mjs';
 
 export const T21RC2_REPOSITORY_ID = 1385308553;
-export const T21RC2_REPOSITORY = 'vn-tako4/Tako-san';
+export const T21RC2_REPOSITORY = 'vn-tak/Tako-san';
 export const EXPECTED_PRODUCTION_REVIEWER = 'vn-taphoanhatung';
 export const T21RC2_WORKFLOW_PATH = '.github/workflows/production-d1-t21rc-row-reconciliation.yml';
 const OPTIONAL_REVIEW_BOUND_PATHS = Object.freeze([

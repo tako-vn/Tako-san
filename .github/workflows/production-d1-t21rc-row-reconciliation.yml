@@ -33,12 +33,12 @@ jobs:
     outputs:
       candidate_sha: ${{ steps.gate.outputs.candidate_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - name: Require exact current main, reviewed ancestor and exact-main CI
@@ -60,15 +60,15 @@ jobs:
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
       CONFIRM_T21RC_READ_ONLY_CAPTURE: ${{ inputs.confirm_t21rc_read_only_capture }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.gate.outputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
       - name: Install pinned capture and schema tooling
@@ -92,7 +92,7 @@ jobs:
         run: node scripts/t21rc2-production-approval.mjs recheck
       - name: Generate allowlisted public-safe aggregate receipt
         run: node scripts/t21rc2-production-receipt.mjs publish
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: success()
         with:
           name: production-t21rc2-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
