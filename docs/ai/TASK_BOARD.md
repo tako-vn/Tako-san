@@ -1,3 +1,32 @@
+# T21R-C2 protected production row-read implementation — 2026-10-02 UTC
+
+- [x] Start `codex/t21rc2-protected-production-row-read` exactly at certified
+  `518818458a354c5e180da52ae9bb73c9d3c1af78`; repository `1385308553` / `vn-tako4/Tako-san`,
+  exact-main CI `36972970904` SUCCESS. Exclude and preserve old local `9542e112`.
+- [x] Implement dispatch-only workflow, minimal permissions, production
+  Environment, hardened full-SHA/current-main/ancestor/CI gate and fresh main checks.
+- [x] Normal reviewer `vn-taphoanhatung`; reject skipped/bypass/wrong/self
+  approval and reruns. Use real GitHub API record shape, not invented approval IDs.
+- [x] Pin account/database/config; fixed SELECT executable guard; exact reviewed
+  38-name ledger, four counts, two certified rosters and two-read non-atomic digest.
+- [x] Reuse original classifier/schema; private runner-temp capture/manifest/logs,
+  restrictive modes, safe errors/failure receipt and exact success-only aggregate upload.
+- [x] C2 146/146, combined focused 455/455 and full 230 files / 5,109 PASS;
+  lint/typecheck/local migration smoke/build/syntax/diff PASS. Failure resolutions
+  retain assertions/timeouts; independent agent review found no material defect.
+- [x] Normally publish executable checkpoint `ad7b3012`; provider/local SHA
+  equality verified, main unchanged. Completion docs follow; no force push or PR.
+- [ ] Independent human implementation/query/privacy/approval/stability review.
+- [ ] Any separately authorized production read, normal Environment approval,
+  live evidence receipt or secure row delivery. None authorized/executed here.
+
+`T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`; no production/Cloudflare operations,
+no T19/T20/0039/runtime/dependency edits, no merge. `ROW_LEVEL_DELIVERY=UNCONFIGURED`,
+`T21G_NOT_READY`, repair/0039/deploy STOPPED. Exact checks/failures/options:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C P1-only remediation — 2026-10-02 UTC
 
 - [x] Verify published reviewed head `32ab51d`, unchanged main and clean tracked

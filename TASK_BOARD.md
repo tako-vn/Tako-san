@@ -1,3 +1,25 @@
+# Current — T21R-C2 executable protected row-read (2026-10-02 UTC)
+
+**Status: `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`.** Correct branch
+`codex/t21rc2-protected-production-row-read`, certified base
+`518818458a354c5e180da52ae9bb73c9d3c1af78`, repository `1385308553` / `vn-tako4/Tako-san`.
+Actual dispatch-only workflow/four scripts/four suites implemented; existing
+classifier/schema and T19/T20 untouched. Verified executable checkpoint `ad7b3012`
+normally published with exact local/provider equality; no PR or merge.
+Old local `9542e112` is preserved and excluded, not C2 implementation or ancestry.
+
+Focused PASS: 8 files / 455 tests (C2 146, predecessor 73, release-check 236).
+Full `pnpm exec vitest run --maxWorkers=1` PASS: 230 files / 5,109 tests.
+Lint/typecheck/local migration smoke/build/syntax/diff PASS; independent agent
+review found no material defect. Initial setup/integration failures are recorded;
+no timeout/assertion weakened. Production/Cloudflare calls/dispatches/approvals/
+mutations/applies/restores/deploys: 0. Row delivery `UNCONFIGURED`.
+Next: independent review of the actual executable implementation before any
+production authorization. `T21G_NOT_READY`; repair NOT_AUTHORIZED, 0039/deploy STOPPED.
+Exact checks/options/failures: `docs/ai/recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # Current — T21R-C P1-only remediation (2026-10-02 UTC)
 
 Reviewed parent `32ab51d`, branch `codex/t21rc-row-level-reconciliation`;

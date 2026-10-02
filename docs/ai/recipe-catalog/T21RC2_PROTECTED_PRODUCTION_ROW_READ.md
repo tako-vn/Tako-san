@@ -226,6 +226,25 @@ dispatch is authorized. This new branch is not covered by the base main's CI;
 the CI workflow does not run on this branch's push without a PR. Local success
 does not establish hosted implementation-head CI or a live capture receipt.
 
+### Verified checkpoint and publication
+
+- Executable implementation checkpoint: `ad7b3012`
+  (`ad7b3012fc13c53948cdf7cbac4362df2662dee5`), containing the dedicated workflow,
+  four scripts, four test files, this report and proposed ADR-040. Verified normal
+  push to `codex/t21rc2-protected-production-row-read`; GitHub branch GET exactly
+  matched that local implementation HEAD. No force push or PR creation.
+- Live main GET remained exactly `518818458a354c5e180da52ae9bb73c9d3c1af78` after
+  publication. Old wrong-task `9542e112` is not an ancestor of C2 and was not
+  pushed. No history was reset or silently rebased.
+- Current-state/task-board/handoff updates are a later documentation checkpoint;
+  its own hash cannot be embedded here. Final Git/provider verification identifies
+  the published completion head. The implementation and all checks above remain
+  unchanged; no new production capability is introduced by that documentation.
+- `PRODUCTION_READS=0`, `CLOUDFLARE_PRODUCTION_CALLS=0`,
+  `PRODUCTION_DISPATCH=NO`, `ENVIRONMENT_APPROVALS=0`, production mutations /
+  operational SQL writes / restores / migrations / 0039 applies / deploys = 0.
+  Local SQLite fixture replay is not a production migration.
+
 No live row receipt exists; current production counts/ledger/flags were not
 re-read. T19/T20 planner, cooking, shopping, roles, hard restrictions, inventory,
 household isolation and Week compatibility are untouched. Local SQLite test

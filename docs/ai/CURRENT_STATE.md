@@ -1,3 +1,44 @@
+# T21R-C2 executable protected row-read — 2026-10-02 UTC
+
+**State:** `T21RC2_IMPLEMENTATION_READY_FOR_REVIEW`. Correct branch
+`codex/t21rc2-protected-production-row-read` starts exactly at certified main
+`518818458a354c5e180da52ae9bb73c9d3c1af78` in repository `1385308553` /
+`vn-tako4/Tako-san`; base exact-main push CI `36972970904` SUCCESS. Wrong-direction
+local `9542e112` remains only on the old branch and is not C2 ancestry.
+Verified executable checkpoint `ad7b3012` (`ad7b3012fc13c53948cdf7cbac4362df2662dee5`)
+was normally pushed; GitHub branch HEAD equaled local implementation HEAD.
+No PR/merge. This handoff follows that implementation checkpoint.
+
+**Implemented:** Dedicated manual workflow; full-SHA/current-main/reviewed-ancestor/
+exact-push-CI guards; API-shaped independent normal approval, skipped/bypass/self
+rejection and fresh remote-main rechecks; pinned account/database/config; four
+fixed SELECTs; exact 0038 ledger, independent counts/certified rosters and two-read
+non-atomic digest stability. Reuse merged classifier/schema credential-free;
+restrictive runner-temp raw/full evidence, private Wrangler logs, redacted failure
+codes and aggregate-only success artifact. Row delivery `UNCONFIGURED`.
+
+**Executed:** Focused C2 + T21R-C/B + release-check command (`--maxWorkers=1`)
+PASS, 8 files / 455 tests: new C2 146 (approval 62, capture/privacy 70, receipt 7,
+workflow 7), predecessor 73, release-check 236. Full
+`pnpm exec vitest run --maxWorkers=1` PASS, 230 files / 5,109 tests, 525.17 seconds.
+`pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, all C2 script
+syntax and working/staged diff checks PASS. Initial fixture/integration failures
+and the unchanged 5-second synthetic setup timeout are recorded in the report;
+source fixture moved to `beforeAll`, no timeout/assertion weakened. Independent
+agent review found no material defect; not human/Environment authorization.
+
+**Boundary / next:** No production read/Cloudflare call/dispatch/approval/mutation/
+SQL write/restore/migration/0039 apply/deploy. SQLite smoke is local throwaway
+fixtures. T19/T20/runtime/legacy classifier/schema/workflows/migrations/dependencies
+unchanged except the new dedicated C2 workflow. No hosted C2-head CI or live
+receipt exists; no delivery/storage/settings provisioned. Independent review of
+the published executable implementation before any production authorization.
+`T21G_NOT_READY`; repair NOT_AUTHORIZED; 0039/deploy STOPPED.
+Exact commands, failure history and delivery options:
+`recipe-catalog/T21RC2_PROTECTED_PRODUCTION_ROW_READ.md`.
+
+---
+
 # T21R-C P1 remediation only — 2026-10-02 UTC
 
 **State:** `T21RC_REMEDIATION_READY_FOR_REVIEW`; local verification complete
