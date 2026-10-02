@@ -1,3 +1,41 @@
+# T21R-C protected row-level evidence — 2026-10-02 UTC
+
+**State:** `T21RC_OFFLINE_DESIGN_READY`. Offline classifier, closed evidence schema and protected-read design
+implemented on `codex/t21rc-row-level-reconciliation`, based on verified main
+`a828b6354e29d89268a3d11c874158eb5ecb997c` in repository `1385308553` (`vn-tako4/Tako-san`).
+V1 release `rel-bd00a4f53fcaeee4` remains the certified target; V2 is not release
+authority. Verified implementation checkpoint: `ec24101`
+(`ec24101bd906b820d3a6ac29dcc179dd62a1d3fa`); this handoff is a later documentation checkpoint.
+
+**Evidence:** Historical protected run `36943692146/1` succeeded: 500 recipes,
+6,720 occurrences, 26 exact, 1,793 same-ID drift, 20 ID conflicts, 6,694/2,676
+unmatched production/target, ledger 0038, zero order rows and 0/500 hydrated.
+Four sanitized artifacts and their exact GitHub digest metadata were verified.
+Approval history records `skipped` by `vn-tako4`; data remains acceptable for
+review with an admin-bypass governance exception, not normal reviewer approval.
+
+**Executed:** Focused Vitest 3 files / 67 tests (51 T21R-C + 16 existing)
+PASS; both real-source offline CLI smokes PASS on synthetic 500/2,702 data,
+zero approved bridges; Ajv schema/output checks, syntax, formatting, lint,
+typecheck, local in-memory migration smoke, build and diff check PASS.
+Full two-worker Vitest completed 226 files / 4,957 tests with one existing
+5-second certification-pipeline timeout (4,956 passed); final unchanged
+`pnpm exec vitest run --maxWorkers=1` PASS: 226 files / 4,957 tests,
+837.08 seconds. No timeout/assertion weakened. Dependency
+audit separately reports 33 existing advisories: 4 low, 17 moderate, 12 high,
+0 critical; no dependency/lockfile change.
+
+**Boundary / next:** No live T21R-C rows classified or new production read,
+mutation, SQL write, restore, migration/0039 apply, deploy, flag change, push,
+merge or PR. The required SQLite fixture tests are local only. `T21G_NOT_READY`;
+repair, 0039 and production deploy remain stopped. Normal required-reviewer
+approval is mandatory for any future mutation; bypass is forbidden. Independent
+human classifier/schema/query/privacy/stability review and separately approved
+restricted artifact delivery are needed before any separately authorized read.
+See `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
+---
+
 # Production V2 existing_canonical_id review fail-closed — 2026-09-30
 
 PR #30 P1: `existing_canonical_id` now rejects any non-null `review` (including `{}`). Valid existing bridges still require distinct non-empty `sourceId` and `review=null`. Local gates: typecheck, ESLint, migration-smoke=ok, focused V2 tests 27/27, Vitest 222 files / 4,851 tests, `pnpm build`, `git diff --check` PASS. Combined `pnpm check` NOT_RUN. No workflow, extra SELECT, mutation, merge, or production diagnostic. Next: hosted CI on the new head and independent approval.

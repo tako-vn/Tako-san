@@ -1,3 +1,30 @@
+# T21R-C protected row-level reconciliation evidence — 2026-10-02 UTC
+
+- [x] Verify repository `1385308553`, main/source `a828b6354e29d89268a3d11c874158eb5ecb997c`, run
+  `36943692146/1`, exact-main CI `36933387793`, four sanitized artifacts and hashes.
+- [x] Accept read-only aggregates for review; separately record admin-bypass
+  exception and actual approval history `skipped` by `vn-tako4`.
+- [x] Implement deterministic offline occurrence/multiset classification,
+  exact accounting, explicit unknown/review populations, per-recipe summaries,
+  drift/conflict evidence, private physical handles and no fuzzy/position authority.
+- [x] Close false-absence cases for mixed duplicates, incomplete captures and
+  alternate-ID conflicts; 51 focused T21R-C tests plus 16 regressions PASS.
+- [x] Closed JSON schema, real-source offline CLIs, syntax/formatting/Ajv,
+  lint/typecheck/local migration smoke/build/diff PASS; no dependencies upgraded.
+- [x] Design fixed SELECTs, independent counts, two-read non-atomic stability,
+  0038 ledger/main/normal-review guards, private artifact audience and T19/T20 risks.
+- [x] Final unchanged one-worker full suite PASS: 226 files / 4,957 tests.
+  Verified implementation checkpoint `ec24101`; two-worker timeout retained
+  in the report. No assertion or timeout was weakened.
+- [ ] Independent human review; governance/privacy/operator decision before any
+  additional read. No dispatch, push, PR, merge or production operation authorized.
+
+`T21RC_OFFLINE_DESIGN_READY`; `T21G_NOT_READY`; V1 remains authority.
+0039, repair and production deploy STOPPED. Local only; not pushed or PR-opened.
+Report: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
+---
+
 # Production V2 existing_canonical_id review fail-closed — 2026-09-30
 
 - [x] existing_canonical_id + any review (object or `{}`) has no bridge authority.

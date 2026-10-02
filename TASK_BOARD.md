@@ -1,3 +1,23 @@
+# Current — T21R-C protected row evidence (2026-10-02 UTC)
+
+**Status: `T21RC_OFFLINE_DESIGN_READY`.** Offline classifier/schema/read design completed on
+`codex/t21rc-row-level-reconciliation` from verified `a828b6354e29d89268a3d11c874158eb5ecb997c`,
+repository ID `1385308553` (`vn-tako4/Tako-san`). Focused 67/67 (51 new + 16
+regressions), offline source/CLI/Ajv checks, lint/typecheck/local migration
+smoke/build/diff PASS. Full two-worker suite: 4,956 passed, one existing
+5-second certification test timeout; final unchanged one-worker full run PASS,
+226 files / 4,957 tests. Verified local implementation checkpoint `ec24101`.
+
+Run `36943692146/1` aggregates accepted for review; admin-bypass exception is
+separate (approval history `skipped` by `vn-tako4`). No new production read,
+raw-row upload, mutation, restore, migration/0039 apply, deploy, flags, push,
+PR or merge. V1 remains authority; `T21G_NOT_READY`; repair/0039/deploy STOPPED.
+Next: independent human/privacy/governance review
+before a separately authorized normal-reviewer protected read. Details/checks:
+`docs/ai/recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
+
+---
+
 # Current — T19 cooking hard-restriction hotfix (2026-09-28)
 
 **Status: `T19_COOKING_HARD_RESTRICTION_HOTFIX_READY_FOR_REVIEW`.** Branch

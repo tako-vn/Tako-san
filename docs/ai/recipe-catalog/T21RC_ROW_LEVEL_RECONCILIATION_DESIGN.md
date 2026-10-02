@@ -1,6 +1,6 @@
 # T21R-C — Protected row-level reconciliation evidence
 
-Status: `T21RC_OFFLINE_DESIGN_IN_PROGRESS`. This is an offline evidence contract,
+Status: `T21RC_OFFLINE_DESIGN_READY`. This is an offline evidence contract,
 not repair, a release certification, or authorization for another production read.
 `T21G_NOT_READY`; repair, 0039 and production deployment remain stopped.
 
@@ -381,7 +381,7 @@ mutation approval. No push or PR is authorized by this packet.
 
 ## Verification and checkpoint
 
-Final checks and checkpoint hashes are recorded below after execution. Earlier
+Final checks and verified implementation checkpoint are recorded below. Earlier
 review found and corrected mixed-tuple duplicate/deficit false absence,
 unverified completeness and alternate-ID conflicts hidden by same-ID drift.
 The final bounded agent re-review found no remaining issue in those cases.
@@ -403,9 +403,9 @@ migration/0039 applies, restores, mutations and deployments remain **0**.
 | `pnpm typecheck` | PASS, both Web/shared and Worker, exit 0 |
 | `pnpm check:migrations` | PASS, `migration-smoke=ok`, in-memory SQLite only |
 | `pnpm build` | PASS, Web build and Worker type compilation, exit 0 |
-| `git diff --check` | PASS; final staged diff check will be repeated |
+| `git diff --check`, `git diff --cached --check` | PASS; task-owned diff reviewed including newly added files |
 | `pnpm exec vitest run --maxWorkers=2` on frozen source | 226 files, 4,956 passed / 1 failed of 4,957; unchanged certification query-safety test timed out at its existing 5,000 ms deadline |
-| `pnpm exec vitest run --maxWorkers=1` | Final unchanged full-suite retry in progress, lower concurrency only |
+| `pnpm exec vitest run --maxWorkers=1` | PASS, 226 files / 4,957 tests, 837.08 seconds; lower concurrency only, unchanged assertions/timeouts |
 
 First full attempt had a 600-second command limit (exit 124), an intermediate
 fixture failure and two CLI-heavy timeout cases. A later attempt was interrupted
@@ -416,9 +416,33 @@ unchanged auth-route diagnostic run separately passed 39/39. Fixture updates
 reflect required completeness and correct exact-content ID-conflict semantics,
 not reduced coverage. Raw logs and synthetic inputs remain ignored/local.
 
+The final single-worker run passed the entire unchanged suite, including the
+certification query-safety and staging catch-up tests. Two-worker timeout
+evidence remains above rather than being overwritten or called a pass.
+
 ### Dependency audit — separate existing findings
 
 `pnpm audit --json` returned exit 1 with **33 existing advisories**: 4 low,
 17 moderate, 12 high, zero critical/info. No dependency or lockfile was changed.
 This is not a T21R-C classifier correctness failure or authority to upgrade
 unrelated packages; remediation needs separate scope.
+
+### Verified checkpoint and final authority
+
+- Implementation: `ec24101` / `ec24101bd906b820d3a6ac29dcc179dd62a1d3fa`, verified local commit containing
+  classifier, tests, source-proof reuse, schema and design report. This report's
+  completion/state entries are a later documentation checkpoint, whose own hash
+  cannot be embedded in itself; final Git output identifies that checkpoint.
+- Final `git fetch origin --prune` still resolves main to
+  `a828b6354e29d89268a3d11c874158eb5ecb997c`; no source-main move or compatibility rebase.
+  One managed worktree; implementation was ahead 1 / behind 0 before the
+  documentation checkpoint. Existing untracked `.context/` preserved.
+- Verified diff against main has no changes in application/packages, migrations,
+  workflows, production/staging Wrangler configuration, package manifest or
+  lockfile. No protected PayOS/authentication/runtime paths changed.
+- No push, PR, merge, production dispatch or row upload. Operational production
+  mutations/SQL writes/restores/migrations/0039 applies/deploys/flag changes: **0**.
+  Local fixture validation is explicitly distinct from production operations.
+- Next: independent human review of the T21R-C classifier, schema and protected
+  read/privacy/governance path before separately authorizing any further read.
+  `T21G_NOT_READY`, `repairAuthorized=false`, 0039 and production deploy STOPPED.
