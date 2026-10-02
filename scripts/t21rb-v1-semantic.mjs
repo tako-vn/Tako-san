@@ -95,6 +95,8 @@ function bridgePair(row) {
   return null;
 }
 
+export { bridgePair as reviewedIngredientBridgePair };
+
 function uniqueBridges(reconciliation) {
   if (!Array.isArray(reconciliation)) throw new Error('Reconciliation input must be an array');
   const forward = new Map();
