@@ -351,6 +351,22 @@ Report: `recipe-catalog/T21RC_ROW_LEVEL_RECONCILIATION_DESIGN.md`.
 
 ---
 
+# Task board — T19 staging canary-1 observation / canary-5 (2026-09-28)
+
+**Status: `T19_CANARY_5_BLOCKED_WORKFLOW_DISPATCH_FORBIDDEN`.** Remote mutation: NO.
+
+- [x] Repository `takovn2/Tako-san` / 1385308553; main `85660fa497f3` unchanged start and end.
+- [x] Deploy `36385014725` and artifact `release-staging-36385014725-1` verified (canary/1/true, 500, ready, fingerprint match, fallback null; production skipped).
+- [x] Fresh public authority checks (commit, mode, percent, cutover, mixed, release, fallback null).
+- [x] Fresh outside-cohort live smoke PASS (planner, detail, cook start, shopping, T20 Manual/Assisted/Auto, time cap, 409, ownership).
+- [x] Transition map reviewed; `release-check` unit tests 236/236.
+- [ ] Fresh Staging D1 Runtime Readiness: dispatch HTTP 403 (needs `actions: write`).
+- [ ] Fresh protected authority evidence (served count, fingerprint, readiness).
+- [ ] Inside-cohort live smoke (needs an operator decision on how to get an in-cohort household).
+- [ ] Staging Deploy canary/5 and post-deploy certification.
+
+---
+
 # Task board — T19-R0 staging D1 runtime readiness certifier (2026-09-27)
 
 **Status: `T19_STAGING_D1_RUNTIME_READINESS_FIX_READY_FOR_REVIEW`.** Remote D1 mutation: NO.
