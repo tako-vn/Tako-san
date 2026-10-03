@@ -316,6 +316,18 @@ describe('T21R-C2D credential-free classify command boundaries', () => {
 });
 
 describe('T21R-C2D classification failure stages', () => {
+  it.each([
+    ['status', (values) => { values.capture.status = 'INVALID'; }],
+    ['authorization digest', (values) => { values.authorization.source = 'changed'; }],
+    ['authority proof', (values) => { values.capture.authorityProof = { ...proof, reviewedBridgeCount: 1 }; }],
+    ['capture counts', (values) => { values.capture.counts = { recipeCount: 1, ingredientOccurrenceCount: 2 }; }],
+  ])('retains the %s capture-binding guard', async (_, mutate) => {
+    const values = fixture();
+    mutate(values);
+    await expect(classifyT21RC2Snapshot(values))
+      .rejects.toThrow('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
+  });
+
   it('reports capture binding rather than a generic classification rejection', async () => {
     const values = fixture();
     values.capture.snapshotDigestSha256 = '0'.repeat(64);
@@ -328,6 +340,22 @@ describe('T21R-C2D classification failure stages', () => {
     delete values.authority;
     values.loadAuthority = async () => { throw new Error('T21RC_AUTHORITY_CONTRADICTION'); };
     await expect(classifyT21RC2Snapshot(values))
+      .rejects.toThrow('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
+  });
+
+  it('rejects a missing authority-loader result at the authority stage', async () => {
+    const values = fixture();
+    delete values.authority;
+    values.loadAuthority = async () => null;
+    await expect(classifyT21RC2Snapshot(values))
+      .rejects.toThrow('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
+  });
+
+  it('preserves the authority category when reconciliation surfaces an authority contradiction', async () => {
+    vi.spyOn(reconciliation, 'reconcileIngredientOccurrences').mockImplementation(() => {
+      throw Object.assign(new Error('PRIVATE_AUTHORITY_CONTEXT'), { code: 'T21RC_AUTHORITY_CONTRADICTION' });
+    });
+    await expect(classifyT21RC2Snapshot(fixture()))
       .rejects.toThrow('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
   });
 
