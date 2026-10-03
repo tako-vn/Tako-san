@@ -45,6 +45,16 @@ no Environment policy, production credential, live database or row delivery.
 See `recipe-catalog/T21RC3_PRODUCTION_DISPATCH_READINESS.md` for source evidence,
 the credential-free future packet and fixture-only validation.
 
+**C4I separate identity diagnosis:** Add a manual production-Environment
+metadata-only workflow/script outside the unchanged 73-path C2 closure. Permit
+only whoami and D1 metadata list; expose stage enums, suppress raw output/debug
+files and publish no artifact. Existing C2 generic identity rejection remains
+unchanged. Real-Git additive binding passes and a bound-byte mutation rejects;
+C3 reviewed SHA remains eligible only under future-main equivalence and all C2
+gates. Identity success never proves read-only token scope or authorizes SQL,
+credential mutation or C2 rerun. See
+`recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.
