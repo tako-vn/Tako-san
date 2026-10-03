@@ -50,6 +50,12 @@ function manifestFor(values = fixture()) {
     authorityProof: authority.authorityProof,
   };
 }
+function refreshClassificationDigest(manifest) {
+  manifest.digests.classificationSha256 = captureDigest({
+    captureEvidence: manifest.captureEvidence, production: manifest.production,
+    target: manifest.target, recipes: manifest.recipes, summary: manifest.summary,
+  });
+}
 const temporary = [];
 const temp = () => {
   const directory = mkdtempSync(path.join(tmpdir(), 't21rc2d-test-'));
@@ -89,6 +95,35 @@ describe('T21R-C2D classifier/schema contract regressions', () => {
 });
 
 describe('T21R-C2D closed schema and aggregate mutation stages', () => {
+  it.each(['production', 'target'])('rejects cross-recipe %s candidates even with a recomputed digest', (side) => {
+    const manifest = manifestFor(fixture({
+      targetRecipes: ['synthetic-a', 'synthetic-b'].map((id) => ({ id, ingredients: [ingredient()] })),
+      rows: ['synthetic-a', 'synthetic-b'].map((id) => row({ id: `row-${id}`, recipe_id: id })),
+    }));
+    if (side === 'production') {
+      const entry = manifest.production[0];
+      entry.candidateTargetOccurrenceKeys = [manifest.target.find((candidate) => candidate.recipeId !== entry.recipeId).occurrenceKey];
+    } else {
+      const entry = manifest.target[0];
+      entry.candidateProductionOccurrenceKeys = [manifest.production.find((candidate) => candidate.recipeId !== entry.recipeId).occurrenceKey];
+    }
+    refreshClassificationDigest(manifest);
+    expect(validateT21RC2ManifestSchema(manifest)).toBe(true);
+    expect(() => validateT21RC2Manifest(manifest)).toThrow('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+  });
+
+  it.each([
+    ['recipe status', (manifest) => { manifest.recipes[0].status = 'SEVERELY_DIVERGED'; }],
+    ['largest drift index', (manifest) => { manifest.summary.largestDriftRecipes = [{ recipeId: manifest.recipes[0].recipeId, count: 99 }]; }],
+    ['conflict index', (manifest) => { manifest.summary.idConflictOccurrenceKeys = [`p:${'0'.repeat(64)}:1`]; }],
+  ])('rejects false derived %s even with a recomputed digest', (_, mutate) => {
+    const manifest = manifestFor();
+    mutate(manifest);
+    refreshClassificationDigest(manifest);
+    expect(validateT21RC2ManifestSchema(manifest)).toBe(true);
+    expect(() => validateT21RC2Manifest(manifest)).toThrow('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+  });
+
   it.each([
     ['production classification', (manifest) => { manifest.production[0].classification = 'INVALID'; }],
     ['target classification', (manifest) => { manifest.target[0].classification = 'INVALID'; }],

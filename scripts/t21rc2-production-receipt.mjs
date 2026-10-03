@@ -103,6 +103,7 @@ const isPlainObject = (value) => value !== null && typeof value === 'object'
   && !Array.isArray(value)
   && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 const safeInteger = (value) => Number.isSafeInteger(value) && value >= 0;
+const order = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const githubLogin = (value) => typeof value === 'string'
   && value.length > 0 && value.length <= 39
   && value.trim() === value
@@ -210,9 +211,9 @@ function sum(values) {
   return values.reduce((total, value) => total + value, 0);
 }
 
-function occurrenceKeys(records) {
-  const values = records.map((record) => record.occurrenceKey);
-  return new Set(values).size === values.length ? new Set(values) : null;
+function occurrencesByKey(records) {
+  const indexed = new Map(records.map((record) => [record.occurrenceKey, record]));
+  return indexed.size === records.length ? indexed : null;
 }
 
 function canonicalEqual(left, right) {
@@ -267,9 +268,9 @@ export function validateT21RC2ManifestAggregate(manifest) {
       reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     }
 
-    const productionKeys = occurrenceKeys(production);
-    const targetKeys = occurrenceKeys(targetRows);
-    if (!productionKeys || !targetKeys) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+    const productionByKey = occurrencesByKey(production);
+    const targetByKey = occurrencesByKey(targetRows);
+    if (!productionByKey || !targetByKey) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
 
     const productionClassCounts = countBy(production, 'classification', PRODUCTION_CLASSES);
     const targetClassCounts = countBy(targetRows, 'classification', TARGET_CLASSES);
@@ -301,7 +302,9 @@ export function validateT21RC2ManifestAggregate(manifest) {
         group.production.push(row);
       }
       for (const key of row.candidateTargetOccurrenceKeys) {
-        if (!targetKeys.has(key)) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+        if (!targetByKey.has(key) || targetByKey.get(key).recipeId !== row.recipeId) {
+          reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+        }
       }
     }
     for (const row of targetRows) {
@@ -309,7 +312,9 @@ export function validateT21RC2ManifestAggregate(manifest) {
       if (!group) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       group.target.push(row);
       for (const key of row.candidateProductionOccurrenceKeys) {
-        if (!productionKeys.has(key)) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+        if (!productionByKey.has(key) || productionByKey.get(key).recipeId !== row.recipeId) {
+          reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
+        }
       }
     }
 
@@ -330,7 +335,16 @@ export function validateT21RC2ManifestAggregate(manifest) {
       const pCounts = countBy(group.production, 'classification', PRODUCTION_CLASSES);
       const tCounts = countBy(group.target, 'classification', TARGET_CLASSES);
       const reviewRequiredCount = group.production.filter((row) => row.confidence === 'REVIEW_REQUIRED').length;
-      if (recipe.productionOccurrenceCount !== group.production.length
+      const allSatisfied = tCounts.TARGET_ONLY_MISSING === 0 && tCounts.AMBIGUOUS === 0;
+      const allMapped = pCounts.EXACT_V1_MATCH + pCounts.DETERMINISTIC_V1_COUNTERPART
+        + pCounts.REVIEWED_ID_BRIDGE === group.production.length;
+      const uncertain = tCounts.AMBIGUOUS + pCounts.AMBIGUOUS + pCounts.MALFORMED_OCCURRENCE
+        + pCounts.ID_CONFLICT_REVIEW_REQUIRED + pCounts.DUPLICATE_SEMANTIC_OCCURRENCE;
+      const status = allSatisfied && allMapped
+        ? pCounts.DETERMINISTIC_V1_COUNTERPART + pCounts.REVIEWED_ID_BRIDGE > 0 ? 'DETERMINISTICALLY_RECONCILABLE' : 'EXACT_V1_PARITY'
+        : uncertain > 0 ? 'AMBIGUOUS'
+          : tCounts.SATISFIED_EXACT + tCounts.SATISFIED_DETERMINISTICALLY > 0 ? 'PARTIALLY_RECONCILABLE' : 'SEVERELY_DIVERGED';
+      if (recipe.status !== status || recipe.productionOccurrenceCount !== group.production.length
           || recipe.targetOccurrenceCount !== group.target.length
           || !sameCounts(recipe.productionClassCounts, pCounts, PRODUCTION_CLASSES)
           || !sameCounts(recipe.targetClassCounts, tCounts, TARGET_CLASSES)
@@ -348,7 +362,14 @@ export function validateT21RC2ManifestAggregate(manifest) {
       if (recipe.sameIdDriftCount > 0) driftRecipeCount += 1;
     }
 
-    if (summary.driftRecipeCount !== driftRecipeCount) {
+    const largestDriftRecipes = recipes.filter((recipe) => recipe.sameIdDriftCount > 0)
+      .sort((a, b) => b.sameIdDriftCount - a.sameIdDriftCount || order(a.recipeId, b.recipeId))
+      .slice(0, 10).map((recipe) => ({ recipeId: recipe.recipeId, count: recipe.sameIdDriftCount }));
+    const idConflictOccurrenceKeys = production.filter((row) => row.classification === 'ID_CONFLICT_REVIEW_REQUIRED'
+      || row.reviewReason === 'ALTERNATE_IDENTITY_CONTENT_CONFLICT').map((row) => row.occurrenceKey);
+    if (summary.driftRecipeCount !== driftRecipeCount
+        || !canonicalEqual(summary.largestDriftRecipes, largestDriftRecipes)
+        || !canonicalEqual(summary.idConflictOccurrenceKeys, idConflictOccurrenceKeys)) {
       reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     }
 
