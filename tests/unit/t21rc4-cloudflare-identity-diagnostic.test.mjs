@@ -8,6 +8,7 @@ import { formatT21RC4IdentityReceipt, runT21RC4IdentityDiagnostic, T21RC4I_COMMA
 import { verifyProductionWranglerConfig } from '../../scripts/d1-migration-check.mjs';
 import { verifyT21RC2CloudflareIdentity } from '../../scripts/t21rc2-production-capture.mjs';
 import { assertReviewedExecutionClosure, T21RC2_REVIEW_BOUND_PATHS } from '../../scripts/t21rc2-production-approval.mjs';
+import { assertC4IReviewBinding } from '../../scripts/t21rc4-identity-gate.mjs';
 
 const ACCOUNT = 'a'.repeat(32);
 const OTHER_ACCOUNT = 'b'.repeat(32);
@@ -174,7 +175,7 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'CLOUDFLARE_API_BASE_URL', 'CLOUDFLARE_API_KEY']) {
       expect(child).not.toHaveProperty(key);
     }
-    expect(child.WRANGLER_SEND_METRICS).toBe('false'); expect(child.WRANGLER_LOG).toBe('error');
+    expect(child.WRANGLER_SEND_METRICS).toBe('false'); expect(child.WRANGLER_LOG).toBe('log');
     expect(child.WRANGLER_LOG_PATH).not.toBe('/unexpected/file');
     expect(() => statSync(path.dirname(child.WRANGLER_LOG_PATH))).toThrow();
   });
@@ -230,6 +231,133 @@ describe('C4I additions preserve independently reviewed C2 execution bytes', () 
     git('add', '--', bound);
     const mutated = git('commit-tree', git('write-tree'), '-p', future, '-m', 'mutate bound bytes');
     expect(() => assertReviewedExecutionClosure(reviewed, mutated, { cwd: repo }))
+      .toThrow('T21RC2_REVIEW_BINDING_REJECTED');
+  });
+});
+
+// Models Wrangler 3.114.17: logger.log/table reach stdout only when LOGGER_LEVELS[WRANGLER_LOG] >= log;
+// an unset or unrecognised value defaults to log.
+const LOGGER_LEVELS = { none: -1, error: 0, warn: 1, info: 2, log: 3, debug: 4 };
+const loggerEmits = (env) => (LOGGER_LEVELS[(env.WRANGLER_LOG ?? 'log').toLowerCase()] ?? 3) >= LOGGER_LEVELS.log;
+const LOG_ACCOUNT = '5e2c7a91d04b3f6e8a1c9d2b7f4e6a03';
+const LOG_EMAIL = 'private-operator@example.invalid';
+const LOG_ACCOUNT_NAME = 'Private Account Name Ltd';
+const LOG_PROVIDER_TEXT = 'PRIVATE_PROVIDER_TEXT_request-7f3a';
+const realisticWhoami = (accountCell = LOG_ACCOUNT) => [
+  '', ' ⛅️ wrangler 3.114.17', '--------------------', '', 'Getting User settings...',
+  `👋 You are logged in with an API Token, associated with the email ${LOG_EMAIL}.`,
+  '┌──────────────────────────┬──────────────────────────────────┐',
+  '│ Account Name             │ Account ID                       │',
+  '├──────────────────────────┼──────────────────────────────────┤',
+  `│ ${LOG_ACCOUNT_NAME} │ ${accountCell} │`,
+  `│ Unrelated account        │ ${OTHER_ACCOUNT} │`,
+  '└──────────────────────────┴──────────────────────────────────┘',
+  `🔓 Token Permissions: ${LOG_PROVIDER_TEXT} trace ${'c'.repeat(64)} ${TOKEN}`,
+].join('\n');
+
+function loggerSensitiveRun({ whoamiGated = true, listGated = true, whoami = realisticWhoami(),
+  list = LIST, env = {} } = {}) {
+  const execute = vi.fn((command, args, options) => {
+    expect(command).toBe('pnpm');
+    expect(options.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+    expect(readlinkSync(options.env.WRANGLER_LOG_PATH)).toBe('/dev/null');
+    if (JSON.stringify(args) === JSON.stringify(T21RC4I_COMMANDS.whoami)) {
+      return !whoamiGated || loggerEmits(options.env) ? whoami : '';
+    }
+    expect(args).toEqual(T21RC4I_COMMANDS.list);
+    return !listGated || loggerEmits(options.env) ? JSON.stringify(list, null, 2) : '';
+  });
+  const result = runT21RC4IdentityDiagnostic({ cwd, execute,
+    env: { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: LOG_ACCOUNT, ...env } });
+  return { result, execute, formatted: formatT21RC4IdentityReceipt(result) };
+}
+
+describe('T21R-C4L parsed Wrangler stdout is not suppressed by the logger level', () => {
+  it('the model reproduces the bug: WRANGLER_LOG=error empties logger.log/table stdout', () => {
+    expect(loggerEmits({ WRANGLER_LOG: 'error' })).toBe(false);
+    expect(loggerEmits({ WRANGLER_LOG: 'log' })).toBe(true);
+    expect(loggerEmits({})).toBe(true);
+  });
+  it('whoami account table reaches the parser and matches the configured account', () => {
+    const { result, execute } = loggerSensitiveRun({ listGated: false });
+    expect(execute.mock.calls.map(([, , options]) => options.env.WRANGLER_LOG)).toEqual(['log', 'log']);
+    expect(result.wranglerWhoami).toBe('SUCCESS');
+    expect(result.accountIdMatchesWhoami).toBe(true);
+    expect(result.status).toBe('T21RC4I_CLOUDFLARE_IDENTITY_CERTIFIED');
+  });
+  it('an inherited WRANGLER_LOG=error cannot suppress either parsed command', () => {
+    const { result, execute } = loggerSensitiveRun({ env: { WRANGLER_LOG: 'error' } });
+    expect(execute.mock.calls.every(([, , options]) => options.env.WRANGLER_LOG === 'log')).toBe(true);
+    expect(result.status).toBe('T21RC4I_CLOUDFLARE_IDENTITY_CERTIFIED');
+  });
+  it('d1 list --json payload reaches the parser and the exact name/UUID comparison runs', () => {
+    const { result, execute } = loggerSensitiveRun({ whoamiGated: false });
+    expect(execute.mock.calls[1][2].env.WRANGLER_LOG).toBe('log');
+    expect(result.d1List).toBe('SUCCESS');
+    expect(result.frigoDbMatchCount).toBe(1);
+    expect(result.productionD1UuidMatch).toBe(true);
+    expect(result.status).toBe('T21RC4I_CLOUDFLARE_IDENTITY_CERTIFIED');
+    const mismatch = loggerSensitiveRun({ whoamiGated: false, list: [{ name: 'frigo-db', uuid: OTHER_UUID }] });
+    expect(mismatch.result.d1List).toBe('SUCCESS');
+    expect(mismatch.result.status).toBe('T21RC4I_PRODUCTION_D1_UUID_MISMATCH');
+  });
+  it('bounded matching on realistic whoami output ignores 32-hex runs inside longer hex', () => {
+    expect(LOG_ACCOUNT).toMatch(/^[0-9a-f]{32}$/);
+    const { result, execute } = loggerSensitiveRun({ whoami: realisticWhoami(`${LOG_ACCOUNT}${LOG_ACCOUNT}`) });
+    expect(result.status).toBe('T21RC4I_ACCOUNT_ID_SECRET_MISMATCH');
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ['certified', {}],
+    ['account mismatch', { whoami: realisticWhoami(OTHER_ACCOUNT.replace(/b/g, 'd')) }],
+    ['UUID mismatch', { list: [{ name: 'frigo-db', uuid: OTHER_UUID }, LIST[1]] }],
+  ])('visible raw Wrangler output never reaches the receipt or console (%s)', (_, options) => {
+    const writes = [vi.spyOn(process.stdout, 'write'), vi.spyOn(process.stderr, 'write'),
+      vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')];
+    const { formatted } = loggerSensitiveRun(options);
+    for (const secret of [TOKEN, LOG_ACCOUNT, OTHER_ACCOUNT, LOG_EMAIL, LOG_ACCOUNT_NAME,
+      LOG_PROVIDER_TEXT, UUID, OTHER_UUID, 'other-private-name']) expect(formatted).not.toContain(secret);
+    writes.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});
+
+describe('T21R-C4L intentionally invalidates both prior reviewed execution SHAs', () => {
+  const rev = (ref) => execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`],
+    { cwd: root, encoding: 'utf8', stdio: 'pipe' }).trim();
+  function remediationRepo() {
+    const repo = path.join(cwd, 'c4l-binding-repo');
+    execFileSync('git', ['init', '--quiet', repo], { stdio: 'pipe' });
+    writeFileSync(path.join(repo, '.git', 'objects', 'info', 'alternates'), `${path.join(root, '.git', 'objects')}\n`);
+    const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: 'pipe' }).trim();
+    git('config', 'user.name', 'C4L Test'); git('config', 'user.email', 'c4l@example.invalid');
+    // Last certified main before T21R-C4L; both old reviewed SHAs bind to it unchanged.
+    const base = rev('0e6342f');
+    git('read-tree', base);
+    const unchanged = git('commit-tree', git('write-tree'), '-p', base, '-m', 'unchanged');
+    const remediate = (file) => {
+      writeFileSync(path.join(repo, file), readFileSync(path.join(root, file)));
+      git('update-index', '--add', '--cacheinfo', `100644,${git('hash-object', '-w', file)},${file}`);
+      return git('commit-tree', git('write-tree'), '-p', base, '-m', `remediate ${file}`);
+    };
+    return { git, base, unchanged, remediate, repo };
+  }
+  it('C4I reviewed SHA a0c1cfd rejects the remediated diagnostic bytes', () => {
+    const { unchanged, remediate, repo } = remediationRepo();
+    const reviewed = rev('a0c1cfd');
+    expect(() => assertC4IReviewBinding(reviewed, unchanged, { cwd: repo })).not.toThrow();
+    const file = 'scripts/t21rc4-cloudflare-identity-diagnostic.mjs';
+    mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    expect(() => assertC4IReviewBinding(reviewed, remediate(file), { cwd: repo }))
+      .toThrow('T21RC4I_REVIEW_BINDING_REJECTED');
+  });
+  it('C2 reviewed SHA 93c4055 rejects the remediated capture bytes', () => {
+    const { unchanged, remediate, repo } = remediationRepo();
+    const reviewed = rev('93c4055');
+    expect(() => assertReviewedExecutionClosure(reviewed, unchanged, { cwd: repo })).not.toThrow();
+    const file = 'scripts/t21rc2-production-capture.mjs';
+    expect(T21RC2_REVIEW_BOUND_PATHS).toContain(file);
+    mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    expect(() => assertReviewedExecutionClosure(reviewed, remediate(file), { cwd: repo }))
       .toThrow('T21RC2_REVIEW_BINDING_REJECTED');
   });
 });

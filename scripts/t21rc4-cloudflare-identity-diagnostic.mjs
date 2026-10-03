@@ -90,13 +90,15 @@ export function runT21RC4IdentityDiagnostic({
     const logSink = path.join(privateDir, 'wrangler.log');
     symlinkSync('/dev/null', logSink);
     // Do not inherit alternate credentials, endpoint overrides or GitHub tokens.
+    // Both commands' stdout is parsed: Wrangler 3.114.17 emits whoami's account table and the
+    // d1 list --json payload via logger.table/log, which WRANGLER_LOG=error suppresses.
     const childEnv = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP',
       'SystemRoot', 'ComSpec', 'PATHEXT'].filter((key) => typeof env[key] === 'string')
       .map((key) => [key, env[key]]));
     Object.assign(childEnv, {
       CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
-      CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG: 'error',
+      CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG: 'log',
       WRANGLER_LOG_PATH: logSink,
     });
     const options = { cwd, env: childEnv, encoding: 'utf8',
