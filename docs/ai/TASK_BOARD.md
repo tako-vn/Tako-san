@@ -1,3 +1,20 @@
+# T21R-C4L Wrangler parsed-stdout remediation — 2026-10-03 UTC
+
+- [x] Verify main `0e6342f`; confirm 3.114.17 logger/whoami/list/execute source.
+- [x] C4I and C2 parsed-stdout commands use `WRANGLER_LOG='log'`; stdio piped,
+  no command/SQL/validation/dependency/workflow change.
+- [x] Regressions: C4I whoami + d1 list, C2 whoami + d1 list + d1 execute,
+  raw-output leakage; all fail against old `error` code.
+- [x] Old C4I `a0c1cfd` / C2 `93c4055` bindings reject the remediated head.
+- [x] Correct historical interpretation of runs 37124563415, 37128183771,
+  37084988593; account secret correctness UNVERIFIED_PENDING_FIXED_C4I.
+- [ ] Independent review of exact head covering both C4I and C2 surfaces.
+- [ ] Protected merge, exact-main CI, then separately authorized fresh C4I.
+
+Report: `recipe-catalog/T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
+
+---
+
 # T21R-C4I separate Cloudflare identity diagnostic — 2026-10-03 JST
 
 - [x] Verify exact certified main `7cd58968c3b4c0f7936c75d74b6965d229b57c69` and repository

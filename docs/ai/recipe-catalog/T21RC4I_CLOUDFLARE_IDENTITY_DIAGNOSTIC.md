@@ -140,6 +140,12 @@ in memory. A private temporary directory sends Wrangler's debug log to
 OS fields and the two explicit Cloudflare credentials, without GitHub tokens,
 alternate Cloudflare credentials, endpoint overrides or debug settings.
 
+**T21R-C4L correction:** the child previously set `WRANGLER_LOG=error`, which in
+Wrangler 3.114.17 suppressed the whoami account table and `d1 list --json`
+output. `T21RC4I_ACCOUNT_ID_SECRET_MISMATCH` from runs 37124563415 and
+37128183771 is invalidated as account evidence. The child now uses
+`WRANGLER_LOG=log`; see `T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
+
 ## Future operator sequence
 
 1. Obtain independent delta review of the new exact C4I remediation head and
