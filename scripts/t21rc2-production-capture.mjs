@@ -194,23 +194,52 @@ export async function captureT21RC2Snapshot({ read, expectedRecipeIds, expectedL
   };
 }
 
-export async function classifyT21RC2Snapshot({ input, capture, authorization, authority }) {
-  if (capture?.status !== 'OBSERVED_STABLE_NON_ATOMIC' || capture.authorizationSha256 !== captureDigest(authorization)
-      || !same(capture.authorityProof, authority.authorityProof) || !same(input?.captureCounts, capture.counts)
-      || captureDigest(input) !== capture.snapshotDigestSha256) throw t21rc2Error('T21RC2_CLASSIFICATION_REJECTED');
+export async function classifyT21RC2Snapshot({ input, capture, authorization, authority,
+  loadAuthority = loadCertifiedV1Authority, cwd = process.cwd() }) {
   try {
-    const manifest = reconcileIngredientOccurrences({
+    if (capture?.status !== 'OBSERVED_STABLE_NON_ATOMIC' || capture.authorizationSha256 !== captureDigest(authorization)
+        || !same(input?.captureCounts, capture.counts) || captureDigest(input) !== capture.snapshotDigestSha256) {
+      throw t21rc2Error('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
+    }
+  } catch {
+    throw t21rc2Error('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
+  }
+  try {
+    authority ??= await loadAuthority(cwd);
+    if (!authority || typeof authority !== 'object') {
+      throw t21rc2Error('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
+    }
+  } catch {
+    throw t21rc2Error('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
+  }
+  try {
+    if (!same(capture.authorityProof, authority.authorityProof)) {
+      throw t21rc2Error('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
+    }
+  } catch {
+    throw t21rc2Error('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
+  }
+  let manifest;
+  try {
+    manifest = reconcileIngredientOccurrences({
       ...authority, productionRows: input.occurrences, productionRecipeIds: input.recipeIds, captureCounts: input.captureCounts,
     });
     manifest.authorityProof = authority.authorityProof;
-    const { validateT21RC2Manifest } = await import('./t21rc2-production-receipt.mjs');
-    validateT21RC2Manifest(manifest);
-    return { manifest, capture: { ...capture, digests: {
-      occurrenceSha256: manifest.digests.occurrenceSha256, semanticSha256: manifest.digests.semanticSha256,
-    } } };
-  } catch {
-    throw t21rc2Error('T21RC2_CLASSIFICATION_REJECTED');
+  } catch (error) {
+    throw t21rc2Error(error?.message === 'T21RC_AUTHORITY_CONTRADICTION' || error?.code === 'T21RC_AUTHORITY_CONTRADICTION'
+      ? 'T21RC2_CLASSIFICATION_AUTHORITY_REJECTED' : 'T21RC2_CLASSIFICATION_RECONCILIATION_REJECTED');
   }
+  let validateT21RC2Manifest;
+  try {
+    ({ validateT21RC2Manifest } = await import('./t21rc2-production-receipt.mjs'));
+  } catch (error) {
+    throw t21rc2Error(error?.code === 'T21RC2_CLASSIFICATION_AUTHORITY_REJECTED'
+      ? 'T21RC2_CLASSIFICATION_AUTHORITY_REJECTED' : 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
+  }
+  validateT21RC2Manifest(manifest);
+  return { manifest, capture: { ...capture, digests: {
+    occurrenceSha256: manifest.digests.occurrenceSha256, semanticSha256: manifest.digests.semanticSha256,
+  } } };
 }
 
 export async function runT21RC2CaptureCommand(command, { env = process.env, cwd = process.cwd(), execute = execFileSync, authorize, loadAuthority = loadCertifiedV1Authority } = {}) {
@@ -236,7 +265,7 @@ export async function runT21RC2CaptureCommand(command, { env = process.env, cwd 
     const result = await classifyT21RC2Snapshot({
       input: readPrivateJson('classifier-input.json', env, cwd),
       capture: readPrivateJson('capture-verified.json', env, cwd),
-      authorization, authority: await loadAuthority(cwd),
+      authorization, loadAuthority, cwd,
     });
     writePrivateJson('row-manifest.json', result.manifest, env, cwd);
     writePrivateJson('capture-proof.json', result.capture, env, cwd);

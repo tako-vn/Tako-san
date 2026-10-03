@@ -62,7 +62,7 @@ let targetSpec;
 try {
   targetSpec = JSON.parse(TARGET_SPEC_BYTES.toString('utf8'));
 } catch {
-  throw t21rc2Error('T21RC2_CLASSIFICATION_REJECTED');
+  throw t21rc2Error('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
 }
 
 const target = targetSpec?.target;
@@ -80,7 +80,7 @@ if (targetSpec?.status !== 'T21RA_CANONICAL_TARGET_CERTIFIED'
     || PRODUCTION_D1.name !== 'frigo-db'
     || typeof PRODUCTION_D1.id !== 'string'
     || PRODUCTION_D1.id.length === 0) {
-  throw t21rc2Error('T21RC2_CLASSIFICATION_REJECTED');
+  throw t21rc2Error('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
 }
 
 const PINNED_TARGET = Object.freeze({
@@ -175,7 +175,7 @@ function assertAuthorityProof(proof, requirePinned = false) {
       || !isSha256(proof.reconciliationSha256)
       || !isSha256(proof.runtimeFingerprint)
       || !safeInteger(proof.reviewedBridgeCount)) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
   }
   if (requirePinned
       && (proof.canonicalTargetSha256 !== PINNED_TARGET.canonicalTargetSha256
@@ -183,7 +183,7 @@ function assertAuthorityProof(proof, requirePinned = false) {
         || proof.approvedBatchesSha256 !== PINNED_TARGET.approvedBatchesSha256
         || proof.releaseId !== PINNED_TARGET.releaseId
         || proof.runtimeFingerprint !== PINNED_TARGET.runtimeFingerprint)) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_AUTHORITY_REJECTED');
   }
 }
 
@@ -194,7 +194,7 @@ function emptyCounts(keys) {
 function countBy(records, key, keys) {
   const counts = emptyCounts(keys);
   for (const record of records) {
-    if (!Object.hasOwn(counts, record[key])) reject('T21RC2_CLASSIFICATION_REJECTED');
+    if (!Object.hasOwn(counts, record[key])) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     counts[record[key]] += 1;
   }
   return counts;
@@ -233,17 +233,21 @@ function classificationDigest(manifest) {
   }));
 }
 
-function validateManifestAndAggregate(manifest) {
+export function validateT21RC2ManifestSchema(manifest) {
   try {
     if (!isPlainObject(manifest) || !validateManifestSchema(manifest)) {
-      reject('T21RC2_CLASSIFICATION_REJECTED');
+      reject('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
     }
+    return true;
+  } catch {
+    // Ajv paths, params and data are private; only the fixed stage code leaves this validator.
+    reject('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
+  }
+}
+
+export function validateT21RC2ManifestAggregate(manifest) {
+  try {
     assertAuthorityProof(manifest.authorityProof);
-    if (!isSha256(manifest.digests.occurrenceSha256)
-        || !isSha256(manifest.digests.semanticSha256)
-        || !isSha256(manifest.digests.classificationSha256)) {
-      reject('T21RC2_CLASSIFICATION_REJECTED');
-    }
 
     const { captureEvidence, production, target: targetRows, recipes, summary } = manifest;
     if (captureEvidence.completeness !== 'COUNT_CONSISTENT_OFFLINE_INPUT'
@@ -260,12 +264,12 @@ function validateManifestAndAggregate(manifest) {
         || summary.accounting.targetClassSum !== targetRows.length
         || !safeInteger(summary.unattributedProductionOccurrences)
         || !safeInteger(summary.driftRecipeCount)) {
-      reject('T21RC2_CLASSIFICATION_REJECTED');
+      reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     }
 
     const productionKeys = occurrenceKeys(production);
     const targetKeys = occurrenceKeys(targetRows);
-    if (!productionKeys || !targetKeys) reject('T21RC2_CLASSIFICATION_REJECTED');
+    if (!productionKeys || !targetKeys) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
 
     const productionClassCounts = countBy(production, 'classification', PRODUCTION_CLASSES);
     const targetClassCounts = countBy(targetRows, 'classification', TARGET_CLASSES);
@@ -276,7 +280,7 @@ function validateManifestAndAggregate(manifest) {
     const perRecipe = new Map();
 
     for (const recipe of recipes) {
-      if (recipeIds.has(recipe.recipeId)) reject('T21RC2_CLASSIFICATION_REJECTED');
+      if (recipeIds.has(recipe.recipeId)) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       recipeIds.add(recipe.recipeId);
       perRecipe.set(recipe.recipeId, {
         production: [], target: [],
@@ -293,19 +297,19 @@ function validateManifestAndAggregate(manifest) {
         unattributedProductionOccurrences += 1;
       } else {
         const group = perRecipe.get(row.recipeId);
-        if (!group) reject('T21RC2_CLASSIFICATION_REJECTED');
+        if (!group) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
         group.production.push(row);
       }
       for (const key of row.candidateTargetOccurrenceKeys) {
-        if (!targetKeys.has(key)) reject('T21RC2_CLASSIFICATION_REJECTED');
+        if (!targetKeys.has(key)) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       }
     }
     for (const row of targetRows) {
       const group = perRecipe.get(row.recipeId);
-      if (!group) reject('T21RC2_CLASSIFICATION_REJECTED');
+      if (!group) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       group.target.push(row);
       for (const key of row.candidateProductionOccurrenceKeys) {
-        if (!productionKeys.has(key)) reject('T21RC2_CLASSIFICATION_REJECTED');
+        if (!productionKeys.has(key)) reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       }
     }
 
@@ -317,7 +321,7 @@ function validateManifestAndAggregate(manifest) {
         || summary.unattributedProductionOccurrences !== unattributedProductionOccurrences
         || sum(Object.values(productionClassCounts)) !== production.length
         || sum(Object.values(targetClassCounts)) !== targetRows.length) {
-      reject('T21RC2_CLASSIFICATION_REJECTED');
+      reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     }
 
     let driftRecipeCount = 0;
@@ -339,14 +343,13 @@ function validateManifestAndAggregate(manifest) {
           || recipe.ambiguousProductionCount !== pCounts.AMBIGUOUS
           || recipe.ambiguousTargetCount !== tCounts.AMBIGUOUS
           || recipe.reviewRequiredCount !== reviewRequiredCount) {
-        reject('T21RC2_CLASSIFICATION_REJECTED');
+        reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
       }
       if (recipe.sameIdDriftCount > 0) driftRecipeCount += 1;
     }
 
-    if (summary.driftRecipeCount !== driftRecipeCount
-        || manifest.digests.classificationSha256 !== classificationDigest(manifest)) {
-      reject('T21RC2_CLASSIFICATION_REJECTED');
+    if (summary.driftRecipeCount !== driftRecipeCount) {
+      reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
     }
 
     return {
@@ -362,10 +365,30 @@ function validateManifestAndAggregate(manifest) {
       unattributedProductionOccurrences,
       summary,
     };
-  } catch (error) {
-    if (T21RC2_ERROR_CODES.includes(error?.code)) throw error;
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+  } catch {
+    reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
   }
+}
+
+export function validateT21RC2ManifestDigests(manifest) {
+  try {
+    if (!isSha256(manifest.digests.occurrenceSha256)
+        || !isSha256(manifest.digests.semanticSha256)
+        || !isSha256(manifest.digests.classificationSha256)
+        || manifest.digests.classificationSha256 !== classificationDigest(manifest)) {
+      reject('T21RC2_CLASSIFICATION_DIGEST_REJECTED');
+    }
+    return true;
+  } catch {
+    reject('T21RC2_CLASSIFICATION_DIGEST_REJECTED');
+  }
+}
+
+function validateManifestAndAggregate(manifest) {
+  validateT21RC2ManifestSchema(manifest);
+  const aggregate = validateT21RC2ManifestAggregate(manifest);
+  validateT21RC2ManifestDigests(manifest);
+  return aggregate;
 }
 
 export function validateT21RC2Manifest(manifest) {
@@ -407,12 +430,12 @@ function validateCapture({ authorization, authorizationSha256, capture, manifest
       || aggregate.productionOccurrenceCount !== counts.ingredientOccurrenceCount
       || aggregate.recipeCount !== PINNED_TARGET.recipeCount
       || aggregate.targetOccurrenceCount !== PINNED_TARGET.targetOccurrenceCount) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
   }
 
   assertAuthorityProof(capture.authorityProof, true);
   if (!canonicalEqual(capture.authorityProof, manifest.authorityProof)) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
   }
 
   if (!isPlainObject(capture.digests)
@@ -420,11 +443,11 @@ function validateCapture({ authorization, authorizationSha256, capture, manifest
       || !isSha256(capture.digests.semanticSha256)
       || capture.digests.occurrenceSha256 !== manifest.digests.occurrenceSha256
       || capture.digests.semanticSha256 !== manifest.digests.semanticSha256) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_DIGEST_REJECTED');
   }
 
   if (!isSha256(capture.snapshotDigestSha256)) {
-    reject('T21RC2_CLASSIFICATION_REJECTED');
+    reject('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
   }
 
   if (!isSha256(capture.authorizationSha256)

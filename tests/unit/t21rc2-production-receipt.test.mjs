@@ -217,19 +217,19 @@ describe('T21R-C2 aggregate production receipt', () => {
 
     const forgedClasses = tinyManifest();
     forgedClasses.summary.productionClassCounts.EXACT_V1_MATCH += 1;
-    expectSafeRejection(() => validateT21RC2Manifest(forgedClasses), 'T21RC2_CLASSIFICATION_REJECTED');
+    expectSafeRejection(() => validateT21RC2Manifest(forgedClasses), 'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
 
     const forgedCapture = tinyManifest();
     forgedCapture.captureEvidence.ingredientOccurrenceCount += 1;
-    expectSafeRejection(() => validateT21RC2Manifest(forgedCapture), 'T21RC2_CLASSIFICATION_REJECTED');
+    expectSafeRejection(() => validateT21RC2Manifest(forgedCapture), 'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
 
     const missingAuthority = tinyManifest();
     missingAuthority.authorityProof = null;
-    expectSafeRejection(() => validateT21RC2Manifest(missingAuthority), 'T21RC2_CLASSIFICATION_REJECTED');
+    expectSafeRejection(() => validateT21RC2Manifest(missingAuthority), 'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED');
 
     const extraField = tinyManifest();
     extraField.privateMarker = PRIVATE_NAME;
-    expectSafeRejection(() => validateT21RC2Manifest(extraField), 'T21RC2_CLASSIFICATION_REJECTED');
+    expectSafeRejection(() => validateT21RC2Manifest(extraField), 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
   });
 
   it('builds a pinned success receipt from the fixed V1/D1 proof and keeps only aggregate allowlisted fields', () => {
@@ -348,21 +348,21 @@ describe('T21R-C2 aggregate production receipt', () => {
     paddedManifestDigest.manifest.digests.semanticSha256 += '\n';
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(paddedManifestDigest),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_SCHEMA_REJECTED',
     );
 
     const forgedOccurrenceDigest = receiptInput(validFixture);
     forgedOccurrenceDigest.capture.digests.occurrenceSha256 = '9'.repeat(64);
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(forgedOccurrenceDigest),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_DIGEST_REJECTED',
     );
 
     const malformedSnapshotDigest = receiptInput(validFixture);
     malformedSnapshotDigest.capture.snapshotDigestSha256 = 'not-a-sha256';
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(malformedSnapshotDigest),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED',
     );
 
     const forgedAuthorizationBinding = receiptInput(validFixture);
@@ -376,7 +376,7 @@ describe('T21R-C2 aggregate production receipt', () => {
     changedProof.capture.authorityProof.reviewedBridgeCount += 1;
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(changedProof),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED',
     );
 
     const unpinnedTarget = receiptInput(validFixture);
@@ -384,7 +384,7 @@ describe('T21R-C2 aggregate production receipt', () => {
     unpinnedTarget.capture.authorityProof.runtimeFingerprint = '0'.repeat(64);
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(unpinnedTarget),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_AUTHORITY_REJECTED',
     );
 
     const wrongRepository = receiptInput(validFixture);
@@ -400,28 +400,28 @@ describe('T21R-C2 aggregate production receipt', () => {
     forgedClasses.manifest.summary.productionClassCounts.EXACT_V1_MATCH += 1;
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(forgedClasses),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED',
     );
 
     const forgedPartition = receiptInput(validFixture);
     forgedPartition.manifest.summary.accounting.productionAccounted = false;
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(forgedPartition),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED',
     );
 
     const wrongTargetCount = receiptInput(validFixture);
     wrongTargetCount.manifest.target.pop();
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(wrongTargetCount),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED',
     );
 
     const wrongCaptureCount = receiptInput(validFixture);
     wrongCaptureCount.capture.counts.ingredientOccurrenceCount = 2;
     expectSafeRejection(
       () => buildT21RC2ProductionReceipt(wrongCaptureCount),
-      'T21RC2_CLASSIFICATION_REJECTED',
+      'T21RC2_CLASSIFICATION_AGGREGATE_REJECTED',
     );
 
     const unknownAuthorizationField = receiptInput(validFixture);

@@ -1257,7 +1257,10 @@ describe('T21R-C offline occurrence reconciliation', () => {
     expect(result.production[0]).toMatchObject({
       classification: 'MALFORMED_OCCURRENCE',
       reviewReason: 'BROKEN_RECIPE_REFERENCE',
+      recipeId: null,
     });
+    expect(result.summary.unattributedProductionOccurrences).toBe(1);
+    expect(result.recipes.map((recipe) => recipe.recipeId)).not.toContain('recipe-outside');
     expect(result.target.every((row) => row.classification === 'AMBIGUOUS')).toBe(true);
     expectAccounting(result);
   });
