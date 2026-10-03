@@ -1,3 +1,84 @@
+# T21R-C4I independent-review remediation - 2026-10-03 JST
+
+**State:** Remediation of independent review findings on draft PR #38 is locally
+validated and awaiting fresh hosted CI and independent delta review. Repository
+`vn-tak/Tako-san` (ID `1385308553`), branch
+`codex/t21rc4-cloudflare-identity-diagnostic`, reviewed pre-remediation head
+`a5966c7fa27b67d16ff02acb753cd2bc82c372fa`; certified main remains
+`7cd58968c3b4c0f7936c75d74b6965d229b57c69`. Final remediation SHA is
+recorded in the publication receipt rather than self-referenced here.
+
+**Changes:** Separate C4I closure binds the diagnostic workflow, CI workflow,
+three C4I scripts, package/lock/config and optional package configuration bytes.
+A credential-free gate requires reviewed ancestor, exact current main and
+successful exact-main push CI. The production job verifies gate outputs, then
+validates the specific independent Environment approval and current main before
+the Cloudflare-only step. Account ID syntax now matches C2 for 32 case-insensitive
+hex characters. Command and malformed-response statuses no longer claim auth or
+scope without evidence. C2's 73 review-bound paths remain unchanged.
+
+**Local validation:** Eight focused C4I/C2 files, 340/340 PASS (C4I 93, C2 247).
+Full UTC single-worker Vitest run: 234 files, 5,303/5,303 PASS. ESLint,
+typecheck, migration smoke, web/Worker build and diff check PASS. Initial full
+runs exposed missing files in a partial checkout and a macOS `/var` temp-path
+alias; after completing the checkout and using `TMPDIR=/private/var/tmp`, the
+same unchanged C2 suites and full run passed. No C2 source/test was edited.
+
+**Boundary and next:** Production diagnostic NOT_RUN; C2 rerun NO; production
+Environment approval NO; production D1 SQL reads/writes 0/0; production,
+secret and token mutations 0; 0039/deploy STOPPED. Historical run 37084988593
+remains `T21RC2_IDENTITY_REJECTED`; token scope UNKNOWN, read-only scope
+unproven. Push this additive remediation to draft PR #38, require fresh PR CI
+on the new exact head, then stop for independent review. Do not merge or run
+the diagnostic. Details: `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
+---
+
+# T21R-C4I identity metadata diagnostic — 2026-10-03 JST
+
+**State:** `T21RC4I_IMPLEMENTATION_READY_FOR_REVIEW`, not live identity
+certification. Repository `vn-tak/Tako-san` / `1385308553`; isolated branch
+`codex/t21rc4-cloudflare-identity-diagnostic` starts exactly at certified
+`7cd58968c3b4c0f7936c75d74b6965d229b57c69`. C3 is PROTECTED_INTEGRATION_CERTIFIED;
+independently reviewed C2 authority remains `93c4055a42cd2d94f4db296d8ca10d555c2c52c2`.
+Published implementation checkpoint `81646b0e6389fe61ea04db5892dec8ee597693f9` has
+exact tested local checkpoint `dfad66da7706bf315e4b0e27b0e471b9ce71cb83` tree
+`00c68d1b21f9dd965a1936632ee479b1320d16f2`; API commit metadata alone differs.
+Original local history is preserved. Completion docs follow; their own final
+local/remote SHA is recorded externally, not embedded in this document.
+
+**Implemented:** Separate manual/main/attempt-1 production diagnostic, minimal
+contents-read permission, certified Action pins and shared non-cancelling lock.
+Fixed whoami/list commands only; A–H safe failure categories, allowlisted JSON,
+captured stdout/stderr, discarded Wrangler debug logs, no artifact or SQL.
+Isolated strict JSONC verifier matches the existing verifier in eight fixtures.
+No C2 execution byte or 73-path closure member changed. Real-Git additive
+regression passes; a bound-byte mutation still rejects. Future C2 eligibility
+remains conditional on exact future-main binding/ancestry/CI and normal approval.
+
+**Verified:** Focused 6 files / 308 PASS (C4I 61, unchanged C2 247).
+Lint/typecheck/local SQLite migration smoke/web-Worker build/syntax/diff PASS.
+Final UTC single-worker full run: 232 files / 5,271 PASS, zero skips, exit 0,
+494.41 seconds, external Node transport blocked. Initial inherited-PDT full run
+was 5,269 PASS / 2 FAIL; unchanged Week/expired-OTP suites then passed 32/32
+with test-process TZ=UTC. No Week/auth code or assertion changed. Earlier pnpm11
+worktree and workflow-test syntax setup failures are recorded in the report.
+
+**Failed live attempt / limits:** Run 37084988593 attempt 1 failed identity
+before SQL: D1 SQL reads/writes 0/0 and production mutations 0; whoami and/or
+D1-list metadata may have executed, exact progress not distinguishable.
+The historical cause is not diagnosed retrospectively. C4I live diagnostic
+NOT_RUN, C2 rerun NO, Cloudflare calls by this implementation 0; secrets/tokens/
+Environment unchanged. Token scope UNKNOWN, read-only permission unproven.
+
+**Next / boundary:** Independent review of final C4I head before any PR,
+protected integration or separately authorized metadata-only run. No PR/merge,
+dispatch/approval/production SQL/mutation/secret edit/0039/deploy. T21G_NOT_READY,
+repair NOT_AUTHORIZED, 0039/deploy STOPPED, row delivery UNCONFIGURED.
+Evidence: `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
+---
+
 # T21R-C3 production dispatch readiness — 2026-10-03 JST
 
 **State:** `T21RC3_IMPLEMENTATION_READY_FOR_REVIEW`;

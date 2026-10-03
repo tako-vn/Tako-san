@@ -1,3 +1,35 @@
+# T21R-C4I separate Cloudflare identity diagnostic — 2026-10-03 JST
+
+- [x] Verify exact certified main `7cd58968c3b4c0f7936c75d74b6965d229b57c69` and repository
+  ID 1385308553; create isolated C4I worktree, preserve unrelated original change.
+- [x] Confirm failed run 37084988593 gate/approval/capture/skip/cleanup metadata;
+  preserve zero-SQL proof separately from possible historical metadata calls.
+- [x] Add separate manual/main/attempt-1 production workflow with certified pins,
+  contents-read only and shared production concurrency lock; no artifact or SQL.
+- [x] Implement A–H safe categories, early stops, strict config, fixed whoami/list
+  argv, stdout/stderr capture, null-sink debug logging and allowlisted receipt.
+- [x] Preserve every existing C2 byte / all 73 bound entries; real-Git additions
+  pass and an existing workflow-byte mutation rejects. No closure weakening.
+- [x] Focused 308/308 (61 C4I + 247 C2); lint/types/local migrations/build/syntax/diff
+  PASS. UTC full 232 files / 5,271 tests / zero skips / exit 0 PASS (494.41s).
+- [x] Record initial full 5,269 PASS / 2 FAIL under inherited PDT and unchanged
+  32/32 timezone recheck in UTC; no Week/auth/assertion change. Record setup failures.
+- [x] Publish normal code checkpoint `81646b0e6389fe61ea04db5892dec8ee597693f9`, exact tested
+  tree, preserving local source `dfad66da7706bf315e4b0e27b0e471b9ce71cb83`. Completion docs
+  follow; final docs-inclusive SHA/tree and clean local/remote equality external.
+- [ ] Independent review before any PR or protected integration.
+- [ ] Separately authorized metadata-only attempt with normal production approval;
+  no diagnostic run, secret/token edit, C2 rerun or SQL is authorized here.
+
+`T21RC4I_IMPLEMENTATION_READY_FOR_REVIEW`; identity diagnostic NOT_RUN, token
+scope UNKNOWN / read-only-unproven. C2 reviewed SHA 93c4055 remains eligible only
+with future-main byte equivalence and all existing gates. No PR/merge/dispatch/
+approval/Cloudflare call/production SQL/mutation/0039/deploy by this implementation.
+T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED, delivery UNCONFIGURED.
+Report: `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
+---
+
 # T21R-C3 dispatch readiness and dependency hardening — 2026-10-03 JST
 
 - [x] Resolve `vn-tak/Tako-san` to stable ID `1385308553`; exact base main

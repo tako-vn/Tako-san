@@ -1,3 +1,85 @@
+# T21R-C4I remediation handoff - 2026-10-03 JST
+
+Draft PR #38 on `codex/t21rc4-cloudflare-identity-diagnostic` remains the sole
+integration vehicle. The independent review of head
+`a5966c7fa27b67d16ff02acb753cd2bc82c372fa` required 2 P1 and 2 P2 fixes.
+This additive remediation introduces a separate reviewed-byte/exact-main-CI gate,
+validates the exact normal production approval and policy before credential use,
+matches C2's account-ID syntax, and splits command failures from malformed D1
+responses. The C2 73-path closure and historical production failure are intact.
+
+Local checks: focused C4I+C2 8 files / 340 PASS; full UTC Vitest 234 files /
+5,303 PASS; lint, typecheck, migration smoke, build and diff PASS. The final
+source of truth is the new remediation commit and its fresh hosted PR CI, not the
+old CI run 37114032245. At handoff, production diagnostic/C2 rerun/Environment
+approval/SQL/secret changes/0039/deploy have not occurred. Token scope remains
+UNKNOWN. Next: confirm new exact-head PR CI, then request independent delta
+review; keep PR draft, do not merge or dispatch production.
+
+---
+
+# T21R-C4I metadata identity diagnostic handoff — 2026-10-03 JST
+
+**State:** `T21RC4I_IMPLEMENTATION_READY_FOR_REVIEW`, not live certification.
+Repository `vn-tak/Tako-san` / 1385308553; branch
+`codex/t21rc4-cloudflare-identity-diagnostic`, base
+`7cd58968c3b4c0f7936c75d74b6965d229b57c69`. C3 protected integration is certified;
+C2 reviewed head `93c4055a42cd2d94f4db296d8ca10d555c2c52c2` remains eligible subject
+to future-main byte equivalence/ancestry/CI and unchanged gates. Verified published
+code checkpoint `81646b0e6389fe61ea04db5892dec8ee597693f9` matches local tested
+`dfad66da7706bf315e4b0e27b0e471b9ce71cb83` tree `00c68d1b21f9dd965a1936632ee479b1320d16f2`.
+API author/date metadata changes SHA; local source history is preserved. Final
+completion-doc head is verified/reported externally to avoid a document self-hash.
+
+**Implementation:** Four new diagnostic workflow/script/test files, dedicated
+report and minimal status/ADR notes. Manual/main-only/attempt-1, production
+Environment, shared `frigo-deploy-production` lock, no cancellation, contents-read
+only, immutable certified Actions, exact workflow SHA checkout, frozen tooling.
+Credentials only in final script-step env. Fixed whoami/list calls; A–H stage
+receipts, strict config and early aborts, private captured output, 0700 null-sink
+Wrangler log setup/cleanup, no raw artifact. Formatter allowlists every field and
+keeps read-only proof false. Stage B lowercase syntax is intentionally stricter
+than unchanged C2; a new observation is not retrospective credential proof.
+
+**Executed:** Focused pnpm10 6 files / 308 PASS (35 diagnostic, 26 static/workflow,
+148 approval, 70 capture, 8 receipt, 21 C2 workflow). Compatibility fixtures
+compare eight configs to the existing verifier. Real local Git reviewed-SHA /
+additive-diagnostic regression passes; bound-byte mutation rejects. Lint,
+typecheck, real local SQLite 3.45.1 migration smoke, web/Worker build and Node
+syntax/diff PASS. Final `pnpm exec vitest run --maxWorkers=1` with default/JSON
+reporters: UTC 232 files / 5,271 PASS, zero skips, exit 0, 494.41 seconds.
+External Node transport blocked; one attempt per full run denied before network
+use, two separate positive guard probes also denied. Proxy variables cleared;
+all new Wrangler test calls mocked. No unrestricted or hosted C4I result claimed.
+
+**Failures / resolution:** pnpm11 auto-install refused an outside-root worktree
+modules link before tests; preserve modules/use isolated pnpm10.34.6 without
+package/lockfile change. First direct focused run: 282 tests PASS, one workflow
+suite parse failure from dot access to a hyphenated property; correct brackets
+and syntax checks, then 308/308 PASS. First completed full run inherited PDT:
+5,269 PASS / 2 FAIL (weekday/expired-OTP). Preserve that receipt; unchanged two
+suites pass 32/32 under test-process UTC, then fresh full UTC PASS. No application,
+Week/auth, assertion, timeout, selection, dependency or security guard changed.
+
+**Live evidence / limits:** Task error T21RC2_IDENTITY_REJECTED in run 37084988593
+attempt 1, actor tako-vn1, exact certified main. GitHub jobs confirm gate/approval
+validator SUCCESS, capture FAIL, subsequent publication steps skipped, cleanup
+SUCCESS. Source identity proof precedes any fixed SQL: historical D1 SQL 0/0,
+mutations 0; metadata calls POSSIBLE / NOT FULLY DISTINGUISHABLE. No raw log read.
+Current diagnostic NOT_RUN; no C2 rerun, Cloudflare call, production SQL/mutation,
+Environment approval/policy edit or secret/token mutation by this implementation.
+Token scope UNKNOWN, read-only-unproven; production identity cause still unknown.
+
+**Next:** Independent review of final published C4I head before PR. Any later
+protected integration and metadata-only execution need separate authority and
+normal independent Environment approval. Never bypass, self-approve, change
+secrets/tokens, run SQL or rerun C2 based on diagnostic completion. Future C2 ref
+must be actual post-diagnostic current main with existing exact-main/binding gates.
+T21G_NOT_READY, repair NOT_AUTHORIZED, 0039/deploy STOPPED, delivery UNCONFIGURED.
+Report: `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
+---
+
 # T21R-C3 dispatch readiness handoff — 2026-10-03 JST
 
 **State:** `T21RC3_IMPLEMENTATION_READY_FOR_REVIEW`;
