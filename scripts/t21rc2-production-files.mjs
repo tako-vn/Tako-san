@@ -1,4 +1,5 @@
 import { constants, lstatSync, mkdirSync, openSync, closeSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 export const T21RC2_CLASSIFICATION_STAGES = Object.freeze({
@@ -23,6 +24,154 @@ const PRIVATE_FILES = new Set([
   'capture-observations.json', 'capture-verified.json', 'capture-proof.json', 'classifier-input.json', 'row-manifest.json',
 ]);
 
+export const T21RC2_SCHEMA_DIAGNOSTIC_SECTIONS = Object.freeze([
+  'root', 'captureEvidence', 'production', 'target', 'recipes', 'summary', 'authorityProof', 'digests', 'unknown',
+]);
+export const T21RC2_SCHEMA_DIAGNOSTIC_FIELDS = Object.freeze([
+  'AMBIGUOUS', 'DETERMINISTIC_V1_COUNTERPART', 'DUPLICATE_SEMANTIC_OCCURRENCE', 'EXACT_V1_MATCH',
+  'ID_CONFLICT_REVIEW_REQUIRED', 'MALFORMED', 'MALFORMED_OCCURRENCE', 'NON_V1_CANONICAL_ID',
+  'PRODUCTION_ONLY_KNOWN_ID', 'PRODUCTION_ONLY_NEW_ID', 'REVIEWED_ID_BRIDGE', 'REVIEWED_NEW_ID',
+  'SAME_ID_CONTENT_DRIFT', 'SATISFIED_DETERMINISTICALLY', 'SATISFIED_EXACT', 'TARGET_ONLY_MISSING',
+  'UNKNOWN_ID', 'UNREVIEWED_ING_ENR', 'V1_ID', 'accounting', 'ambiguousProductionCount',
+  'ambiguousTargetCount', 'approvedBatchesSha256', 'authority', 'authorityProof', 'baselineComparison',
+  'bridgeEvidenceSha256', 'bridgedTupleMatches', 'candidateProductionOccurrenceKeys',
+  'candidateTargetOccurrenceKeys', 'canonicalIdentity', 'canonicalRegistrySourceSha256',
+  'canonicalTargetSha256', 'captureEvidence', 'certification', 'classification', 'classificationSha256',
+  'comparison', 'completeness', 'confidence', 'count', 'deterministic', 'deterministicCounterpartCount',
+  'digests', 'driftBreakdown', 'driftKind', 'driftRecipeCount', 'exactMatchCount', 'exactTupleMatches',
+  'idConflictOccurrenceKeys', 'idConflictReviewRequired', 'identityPopulation', 'identityPopulations',
+  'indeterminate', 'ingredientId', 'ingredientOccurrenceCount', 'largestDriftRecipes', 'mapping',
+  'membership', 'membership_only', 'membership_plus_content', 'mode', 'multi_field', 'name',
+  'name_only', 'name_plus_semantics', 'occurrenceKey', 'occurrenceSha256', 'optional', 'optional_only',
+  'populations', 'production', 'productionAccounted', 'productionClassCounts', 'productionClassSum',
+  'productionIngredientId', 'productionOccurrenceCount', 'productionOnlyCount', 'quantity',
+  'quantity_only', 'quantity_optional', 'quantity_unit', 'recipe', 'recipeCount', 'recipeId',
+  'recipeIdSetMatch', 'recipes', 'reconciliationSha256', 'releaseId', 'releaseManifestSha256',
+  'repairAuthorized', 'reviewReason', 'reviewRequired', 'reviewRequiredCount', 'reviewedBridgeCount',
+  'runtimeFingerprint', 'runtimePositionAuthority', 'sameIdContentDrift', 'sameIdDriftCount',
+  'schemaVersion', 'semanticSha256', 'status', 'summary', 't21gStatus', 'target', 'targetAccounted',
+  'targetClassCounts', 'targetClassSum', 'targetIngredientId', 'targetOccurrenceCount', 'targetOnlyCount',
+  'unattributedProductionOccurrences', 'unit', 'unit_only', 'unit_optional', 'unknown',
+  'unmatchedProductionLines', 'unmatchedTargetLines',
+]);
+export const T21RC2_SCHEMA_DIAGNOSTIC_KEYWORDS = Object.freeze([
+  'type', 'required', 'enum', 'pattern', 'minimum', 'maximum', 'minLength', 'maxLength',
+  'minItems', 'maxItems', 'uniqueItems', 'additionalProperties', 'const', 'oneOf', 'anyOf',
+  'allOf', 'if', 'contains', 'unknown',
+]);
+const schemaFailureCategories = new WeakMap();
+let schemaDiagnosticRules;
+let manifestSchema;
+let validateManifestSchema;
+const unknownSchemaDiagnostic = (keyword = 'unknown') => Object.freeze({
+  section: 'unknown', field: 'unknown', keyword, code: 'UNKNOWN_SCHEMA_CONTRACT',
+});
+const staticCode = (value) => value.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+
+function closedManifestSchema() {
+  manifestSchema ??= JSON.parse(readFileSync(new URL(
+    '../docs/ai/recipe-catalog/T21RC_ROW_RECONCILIATION_SCHEMA.json', import.meta.url,
+  ), 'utf8'));
+  return manifestSchema;
+}
+
+function knownSchemaDiagnosticRules() {
+  if (schemaDiagnosticRules) return schemaDiagnosticRules;
+  const schema = closedManifestSchema();
+  const rules = new Map();
+  function visit(node, locations, fields, dataPattern, references) {
+    if (node.$ref) {
+      if (!/^#\/definitions\/[A-Za-z0-9_]+$/.test(node.$ref) || references.has(node.$ref)) return;
+      const definition = schema.definitions[node.$ref.slice('#/definitions/'.length)];
+      // Ajv 6 also reports paths relative to a separately compiled referenced definition.
+      visit(definition, [node.$ref, '#'], fields, dataPattern, new Set([...references, node.$ref]));
+      return;
+    }
+    const section = T21RC2_SCHEMA_DIAGNOSTIC_SECTIONS.includes(fields[0]) ? fields[0] : 'root';
+    const field = fields.at(-1) ?? 'unknown';
+    const codeFields = section === 'root' ? fields : fields.slice(1);
+    for (const keyword of T21RC2_SCHEMA_DIAGNOSTIC_KEYWORDS) {
+      if (!Object.hasOwn(node, keyword) || keyword === 'unknown') continue;
+      const diagnostic = Object.freeze({
+        section, field, keyword, code: [section, ...codeFields, keyword].map(staticCode).join('_'),
+      });
+      for (const location of locations) {
+        const key = `${location}/${keyword}`;
+        if (!rules.has(key)) rules.set(key, []);
+        rules.get(key).push({ keyword, dataPath: new RegExp(`^${dataPattern}$`), diagnostic });
+      }
+    }
+    for (const [property, child] of Object.entries(node.properties ?? {})) {
+      if (!T21RC2_SCHEMA_DIAGNOSTIC_FIELDS.includes(property)) continue;
+      visit(child, locations.map((location) => `${location}/properties/${property}`),
+        [...fields, property], `${dataPattern}/${property}`, references);
+    }
+    if (node.items) {
+      visit(node.items, locations.map((location) => `${location}/items`), fields,
+        `${dataPattern}/(?:0|[1-9][0-9]*)`, references);
+    }
+    if (node.contains) {
+      visit(node.contains, locations.map((location) => `${location}/contains`), fields,
+        `${dataPattern}/(?:0|[1-9][0-9]*)`, references);
+    }
+    for (const keyword of ['anyOf', 'oneOf', 'allOf']) {
+      (node[keyword] ?? []).forEach((child, index) => visit(child,
+        locations.map((location) => `${location}/${keyword}/${index}`), fields, dataPattern, references));
+    }
+    for (const keyword of ['if', 'then', 'else']) {
+      if (node[keyword]) visit(node[keyword], locations.map((location) => `${location}/${keyword}`),
+        fields, dataPattern, references);
+    }
+  }
+  visit(schema, ['#'], [], '', new Set());
+  schemaDiagnosticRules = rules;
+  return rules;
+}
+
+function t21rc2SchemaError(ajvError) {
+  let category = unknownSchemaDiagnostic();
+  try {
+    const keywordValue = ajvError?.keyword;
+    const keyword = T21RC2_SCHEMA_DIAGNOSTIC_KEYWORDS.includes(keywordValue) ? keywordValue : 'unknown';
+    const schemaPath = ajvError?.schemaPath;
+    const dataPath = ajvError?.dataPath;
+    category = unknownSchemaDiagnostic(keyword);
+    if (keyword !== 'unknown' && typeof schemaPath === 'string'
+        && typeof dataPath === 'string' && !/[\r\n]/.test(dataPath)) {
+      category = knownSchemaDiagnosticRules().get(schemaPath)
+        ?.find((rule) => rule.keyword === keyword && rule.dataPath.test(dataPath))?.diagnostic ?? category;
+    }
+  } catch {
+    category = unknownSchemaDiagnostic();
+  }
+  const error = t21rc2Error('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
+  schemaFailureCategories.set(error, category);
+  return error;
+}
+
+export function validateT21RC2ManifestSchemaBoundary(manifest) {
+  let schemaError;
+  try {
+    if (manifest !== null && typeof manifest === 'object' && !Array.isArray(manifest)
+        && (Object.getPrototypeOf(manifest) === Object.prototype || Object.getPrototypeOf(manifest) === null)) {
+      if (!validateManifestSchema) {
+        const nodeRequire = createRequire(import.meta.url);
+        const Ajv = createRequire(nodeRequire.resolve('eslint/package.json'))('ajv');
+        validateManifestSchema = new Ajv({ allErrors: false, jsonPointers: true }).compile(closedManifestSchema());
+      }
+      if (validateManifestSchema(manifest)) return true;
+      schemaError = validateManifestSchema.errors?.[0];
+    }
+  } catch {
+    // Validator exceptions never become diagnostic context.
+  }
+  throw t21rc2SchemaError(schemaError);
+}
+
+export function safeT21RC2SchemaDiagnostic(error) {
+  return { ...(schemaFailureCategories.get(error) ?? unknownSchemaDiagnostic()) };
+}
+
 export function t21rc2Error(code) {
   const safe = T21RC2_ERROR_CODES.includes(code) ? code : 'T21RC2_CAPTURE_INCOMPLETE';
   const error = new Error(safe);
@@ -31,7 +180,12 @@ export function t21rc2Error(code) {
 }
 
 export function safeT21RC2Error(error) {
-  return T21RC2_ERROR_CODES.includes(error?.code) ? error.code : 'T21RC2_CAPTURE_INCOMPLETE';
+  try {
+    const code = error?.code;
+    return T21RC2_ERROR_CODES.includes(code) ? code : 'T21RC2_CAPTURE_INCOMPLETE';
+  } catch {
+    return 'T21RC2_CAPTURE_INCOMPLETE';
+  }
 }
 
 export function runnerPaths(env = process.env, cwd = process.cwd()) {
@@ -107,6 +261,8 @@ export function buildT21RC2FailureReceipt(error) {
     ...(Object.hasOwn(T21RC2_CLASSIFICATION_STAGES, reason) ? {
       classificationDiagnostic: {
         schemaVersion: 1, status: reason, stage: T21RC2_CLASSIFICATION_STAGES[reason],
+        ...(reason === 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED'
+          ? { diagnostic: safeT21RC2SchemaDiagnostic(error) } : {}),
       },
     } : {}),
     certification: 'NOT_A_RELEASE_CERTIFICATION', readOnly: true,
@@ -117,6 +273,9 @@ export function buildT21RC2FailureReceipt(error) {
 }
 
 export function recordT21RC2Failure(error, env = process.env, cwd = process.cwd()) {
+  if (safeT21RC2Error(error) === 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED') {
+    console.error(`t21rc2_schema=${JSON.stringify(safeT21RC2SchemaDiagnostic(error))}`);
+  }
   try {
     removePublicReceipt(env, cwd);
     writePublicReceipt(buildT21RC2FailureReceipt(error), env, cwd);

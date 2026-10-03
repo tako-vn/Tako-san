@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,11 +15,10 @@ import {
   recordT21RC2Failure,
   safeT21RC2Error,
   t21rc2Error,
+  validateT21RC2ManifestSchemaBoundary,
   writePublicReceipt,
 } from './t21rc2-production-files.mjs';
 
-const nodeRequire = createRequire(import.meta.url);
-const Ajv = createRequire(nodeRequire.resolve('eslint/package.json'))('ajv');
 const REPOSITORY_ID = 1385308553;
 const REPOSITORY = 'vn-tak/Tako-san';
 // The certified target's recorded review-time name remains historical authority.
@@ -92,12 +90,6 @@ const PINNED_TARGET = Object.freeze({
   recipeCount: target.recipeCount,
   targetOccurrenceCount: target.historicalReplayIngredientLines,
 });
-
-const manifestSchema = JSON.parse(readFileSync(new URL(
-  '../docs/ai/recipe-catalog/T21RC_ROW_RECONCILIATION_SCHEMA.json',
-  import.meta.url,
-), 'utf8'));
-const validateManifestSchema = new Ajv({ allErrors: false, jsonPointers: true }).compile(manifestSchema);
 
 const isPlainObject = (value) => value !== null && typeof value === 'object'
   && !Array.isArray(value)
@@ -235,15 +227,7 @@ function classificationDigest(manifest) {
 }
 
 export function validateT21RC2ManifestSchema(manifest) {
-  try {
-    if (!isPlainObject(manifest) || !validateManifestSchema(manifest)) {
-      reject('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
-    }
-    return true;
-  } catch {
-    // Ajv paths, params and data are private; only the fixed stage code leaves this validator.
-    reject('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
-  }
+  return validateT21RC2ManifestSchemaBoundary(manifest);
 }
 
 export function validateT21RC2ManifestAggregate(manifest) {

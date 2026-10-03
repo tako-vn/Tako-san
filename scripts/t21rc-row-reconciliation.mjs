@@ -346,9 +346,15 @@ export function reconcileIngredientOccurrences({
     const unresolved = production.filter((row) => row.recipeId === line.recipeId
       && (row.classification === 'MALFORMED_OCCURRENCE'
         || ['UNKNOWN_ID', 'UNREVIEWED_ING_ENR'].includes(row.identityPopulation)));
-    const candidates = [...new Set([...explicitCandidates, ...unresolved].map((row) => row.occurrenceKey))].sort();
     const tainted = !captureComplete || globalTaint || taintedRecipes.has(line.recipeId);
-    const assigned = satisfied.get(line.occurrenceKey);
+    const assignment = satisfied.get(line.occurrenceKey);
+    const competing = unresolved.length > 0 || explicitCandidates.some((row) =>
+      row.classification === 'ID_CONFLICT_REVIEW_REQUIRED' || row.reviewReason === 'ALTERNATE_IDENTITY_CONTENT_CONFLICT');
+    const assigned = assignment?.mapping === 'UNIQUE' && competing ? undefined : assignment;
+    // Broad drift links remain in production evidence, not in a unique satisfied witness.
+    const witnesses = assigned?.mapping === 'UNIQUE' ? explicitCandidates.filter((row) =>
+      ['EXACT_V1_MATCH', 'DETERMINISTIC_V1_COUNTERPART', 'REVIEWED_ID_BRIDGE'].includes(row.classification)) : explicitCandidates;
+    const candidates = [...new Set([...witnesses, ...unresolved].map((row) => row.occurrenceKey))].sort();
     return {
       occurrenceKey: line.occurrenceKey, recipeId: line.recipeId, targetIngredientId: line.ingredientId,
       candidateProductionOccurrenceKeys: candidates,
