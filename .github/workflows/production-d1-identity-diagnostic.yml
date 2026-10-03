@@ -1,0 +1,43 @@
+name: Production D1 Identity Diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_metadata_identity_diagnostic:
+        description: Confirm separately authorized identity metadata diagnosis
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frigo-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  diagnostic:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.confirm_metadata_identity_diagnostic == true
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10
+      - name: Install pinned tooling without credentials
+        run: pnpm install --frozen-lockfile
+      - name: Diagnose identity metadata with sanitized receipt
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/t21rc4-cloudflare-identity-diagnostic.mjs
