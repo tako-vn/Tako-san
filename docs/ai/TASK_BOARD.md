@@ -1,3 +1,23 @@
+# T21R-C2D classification diagnostics — 2026-10-03 UTC
+
+- [x] Fetch and verify certified main `78313ab`; metadata-only inspection of
+  run 37135187427, with production/V1 relation UNKNOWN after classification failure.
+- [x] Six sanitized stage categories; separate schema/aggregate/digest validation;
+  reconstruct only fixed code/stage in the existing failure receipt, no failure upload.
+- [x] Reproduce/fix uncaptured-parent summary contradiction and aggregate validator
+  gaps (recipe-local references, status, drift/conflict indexes); no schema relaxation.
+- [x] Closed enum/shape/numeric audit and offline certified authority 500/2702;
+  divergence/extreme/malformed/duplicate/key/privacy regressions.
+- [x] Focused 6 files / 375 PASS; old C2 reviewed binding rejects, C4I unchanged.
+- [x] Final lint/typecheck/migration smoke/build/diff PASS; UTC single-worker
+  full Vitest 235 files / 5384 PASS.
+- [ ] Fresh exact-head attempt-1 hosted PR CI; record head/run/job/count receipt.
+- [ ] Independent security review; no merge, C2/C4I rerun or repair authorization.
+
+Report: `recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
+
+---
+
 # T21R-C4L Wrangler parsed-stdout remediation — 2026-10-03 UTC
 
 - [x] Verify main `0e6342f`; confirm 3.114.17 logger/whoami/list/execute source.

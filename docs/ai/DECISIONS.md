@@ -62,6 +62,18 @@ keeps piped stdio and the private debug-log path. No Wrangler upgrade or
 `whoami --json`. The bound-byte change voids C4I `a0c1cfd` and C2 `93c4055`
 review authority by design. See `recipe-catalog/T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
 
+**C2D failure decomposition:** Capture binding, authority, reconciliation,
+schema, aggregate and digest failures expose distinct fixed safe codes. The
+existing runner-local failure receipt reconstructs code/stage only; Ajv and row
+details remain private, and failure upload stays disabled. Reconciliation keeps
+uncaptured parents unattributed rather than inventing a captured recipe; aggregate
+validation checks recipe-local candidate references and derived status/indexes.
+V1, the closed schema, capture and SELECT authority are unchanged. The old C4L
+C2 reviewed SHA is invalidated by these bound bytes, not excluded from the closure.
+Production run 37135187427's stage remains unknown; a completed capture followed
+by classification failure is not evidence of V1 divergence or repair readiness.
+See `recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.

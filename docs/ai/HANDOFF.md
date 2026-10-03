@@ -1,3 +1,39 @@
+# T21R-C2D classification diagnostics handoff — 2026-10-03 UTC
+
+**State:** Implementation on `codex/t21rc2d-classification-diagnostics` from
+certified main `78313ab`; code checkpoints `fbce4a1`, `3054b4a`, `4be7e18`.
+Final docs-inclusive head and CI receipt belong in the draft PR.
+
+**Evidence:** Run 37135187427 captured a stable non-atomic snapshot but did not
+complete classification. Gate/capture/cleanup PASS, artifact SKIPPED; production
+relation to V1 remains UNKNOWN. Metadata-only inspection, no production rows/logs.
+
+**Changes:** Six fixed classification subcodes and a static code/stage-only
+failure diagnostic; separate schema/aggregate/digest validators; classify-time
+authority failures categorized. Proven offline fixes keep broken parents
+malformed/unattributed and validate recipe-local references, recipe status and
+derived drift/conflict indexes. Schema, V1, SELECTs, capture, private storage,
+workflow, package/lock and C4I are unchanged. Historical rejection cause unresolved.
+
+**Checks/failures:** Baseline 7 expected FAIL / 5 PASS; five additional aggregate
+repros FAIL before their fix. Final focused 6 files / 375 PASS. Final `pnpm lint`,
+`pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, `git diff --check` PASS;
+`TZ=UTC pnpm exec vitest run --maxWorkers=1`: 235 files / 5384 PASS, exit 0.
+Hosted CI pending at this documentation checkpoint; final head/run/job/count
+receipt belongs in the draft PR. One interim padded-digest assertion was corrected
+to expect the earlier schema-stage rejection; no validation was loosened.
+Offline authority 500 recipes / 2702 occurrences with certified release/fingerprint.
+All nine enum families match; no generic schema weakening. Old C2 reviewed head
+`a0d4bf9` rejects intentionally; 73-entry closure unchanged; C4I still binds.
+
+**Next:** Require fresh attempt-1 exact-head PR CI and independent review of six
+boundaries, sanitized receipts/CLI, every contract correction and divergence/key
+fixtures. No merge, C2/C4I rerun, SQL, repair, credential/secret change, 0039 or
+deploy. Production counters 0; repair NOT_AUTHORIZED; T21G_NOT_READY.
+Report: `recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
+
+---
+
 # T21R-C4L Wrangler parsed-stdout remediation handoff - 2026-10-03 UTC
 
 Finding `T21RC4_WRANGLER_LOG_SUPPRESSION_BUG_CONFIRMED`: under the lockfile's
