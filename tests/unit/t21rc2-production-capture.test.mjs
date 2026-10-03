@@ -324,3 +324,90 @@ describe('T21R-C2 runner-local privacy on success and failure', () => {
     expect(outputs).not.toContain('at file:');
   });
 });
+
+// Models Wrangler 3.114.17: logger.log/table (whoami table, d1 list --json, and d1 execute --json after
+// it restores the inherited level) reach stdout only when LOGGER_LEVELS[WRANGLER_LOG] >= log.
+const LOGGER_LEVELS = { none: -1, error: 0, warn: 1, info: 2, log: 3, debug: 4 };
+const loggerEmits = (env) => (LOGGER_LEVELS[(env.WRANGLER_LOG ?? 'log').toLowerCase()] ?? 3) >= LOGGER_LEVELS.log;
+const c4lAccount = '0123456789abcdef'.repeat(2);
+const c4lRaw = {
+  token: 'FAKE_C4L_API_TOKEN_MUST_NOT_APPEAR', email: 'private-operator@example.invalid',
+  accountName: 'Private Account Name Ltd', provider: 'PRIVATE_PROVIDER_TEXT_request-7f3a',
+  uuid: 'unexpected-private-database-uuid',
+};
+const c4lWhoami = (accountCell = c4lAccount) => [
+  '', ' ⛅️ wrangler 3.114.17', '--------------------', '', 'Getting User settings...',
+  `👋 You are logged in with an API Token, associated with the email ${c4lRaw.email}.`,
+  '┌──────────────────────────┬──────────────────────────────────┐',
+  '│ Account Name             │ Account ID                       │',
+  '├──────────────────────────┼──────────────────────────────────┤',
+  `│ ${c4lRaw.accountName} │ ${accountCell} │`,
+  '└──────────────────────────┴──────────────────────────────────┘',
+  `🔓 Token Permissions: ${c4lRaw.provider} trace ${'c'.repeat(64)} ${c4lRaw.token}`,
+].join('\n');
+const c4lList = [{ name: PRODUCTION_D1.name, uuid: PRODUCTION_D1.id }, { name: 'other-private-name', uuid: c4lRaw.uuid }];
+
+function loggerSensitiveExecute({ whoamiGated = true, listGated = true, whoami = c4lWhoami(), list = c4lList, statements } = {}) {
+  return vi.fn((command, args, options) => {
+    expect(command).toBe('pnpm');
+    expect(options.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+    expect(options.env.WRANGLER_LOG_PATH).toBe(path.join(process.env.RUNNER_TEMP, 't21rc2', 'wrangler.log'));
+    if (args[1] === 'whoami') return !whoamiGated || loggerEmits(options.env) ? whoami : '';
+    if (args[1] === 'd1' && args[2] === 'list') return !listGated || loggerEmits(options.env) ? JSON.stringify(list, null, 2) : '';
+    expect(args.slice(0, 3)).toEqual(['wrangler', 'd1', 'execute']);
+    return loggerEmits(options.env) ? JSON.stringify(statements, null, 2) : '';
+  });
+}
+const c4lEnv = (extra = {}) => ({ RUNNER_TEMP: process.env.RUNNER_TEMP, CLOUDFLARE_API_TOKEN: c4lRaw.token, CLOUDFLARE_ACCOUNT_ID: c4lAccount, ...extra });
+
+describe('T21R-C4L parsed Wrangler stdout is not suppressed by the logger level', () => {
+  it('the model reproduces the bug: WRANGLER_LOG=error empties logger.log/table stdout', () => {
+    expect(c4lAccount).toMatch(/^[0-9a-f]{32}$/);
+    expect(loggerEmits({ WRANGLER_LOG: 'error' })).toBe(false);
+    expect(loggerEmits({ WRANGLER_LOG: 'log' })).toBe(true);
+  });
+  it('whoami account table reaches the identity parser', () => {
+    const execute = loggerSensitiveExecute({ listGated: false });
+    expect(proveT21RC2CloudflareIdentity({ execute, env: c4lEnv() })).toEqual(database);
+    expect(execute.mock.calls.map((call) => call[2].env.WRANGLER_LOG)).toEqual(['log', 'log']);
+  });
+  it('d1 list --json payload reaches the parser even when WRANGLER_LOG=error is inherited', () => {
+    const execute = loggerSensitiveExecute({ whoamiGated: false });
+    expect(proveT21RC2CloudflareIdentity({ execute, env: c4lEnv({ WRANGLER_LOG: 'error' }) })).toEqual(database);
+    expect(execute.mock.calls[1][2].env.WRANGLER_LOG).toBe('log');
+    const wrongUuid = loggerSensitiveExecute({ list: [{ name: PRODUCTION_D1.name, uuid: c4lRaw.uuid }] });
+    expect(() => proveT21RC2CloudflareIdentity({ execute: wrongUuid, env: c4lEnv() })).toThrow('T21RC2_IDENTITY_REJECTED');
+    expect(wrongUuid).toHaveBeenCalledTimes(2);
+  });
+  it.each(Object.keys(T21RC2_SELECTS))('d1 execute --json payload reaches the validated parser for %s', (name) => {
+    const results = [{ id: 'recipe-one' }];
+    const execute = loggerSensitiveExecute({ statements: [{ success: true, results, meta: { changes: 0, rows_written: 0 } }] });
+    expect(executeFixedProductionSelect(name, { execute, env: c4lEnv({ WRANGLER_LOG: 'error' }) })).toEqual(results);
+    expect(execute.mock.calls[0][2].env.WRANGLER_LOG).toBe('log');
+    expect(execute.mock.calls[0][1].at(-1)).toBe(T21RC2_SELECTS[name]);
+  });
+  it('visible output still fails closed on write-reporting or paged execute JSON', () => {
+    for (const statement of [{ success: true, results: [], meta: { changes: 1 } }, { success: true, results: [], has_more: true }]) {
+      expect(() => executeFixedProductionSelect('roster', { execute: loggerSensitiveExecute({ statements: [statement] }), env: c4lEnv() }))
+        .toThrow('T21RC2_QUERY_FAILED');
+    }
+  });
+  it('visible raw Wrangler output never reaches the safe failure receipt or console', () => {
+    const writes = [vi.spyOn(process.stdout, 'write'), vi.spyOn(process.stderr, 'write'),
+      vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')];
+    const failures = [];
+    const mismatch = loggerSensitiveExecute({ whoami: c4lWhoami('d'.repeat(32)) });
+    try { proveT21RC2CloudflareIdentity({ execute: mismatch, env: c4lEnv() }); } catch (error) { failures.push(error); }
+    const rawStatement = { success: false, results: [{ id: c4lRaw.uuid }], error: `${c4lRaw.provider} ${c4lRaw.email} ${c4lAccount}` };
+    try { executeFixedProductionSelect('roster', { execute: loggerSensitiveExecute({ statements: [rawStatement] }), env: c4lEnv() }); } catch (error) { failures.push(error); }
+    expect(failures.map((error) => error.code)).toEqual(['T21RC2_IDENTITY_REJECTED', 'T21RC2_QUERY_FAILED']);
+    let published = '';
+    for (const failure of failures) {
+      recordT21RC2Failure(failure, process.env);
+      published += `${readFileSync(runnerPaths(process.env).publicReceipt, 'utf8')}\n${failure.message}\n${JSON.stringify(buildT21RC2FailureReceipt(failure))}\n`;
+      rmSync(runnerPaths(process.env).publicReceipt);
+    }
+    for (const secret of [...Object.values(c4lRaw), c4lAccount, 'other-private-name']) expect(published).not.toContain(secret);
+    writes.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+});

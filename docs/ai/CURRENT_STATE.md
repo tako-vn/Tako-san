@@ -1,3 +1,42 @@
+# T21R-C4L Wrangler parsed-stdout remediation - 2026-10-03 UTC
+
+**State:** `T21RC4L_REMEDIATION_READY_FOR_REVIEW` pending fresh hosted PR CI.
+Branch `codex/t21rc4l-wrangler-parsed-output-fix` from certified main `0e6342f`;
+exact head recorded in the PR/publication receipt; implementation commit `262a61366e4a`.
+
+Finding `T21RC4_WRANGLER_LOG_SUPPRESSION_BUG_CONFIRMED`: under the lockfile's
+Wrangler 3.114.17 (spec `^3.114.0`, unchanged), `WRANGLER_LOG=error` suppresses
+`logger.log`/`logger.table`, emptying the whoami account table, `d1 list --json`
+and `d1 execute --json` stdout that C4I/C2 parse. Fix: C4I child env and C2
+`parsedWranglerStdoutEnvironment` (renamed from `captureExecutionEnvironment`,
+used by identity and fixed SELECTs) set `WRANGLER_LOG='log'`; stdio stays piped,
+debug-log sink/path, commands, SQL allowlist and all validation are unchanged.
+
+C4I runs 37124563415 and 37128183771 and C2 run 37084988593 cannot prove an
+account mismatch; their identity conclusions are
+`INVALIDATED_BY_WRANGLER_LOG_SUPPRESSION_BUG` (run/gate/approval facts, whoami
+command success, zero C4I SQL and zero mutation remain valid). The
+operator-reported `CLOUDFLARE_ACCOUNT_ID` update before 37128183771 occurred, but
+correctness is `UNVERIFIED_PENDING_FIXED_C4I`.
+
+Old reviewed SHAs are intentionally void: C4I `a0c1cfd` → remediation head
+rejects `T21RC4I_REVIEW_BINDING_REJECTED`; C2 `93c4055` rejects
+`T21RC2_REVIEW_BINDING_REJECTED` (both still accept `0e6342f`; closures not
+weakened). A new exact head needs independent review covering both C4I and C2
+execution surfaces.
+
+Local: focused C4I 4 files / 103 PASS, C2 4 files / 256 PASS; regressions fail
+(10) with scripts reverted to `error`. `pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`, `pnpm build`, `git diff
+--check` PASS; `TZ=UTC pnpm exec vitest run --maxWorkers=1` 234 files / 5,322
+PASS (Node 24.21.0).
+
+No production C4I/C2 run, Environment approval, D1 SQL, secret/token mutation,
+migration, 0039 or deploy. `SAFE_TO_RUN_C4I=NO`, `SAFE_TO_RUN_C2=NO`;
+T21G_NOT_READY. Next: independent security review of the exact head (both
+surfaces); do not merge or dispatch. Details: `recipe-catalog/T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
+
+---
+
 # T21R-C4I independent-review remediation - 2026-10-03 JST
 
 **State:** Remediation of independent review findings on draft PR #38 is locally

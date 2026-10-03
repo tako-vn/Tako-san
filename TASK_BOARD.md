@@ -1,3 +1,14 @@
+# Current - T21R-C4L Wrangler parsed-stdout remediation (2026-10-03 UTC)
+
+Draft PR only. `WRANGLER_LOG=error` hid Wrangler 3.114.17 whoami/d1 list/d1
+execute stdout parsed by C4I/C2; now `log`, still piped. Historical account
+conclusions of 37124563415, 37128183771, 37084988593 invalidated; secret
+correctness UNVERIFIED_PENDING_FIXED_C4I. Old C4I/C2 reviewed SHAs reject the new
+head as intended. Next: independent review of both surfaces. No dispatch, merge,
+SQL, secret change, 0039 or deploy. Report: `docs/ai/recipe-catalog/T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
+
+---
+
 # Current - T21R-C4I independent-review remediation (2026-10-03 JST)
 
 Draft PR #38 only. Remediated 2 P1 (C4I reviewed-byte/exact-main-CI gate;

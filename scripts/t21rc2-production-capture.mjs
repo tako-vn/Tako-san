@@ -26,10 +26,12 @@ const same = (a, b) => canonical(a) === canonical(b);
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 const order = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 
-function captureExecutionEnvironment(env, cwd) {
+// Every caller parses Wrangler stdout. Wrangler 3.114.17 emits whoami's account table and
+// every --json payload via logger.log/table, which WRANGLER_LOG=error suppresses; stdout stays piped.
+function parsedWranglerStdoutEnvironment(env, cwd) {
   const { GH_TOKEN, GITHUB_TOKEN, ...cloudflareEnv } = env;
   return {
-    ...cloudflareEnv, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG: 'error',
+    ...cloudflareEnv, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG: 'log',
     WRANGLER_LOG_PATH: path.join(privateDirectory(env, cwd), 'wrangler.log'),
   };
 }
@@ -52,7 +54,7 @@ export function executeFixedProductionSelect(name, { execute = execFileSync, cwd
       'wrangler', 'd1', 'execute', PRODUCTION_D1.name, '--remote', '--yes', '--json',
       '--config', 'wrangler.jsonc', '--command', sql,
     ], {
-      cwd, env: captureExecutionEnvironment(env, cwd), encoding: 'utf8',
+      cwd, env: parsedWranglerStdoutEnvironment(env, cwd), encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
     }));
     if (!Array.isArray(statements) || statements.length !== 1 || statements[0]?.success !== true
@@ -89,7 +91,7 @@ export function proveT21RC2CloudflareIdentity({ execute = execFileSync, env = pr
       throw t21rc2Error('T21RC2_IDENTITY_REJECTED');
     }
     verifyProductionWranglerConfigFile(path.join(cwd, 'wrangler.jsonc'));
-    const options = { cwd, env: captureExecutionEnvironment(env, cwd), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 4 * 1024 * 1024 };
+    const options = { cwd, env: parsedWranglerStdoutEnvironment(env, cwd), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 4 * 1024 * 1024 };
     const whoami = execute('pnpm', ['wrangler', 'whoami'], options);
     const list = JSON.parse(execute('pnpm', ['wrangler', 'd1', 'list', '--json', '--config', 'wrangler.jsonc'], options));
     return verifyT21RC2CloudflareIdentity({ accountId: env.CLOUDFLARE_ACCOUNT_ID, whoami, list });

@@ -55,6 +55,13 @@ gates. Identity success never proves read-only token scope or authorizes SQL,
 credential mutation or C2 rerun. See
 `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
 
+**C4L parsed Wrangler stdout:** Any Wrangler call whose stdout Tako-san parses
+runs with `WRANGLER_LOG='log'` (Wrangler 3.114.17 gates `logger.log`/`table`,
+including whoami's account table and every `--json` payload, at level `log`),
+keeps piped stdio and the private debug-log path. No Wrangler upgrade or
+`whoami --json`. The bound-byte change voids C4I `a0c1cfd` and C2 `93c4055`
+review authority by design. See `recipe-catalog/T21RC4L_WRANGLER_PARSED_STDOUT_REMEDIATION.md`.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.
