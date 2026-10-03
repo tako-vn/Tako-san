@@ -16,9 +16,10 @@ export const T21RC4I_STATUSES = Object.freeze([
   'T21RC4I_TOKEN_MISSING',
   'T21RC4I_ACCOUNT_ID_SECRET_INVALID_FORMAT',
   'T21RC4I_WRANGLER_CONFIG_MISMATCH',
-  'T21RC4I_WHOAMI_AUTH_FAILED',
+  'T21RC4I_WHOAMI_COMMAND_FAILED',
   'T21RC4I_ACCOUNT_ID_SECRET_MISMATCH',
-  'T21RC4I_D1_LIST_AUTH_OR_SCOPE_FAILED',
+  'T21RC4I_D1_LIST_COMMAND_FAILED',
+  'T21RC4I_D1_LIST_RESPONSE_INVALID',
   'T21RC4I_PRODUCTION_D1_NAME_MISSING',
   'T21RC4I_PRODUCTION_D1_NAME_DUPLICATE',
   'T21RC4I_PRODUCTION_D1_UUID_MISMATCH',
@@ -72,7 +73,7 @@ export function runT21RC4IdentityDiagnostic({
     && env.CLOUDFLARE_API_TOKEN.length > 0;
   if (!receipt.tokenPresent) return stop('T21RC4I_TOKEN_MISSING');
   receipt.accountIdSecretFormat = typeof env.CLOUDFLARE_ACCOUNT_ID === 'string'
-    && env.CLOUDFLARE_ACCOUNT_ID.length === 32 && /^[0-9a-f]{32}$/.test(env.CLOUDFLARE_ACCOUNT_ID)
+    && /^[0-9a-f]{32}$/i.test(env.CLOUDFLARE_ACCOUNT_ID)
     ? 'VALID' : 'INVALID';
   if (receipt.accountIdSecretFormat !== 'VALID') return stop('T21RC4I_ACCOUNT_ID_SECRET_INVALID_FORMAT');
   try {
@@ -107,22 +108,30 @@ export function runT21RC4IdentityDiagnostic({
       receipt.wranglerWhoami = 'SUCCESS';
     } catch {
       receipt.wranglerWhoami = 'FAILURE';
-      return stop('T21RC4I_WHOAMI_AUTH_FAILED');
+      return stop('T21RC4I_WHOAMI_COMMAND_FAILED');
     }
     receipt.accountIdMatchesWhoami = (whoami.match(/\b[0-9a-f]{32}\b/gi) ?? [])
-      .some((id) => id.toLowerCase() === env.CLOUDFLARE_ACCOUNT_ID);
+      .some((id) => id.toLowerCase() === env.CLOUDFLARE_ACCOUNT_ID.toLowerCase());
     if (!receipt.accountIdMatchesWhoami) return stop('T21RC4I_ACCOUNT_ID_SECRET_MISMATCH');
-    let list;
+    let listOutput;
     try {
-      list = JSON.parse(execute('pnpm', [...T21RC4I_COMMANDS.list], options));
-      if (!Array.isArray(list) || list.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
-        throw new Error();
-      }
-      receipt.d1List = 'SUCCESS';
+      listOutput = execute('pnpm', [...T21RC4I_COMMANDS.list], options);
     } catch {
       receipt.d1List = 'FAILURE';
-      return stop('T21RC4I_D1_LIST_AUTH_OR_SCOPE_FAILED');
+      return stop('T21RC4I_D1_LIST_COMMAND_FAILED');
     }
+    let list;
+    try {
+      if (typeof listOutput !== 'string') throw new Error();
+      list = JSON.parse(listOutput);
+      if (!Array.isArray(list) || list.some((item) => !item || typeof item !== 'object'
+          || Array.isArray(item) || typeof item.name !== 'string'
+          || typeof item.uuid !== 'string')) throw new Error();
+    } catch {
+      receipt.d1List = 'FAILURE';
+      return stop('T21RC4I_D1_LIST_RESPONSE_INVALID');
+    }
+    receipt.d1List = 'SUCCESS';
     const matches = list.filter((item) => item.name === DATABASE_NAME);
     receipt.frigoDbMatchCount = matches.length > 1 ? 'MULTIPLE' : matches.length;
     if (!matches.length) return stop('T21RC4I_PRODUCTION_D1_NAME_MISSING');

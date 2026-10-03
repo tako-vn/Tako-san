@@ -3,6 +3,14 @@ name: Production D1 Identity Diagnostic
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: Exact current main commit SHA after C4I merge
+        type: string
+        required: true
+      reviewed_sha:
+        description: Exact independently reviewed C4I feature commit SHA
+        type: string
+        required: true
       confirm_metadata_identity_diagnostic:
         description: Confirm separately authorized identity metadata diagnosis
         type: boolean
@@ -11,21 +19,49 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: frigo-deploy-production
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      main_sha: ${{ steps.gate.outputs.main_sha }}
+      reviewed_sha: ${{ steps.gate.outputs.reviewed_sha }}
+      ci_run_id: ${{ steps.gate.outputs.ci_run_id }}
+      ci_attempt: ${{ steps.gate.outputs.ci_attempt }}
+      repository_id: ${{ steps.gate.outputs.repository_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Require reviewed C4I bytes and exact-main CI without production credentials
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          C4I_REF: ${{ inputs.ref }}
+          C4I_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          CONFIRM_METADATA_IDENTITY_DIAGNOSTIC: ${{ inputs.confirm_metadata_identity_diagnostic }}
+        run: node scripts/t21rc4-identity-gate.mjs gate
+
   diagnostic:
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.confirm_metadata_identity_diagnostic == true
+    needs: gate
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.gate.outputs.main_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -36,6 +72,25 @@ jobs:
           version: 10
       - name: Install pinned tooling without credentials
         run: pnpm install --frozen-lockfile
+      - name: Verify gate output and checked-out commit
+        env:
+          C4I_REF: ${{ inputs.ref }}
+          C4I_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          CONFIRM_METADATA_IDENTITY_DIAGNOSTIC: ${{ inputs.confirm_metadata_identity_diagnostic }}
+          C4I_GATE_MAIN_SHA: ${{ needs.gate.outputs.main_sha }}
+          C4I_GATE_REVIEWED_SHA: ${{ needs.gate.outputs.reviewed_sha }}
+          C4I_GATE_CI_RUN_ID: ${{ needs.gate.outputs.ci_run_id }}
+          C4I_GATE_CI_ATTEMPT: ${{ needs.gate.outputs.ci_attempt }}
+          C4I_GATE_REPOSITORY_ID: ${{ needs.gate.outputs.repository_id }}
+        run: node scripts/t21rc4-identity-gate.mjs bind
+      - name: Require normal independent production approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          C4I_REF: ${{ inputs.ref }}
+          C4I_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          C4I_GATE_MAIN_SHA: ${{ needs.gate.outputs.main_sha }}
+          C4I_GATE_REVIEWED_SHA: ${{ needs.gate.outputs.reviewed_sha }}
+        run: node scripts/t21rc4-identity-approval.mjs
       - name: Diagnose identity metadata with sanitized receipt
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

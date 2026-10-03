@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatT21RC4IdentityReceipt, runT21RC4IdentityDiagnostic, T21RC4I_COMMANDS,
   verifyT21RC4IdentityConfig } from '../../scripts/t21rc4-cloudflare-identity-diagnostic.mjs';
 import { verifyProductionWranglerConfig } from '../../scripts/d1-migration-check.mjs';
+import { verifyT21RC2CloudflareIdentity } from '../../scripts/t21rc2-production-capture.mjs';
 import { assertReviewedExecutionClosure, T21RC2_REVIEW_BOUND_PATHS } from '../../scripts/t21rc2-production-approval.mjs';
 
 const ACCOUNT = 'a'.repeat(32);
@@ -46,22 +47,32 @@ function fixture({ env = {}, whoami = WHOAMI, list = LIST, whoamiError, listErro
 }
 
 describe('T21RC4I isolated metadata diagnosis', () => {
-  it('A: rejects missing token before any command or config check', () => {
+  it('rejects missing token before any command or config check', () => {
     const { result, execute } = fixture({ env: { CLOUDFLARE_API_TOKEN: '' } });
     expect(result.status).toBe('T21RC4I_TOKEN_MISSING');
     expect(result.tokenPresent).toBe(false);
     expect(result.accountIdSecretFormat).toBe('NOT_RUN');
     expect(execute).not.toHaveBeenCalled();
   });
-  it.each([undefined, '', 'short', 'A'.repeat(32), ACCOUNT + '\n', 'g'.repeat(32)])(
-    'B: rejects invalid secret syntax %s without commands', (accountId) => {
+  it.each([undefined, '', 'short', 'a'.repeat(31), 'a'.repeat(33), ACCOUNT + '\n',
+    ` ${ACCOUNT}`, `${ACCOUNT} `, 'g'.repeat(32)])(
+    'rejects invalid secret syntax %s without commands', (accountId) => {
       const { result, execute } = fixture({ env: { CLOUDFLARE_ACCOUNT_ID: accountId } });
       expect(result.status).toBe('T21RC4I_ACCOUNT_ID_SECRET_INVALID_FORMAT');
       expect(result.accountIdSecretFormat).toBe('INVALID');
       expect(execute).not.toHaveBeenCalled();
     },
   );
-  it('C: rejects config mismatch before credentials are used by a child', () => {
+  it.each([ACCOUNT, 'A'.repeat(32), 'aA'.repeat(16)])(
+    'accepts lowercase, uppercase and mixed-case syntax in parity with C2: %s', (accountId) => {
+      expect(() => verifyT21RC2CloudflareIdentity({ accountId, whoami: WHOAMI, list: LIST })).not.toThrow();
+      const { result } = fixture({ env: { CLOUDFLARE_ACCOUNT_ID: accountId } });
+      expect(result.accountIdSecretFormat).toBe('VALID');
+      expect(result.accountIdMatchesWhoami).toBe(true);
+      expect(result.status).toBe('T21RC4I_CLOUDFLARE_IDENTITY_CERTIFIED');
+    },
+  );
+  it('rejects config mismatch before credentials are used by a child', () => {
     writeFileSync(path.join(cwd, 'wrangler.jsonc'), configText.replace(UUID, OTHER_UUID));
     const { result, execute, formatted } = fixture();
     expect(result.status).toBe('T21RC4I_WRANGLER_CONFIG_MISMATCH');
@@ -69,10 +80,10 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(formatted).not.toContain(OTHER_UUID);
   });
-  it('D: maps command/timeout/buffer errors without underlying exception output', () => {
+  it('maps whoami command/timeout/buffer errors without underlying exception output', () => {
     const error = Object.assign(new Error(`${TOKEN} ${WHOAMI}`), { stdout: WHOAMI, stderr: OTHER_ACCOUNT });
     const { result, execute, formatted } = fixture({ whoamiError: error });
-    expect(result.status).toBe('T21RC4I_WHOAMI_AUTH_FAILED');
+    expect(result.status).toBe('T21RC4I_WHOAMI_COMMAND_FAILED');
     expect(result.wranglerWhoami).toBe('FAILURE');
     expect(result.d1List).toBe('NOT_RUN');
     expect(execute).toHaveBeenCalledTimes(1);
@@ -80,45 +91,46 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     expect(formatted).not.toContain(OTHER_ACCOUNT);
   });
   it.each([`Only ${OTHER_ACCOUNT}`, `x${ACCOUNT}x`, `0${ACCOUNT}0`])(
-    'E: uses the same bounded account matching as C2 and stops before D1 list', (whoami) => {
+    'uses the same bounded account matching as C2 and stops before D1 list', (whoami) => {
       const { result, execute } = fixture({ whoami });
       expect(result.status).toBe('T21RC4I_ACCOUNT_ID_SECRET_MISMATCH');
       expect(result.accountIdMatchesWhoami).toBe(false);
       expect(execute).toHaveBeenCalledTimes(1);
     },
   );
-  it('F: distinguishes authenticated account from D1 metadata permission failure', () => {
+  it('reports D1 list command failure without claiming auth or scope', () => {
     const { result, execute } = fixture({ listError: new Error(`${TOKEN} request-id private-path`) });
-    expect(result.status).toBe('T21RC4I_D1_LIST_AUTH_OR_SCOPE_FAILED');
+    expect(result.status).toBe('T21RC4I_D1_LIST_COMMAND_FAILED');
     expect(result.wranglerWhoami).toBe('SUCCESS');
     expect(result.accountIdMatchesWhoami).toBe(true);
     expect(result.d1List).toBe('FAILURE');
     expect(execute).toHaveBeenCalledTimes(2);
   });
-  it.each(['not-json', '{}', 'null', '[null]', '[[]]'])(
-    'F: safely rejects malformed metadata %s', (list) => {
-      expect(fixture({ list }).result.status).toBe('T21RC4I_D1_LIST_AUTH_OR_SCOPE_FAILED');
+  it.each(['not-json', '{}', 'null', '[null]', '[[]]', '[{}]', '[{"name":1,"uuid":"x"}]',
+    '[{"name":"frigo-db","uuid":1}]'])(
+    'reports invalid D1 metadata response separately: %s', (list) => {
+      expect(fixture({ list }).result.status).toBe('T21RC4I_D1_LIST_RESPONSE_INVALID');
     },
   );
-  it('G: distinguishes a missing production database name', () => {
+  it('distinguishes a missing production database name', () => {
     const { result } = fixture({ list: [LIST[1]] });
     expect(result.status).toBe('T21RC4I_PRODUCTION_D1_NAME_MISSING');
     expect(result.frigoDbMatchCount).toBe(0);
     expect(result.productionD1UuidMatch).toBeNull();
   });
-  it('G: emits MULTIPLE rather than disclosing arbitrary duplicate counts', () => {
+  it('emits MULTIPLE rather than disclosing arbitrary duplicate counts', () => {
     const { result } = fixture({ list: Array.from({ length: 4 }, () => LIST[0]) });
     expect(result.status).toBe('T21RC4I_PRODUCTION_D1_NAME_DUPLICATE');
     expect(result.frigoDbMatchCount).toBe('MULTIPLE');
     expect(result.productionD1UuidMatch).toBeNull();
   });
-  it('H: rejects a wrong UUID without disclosing it', () => {
+  it('rejects a wrong UUID without disclosing it', () => {
     const { result, formatted } = fixture({ list: [{ name: 'frigo-db', uuid: OTHER_UUID }] });
     expect(result.status).toBe('T21RC4I_PRODUCTION_D1_UUID_MISMATCH');
     expect(result.productionD1UuidMatch).toBe(false);
     expect(formatted).not.toContain(OTHER_UUID);
   });
-  it('I: certifies identity only, without asserting read-only permissions', () => {
+  it('certifies identity only, without asserting read-only permissions', () => {
     const { result, execute } = fixture();
     expect(result).toEqual({
       status: 'T21RC4I_CLOUDFLARE_IDENTITY_CERTIFIED', tokenPresent: true,
@@ -129,7 +141,7 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     });
     expect(execute.mock.calls.map(([, args]) => args)).toEqual([T21RC4I_COMMANDS.whoami, T21RC4I_COMMANDS.list]);
   });
-  it('J/K/L: emits no raw secret, account, email, output, metadata or exception', () => {
+  it('emits no raw secret, account, email, output, metadata or exception', () => {
     const stdout = vi.spyOn(process.stdout, 'write');
     const stderr = vi.spyOn(process.stderr, 'write');
     const consoleError = vi.spyOn(console, 'error');
@@ -139,7 +151,7 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     expect(stdout).not.toHaveBeenCalled(); expect(stderr).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
   });
-  it('J: formatter rejects arbitrary strings, extras and permission overrides', () => {
+  it('formatter rejects arbitrary strings, extras and permission overrides', () => {
     const { result } = fixture();
     const receipt = JSON.parse(formatT21RC4IdentityReceipt({ ...result, status: TOKEN,
       accountIdSecretFormat: ACCOUNT, wranglerWhoami: WHOAMI, frigoDbMatchCount: LIST,
@@ -166,7 +178,7 @@ describe('T21RC4I isolated metadata diagnosis', () => {
     expect(child.WRANGLER_LOG_PATH).not.toBe('/unexpected/file');
     expect(() => statSync(path.dirname(child.WRANGLER_LOG_PATH))).toThrow();
   });
-  it('M: arbitrary CLI arguments cannot execute another Wrangler command', () => {
+  it('arbitrary CLI arguments cannot execute another Wrangler command', () => {
     const child = spawnSync(process.execPath, ['scripts/t21rc4-cloudflare-identity-diagnostic.mjs', 'd1', 'execute'],
       { cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH } });
     expect(child.status).toBe(1); expect(child.stderr).toBe('');
@@ -191,7 +203,10 @@ describe('C4I isolated JSONC identity contract matches existing verifier', () =>
 describe('C4I additions preserve independently reviewed C2 execution bytes', () => {
   it('real reviewed SHA remains eligible after additive diagnostic; a bound-byte mutation rejects', () => {
     const repo = path.join(cwd, 'binding-repo');
-    execFileSync('git', ['clone', '--shared', '--no-checkout', '--quiet', root, repo], { stdio: 'pipe' });
+    execFileSync('git', ['init', '--quiet', repo], { stdio: 'pipe' });
+    mkdirSync(path.join(repo, '.git', 'objects', 'info'), { recursive: true });
+    writeFileSync(path.join(repo, '.git', 'objects', 'info', 'alternates'),
+      `${path.join(root, '.git', 'objects')}\n`);
     const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: 'pipe' }).trim();
     git('config', 'user.name', 'C4I Test'); git('config', 'user.email', 'c4i@example.invalid');
     const reviewed = '93c4055a42cd2d94f4db296d8ca10d555c2c52c2';

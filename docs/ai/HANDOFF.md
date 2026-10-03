@@ -1,3 +1,23 @@
+# T21R-C4I remediation handoff - 2026-10-03 JST
+
+Draft PR #38 on `codex/t21rc4-cloudflare-identity-diagnostic` remains the sole
+integration vehicle. The independent review of head
+`a5966c7fa27b67d16ff02acb753cd2bc82c372fa` required 2 P1 and 2 P2 fixes.
+This additive remediation introduces a separate reviewed-byte/exact-main-CI gate,
+validates the exact normal production approval and policy before credential use,
+matches C2's account-ID syntax, and splits command failures from malformed D1
+responses. The C2 73-path closure and historical production failure are intact.
+
+Local checks: focused C4I+C2 8 files / 340 PASS; full UTC Vitest 234 files /
+5,303 PASS; lint, typecheck, migration smoke, build and diff PASS. The final
+source of truth is the new remediation commit and its fresh hosted PR CI, not the
+old CI run 37114032245. At handoff, production diagnostic/C2 rerun/Environment
+approval/SQL/secret changes/0039/deploy have not occurred. Token scope remains
+UNKNOWN. Next: confirm new exact-head PR CI, then request independent delta
+review; keep PR draft, do not merge or dispatch production.
+
+---
+
 # T21R-C4I metadata identity diagnostic handoff — 2026-10-03 JST
 
 **State:** `T21RC4I_IMPLEMENTATION_READY_FOR_REVIEW`, not live certification.

@@ -1,3 +1,16 @@
+# Current - T21R-C4I independent-review remediation (2026-10-03 JST)
+
+Draft PR #38 only. Remediated 2 P1 (C4I reviewed-byte/exact-main-CI gate;
+independent production approval validation before Cloudflare credentials) and
+2 P2 (C2 account syntax parity; evidence-limited command/response statuses).
+Focused C4I+C2 340/340 PASS; full UTC run 234 files / 5,303 PASS; lint,
+typecheck, migration smoke, build and diff PASS. C2 73-path bytes untouched.
+Next: push additive commit, verify fresh exact-head PR CI, then independent
+delta review. Production diagnostic/C2 rerun/Environment approval/SQL/secret
+mutation/0039/deploy remain stopped; token scope UNKNOWN. Do not merge.
+
+---
+
 # Current — T21R-C2 PR #36 hosted CI-history remediation (2026-10-02 UTC)
 
 Same branch/PR36, verified pre-fix head `3e1bb60b`. Actual old run `37002486858`

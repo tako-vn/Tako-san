@@ -1,3 +1,39 @@
+# T21R-C4I independent-review remediation - 2026-10-03 JST
+
+**State:** Remediation of independent review findings on draft PR #38 is locally
+validated and awaiting fresh hosted CI and independent delta review. Repository
+`vn-tak/Tako-san` (ID `1385308553`), branch
+`codex/t21rc4-cloudflare-identity-diagnostic`, reviewed pre-remediation head
+`a5966c7fa27b67d16ff02acb753cd2bc82c372fa`; certified main remains
+`7cd58968c3b4c0f7936c75d74b6965d229b57c69`. Final remediation SHA is
+recorded in the publication receipt rather than self-referenced here.
+
+**Changes:** Separate C4I closure binds the diagnostic workflow, CI workflow,
+three C4I scripts, package/lock/config and optional package configuration bytes.
+A credential-free gate requires reviewed ancestor, exact current main and
+successful exact-main push CI. The production job verifies gate outputs, then
+validates the specific independent Environment approval and current main before
+the Cloudflare-only step. Account ID syntax now matches C2 for 32 case-insensitive
+hex characters. Command and malformed-response statuses no longer claim auth or
+scope without evidence. C2's 73 review-bound paths remain unchanged.
+
+**Local validation:** Eight focused C4I/C2 files, 340/340 PASS (C4I 93, C2 247).
+Full UTC single-worker Vitest run: 234 files, 5,303/5,303 PASS. ESLint,
+typecheck, migration smoke, web/Worker build and diff check PASS. Initial full
+runs exposed missing files in a partial checkout and a macOS `/var` temp-path
+alias; after completing the checkout and using `TMPDIR=/private/var/tmp`, the
+same unchanged C2 suites and full run passed. No C2 source/test was edited.
+
+**Boundary and next:** Production diagnostic NOT_RUN; C2 rerun NO; production
+Environment approval NO; production D1 SQL reads/writes 0/0; production,
+secret and token mutations 0; 0039/deploy STOPPED. Historical run 37084988593
+remains `T21RC2_IDENTITY_REJECTED`; token scope UNKNOWN, read-only scope
+unproven. Push this additive remediation to draft PR #38, require fresh PR CI
+on the new exact head, then stop for independent review. Do not merge or run
+the diagnostic. Details: `recipe-catalog/T21RC4I_CLOUDFLARE_IDENTITY_DIAGNOSTIC.md`.
+
+---
+
 # T21R-C4I identity metadata diagnostic — 2026-10-03 JST
 
 **State:** `T21RC4I_IMPLEMENTATION_READY_FOR_REVIEW`, not live identity

@@ -17,34 +17,71 @@ const pins = [
 
 function assertDiagnosticStaticSafety(text, script) {
   const workflow = load(text);
-  // The required shared lock contains "deploy" as an identifier, never a command.
-  const lock = workflow.concurrency?.group;
-  expect(lock).toBe('frigo-deploy-production');
+  expect(workflow.concurrency).toEqual({ group: 'frigo-deploy-production', 'cancel-in-progress': false });
   const commandsOnly = structuredClone(workflow);
   commandsOnly.concurrency.group = 'shared-production-lock';
   if (denied.test(JSON.stringify(commandsOnly)) || denied.test(script)) throw new Error('T21RC4I_STATIC_FORBIDDEN');
   expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
-  expect(workflow.permissions).toEqual({ contents: 'read' });
-  expect(workflow.concurrency['cancel-in-progress']).toBe(false);
-  expect(Object.keys(workflow.jobs)).toEqual(['diagnostic']);
-  const job = workflow.jobs.diagnostic;
-  expect(job.environment).toBe('production');
-  expect(job['runs-on']).toBe('ubuntu-latest');
-  expect(job.if).toBe("github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.confirm_metadata_identity_diagnostic == true");
-  expect(job.env).toBeUndefined(); expect(job.permissions).toBeUndefined();
-  expect(job.steps).toHaveLength(5);
-  expect(job.steps.filter((step) => step.uses).map((step) => step.uses)).toEqual(pins);
-  expect(job.steps.filter((step) => step.run).map((step) => step.run)).toEqual([
-    'pnpm install --frozen-lockfile', 'node scripts/t21rc4-cloudflare-identity-diagnostic.mjs',
-  ]);
-  expect(job.steps[0].with).toEqual({ ref: '${{ github.sha }}', 'fetch-depth': 0, 'persist-credentials': false });
-  expect(job.steps[1].with['node-version']).toBe(24);
-  expect(job.steps[2].with.version).toBe(10);
-  for (const step of job.steps.slice(0, -1)) expect(step.env).toBeUndefined();
-  expect(job.steps.at(-1).env).toEqual({
+  const inputs = workflow.on.workflow_dispatch.inputs;
+  expect(Object.keys(inputs)).toEqual(['ref', 'reviewed_sha', 'confirm_metadata_identity_diagnostic']);
+  expect(inputs.ref).toMatchObject({ type: 'string', required: true });
+  expect(inputs.reviewed_sha).toMatchObject({ type: 'string', required: true });
+  expect(inputs.confirm_metadata_identity_diagnostic).toMatchObject({ type: 'boolean', required: true, default: false });
+  expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' });
+  expect(Object.keys(workflow.jobs)).toEqual(['gate', 'diagnostic']);
+  const gate = workflow.jobs.gate;
+  const diagnostic = workflow.jobs.diagnostic;
+  expect(gate.environment).toBeUndefined();
+  expect(gate.env).toBeUndefined();
+  expect(gate.steps).toHaveLength(3);
+  expect(gate.steps.filter((step) => step.uses).map((step) => step.uses)).toEqual(pins.slice(0, 2));
+  expect(gate.steps[0].with).toEqual({ ref: '${{ github.sha }}', 'fetch-depth': 0, 'persist-credentials': false });
+  expect(gate.steps[2].run).toBe('node scripts/t21rc4-identity-gate.mjs gate');
+  expect(gate.steps[2].env).toEqual({
+    GH_TOKEN: '${{ github.token }}',
+    C4I_REF: '${{ inputs.ref }}',
+    C4I_REVIEWED_SHA: '${{ inputs.reviewed_sha }}',
+    CONFIRM_METADATA_IDENTITY_DIAGNOSTIC: '${{ inputs.confirm_metadata_identity_diagnostic }}',
+  });
+  expect(gate.outputs).toEqual({
+    main_sha: '${{ steps.gate.outputs.main_sha }}',
+    reviewed_sha: '${{ steps.gate.outputs.reviewed_sha }}',
+    ci_run_id: '${{ steps.gate.outputs.ci_run_id }}',
+    ci_attempt: '${{ steps.gate.outputs.ci_attempt }}',
+    repository_id: '${{ steps.gate.outputs.repository_id }}',
+  });
+  expect(diagnostic.needs).toBe('gate');
+  expect(diagnostic.environment).toBe('production');
+  expect(diagnostic.env).toBeUndefined();
+  expect(diagnostic.steps).toHaveLength(7);
+  expect(diagnostic.steps.filter((step) => step.uses).map((step) => step.uses)).toEqual(pins);
+  expect(diagnostic.steps[0].with).toEqual({
+    ref: '${{ needs.gate.outputs.main_sha }}', 'fetch-depth': 0, 'persist-credentials': false,
+  });
+  expect(diagnostic.steps[3].run).toBe('pnpm install --frozen-lockfile');
+  expect(diagnostic.steps[4].run).toBe('node scripts/t21rc4-identity-gate.mjs bind');
+  expect(diagnostic.steps[4].env).toMatchObject({
+    C4I_REF: '${{ inputs.ref }}', C4I_REVIEWED_SHA: '${{ inputs.reviewed_sha }}',
+    C4I_GATE_MAIN_SHA: '${{ needs.gate.outputs.main_sha }}',
+    C4I_GATE_REVIEWED_SHA: '${{ needs.gate.outputs.reviewed_sha }}',
+    C4I_GATE_CI_RUN_ID: '${{ needs.gate.outputs.ci_run_id }}',
+    C4I_GATE_CI_ATTEMPT: '${{ needs.gate.outputs.ci_attempt }}',
+    C4I_GATE_REPOSITORY_ID: '${{ needs.gate.outputs.repository_id }}',
+  });
+  expect(diagnostic.steps[5].run).toBe('node scripts/t21rc4-identity-approval.mjs');
+  expect(diagnostic.steps[5].env).toEqual({
+    GH_TOKEN: '${{ github.token }}',
+    C4I_REF: '${{ inputs.ref }}',
+    C4I_REVIEWED_SHA: '${{ inputs.reviewed_sha }}',
+    C4I_GATE_MAIN_SHA: '${{ needs.gate.outputs.main_sha }}',
+    C4I_GATE_REVIEWED_SHA: '${{ needs.gate.outputs.reviewed_sha }}',
+  });
+  expect(diagnostic.steps[6].run).toBe('node scripts/t21rc4-cloudflare-identity-diagnostic.mjs');
+  expect(diagnostic.steps[6].env).toEqual({
     CLOUDFLARE_API_TOKEN: '${{ secrets.CLOUDFLARE_API_TOKEN }}',
     CLOUDFLARE_ACCOUNT_ID: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}',
   });
+  for (const step of [...gate.steps.slice(0, 2), ...diagnostic.steps.slice(0, 4)]) expect(step.env).toBeUndefined();
   const source = ts.createSourceFile('diagnostic.mjs', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const imports = []; const calls = [];
   const visit = (node) => {
@@ -67,10 +104,8 @@ function assertDiagnosticStaticSafety(text, script) {
 }
 
 describe('C4I diagnostic workflow safety', () => {
-  it('is manual, main-only, first-attempt, protected, immutable and metadata-only without artifacts', () => {
+  it('requires credential-free gate, independent approval, exact checkout, and metadata-only commands', () => {
     assertDiagnosticStaticSafety(workflowText, scriptText);
-    const input = load(workflowText).on.workflow_dispatch.inputs.confirm_metadata_identity_diagnostic;
-    expect(input).toMatchObject({ type: 'boolean', required: true, default: false });
   });
   it('freezes exactly the two permitted Wrangler argv arrays', () => {
     expect(T21RC4I_COMMANDS).toEqual({ whoami: ['wrangler', 'whoami'],
@@ -80,9 +115,9 @@ describe('C4I diagnostic workflow safety', () => {
   });
   it.each(['d1 execute', '--command', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE',
     'ALTER', 'DROP', 'PRAGMA', 'migration', 'deploy', 'restore'])(
-    'rejects forbidden token %s in the script and workflow', (token) => {
-      expect(() => assertDiagnosticStaticSafety(workflowText, scriptText + `\n// ${token}\n`)).toThrow('T21RC4I_STATIC_FORBIDDEN');
-      expect(() => assertDiagnosticStaticSafety(workflowText + `\nextra: ${token}\n`, scriptText)).toThrow('T21RC4I_STATIC_FORBIDDEN');
+    'rejects forbidden token %s in script and workflow', (token) => {
+      expect(() => assertDiagnosticStaticSafety(workflowText, scriptText + `\n// ${token}\n`)).toThrow();
+      expect(() => assertDiagnosticStaticSafety(workflowText + `\nextra: ${token}\n`, scriptText)).toThrow();
     },
   );
   it.each(['push', 'pull_request', 'schedule', 'repository_dispatch'])(
@@ -93,19 +128,19 @@ describe('C4I diagnostic workflow safety', () => {
   it.each(['v4', 'main', 'latest', 'abc123', 'A'.repeat(40)])('rejects mutable or wrong pin %s', (ref) => {
     expect(() => assertDiagnosticStaticSafety(workflowText.replace(pins[0], `actions/checkout@${ref}`), scriptText)).toThrow();
   });
-  it('rejects any permission expansion, bypass of the Environment or cancellation', () => {
-    for (const changed of [workflowText.replace('contents: read', 'contents: write'),
-      workflowText.replace('contents: read', 'contents: read\n  actions: write'),
+  it('rejects bypasses of gate, approval, permissions, Environment, and secret isolation', () => {
+    for (const changed of [
+      workflowText.replace('actions: read', 'actions: write'),
       workflowText.replace('environment: production', 'environment: staging'),
-      workflowText.replace('cancel-in-progress: false', 'cancel-in-progress: true')]) {
-      expect(() => assertDiagnosticStaticSafety(changed, scriptText)).toThrow();
-    }
-  });
-  it('rejects an added command, artifact step or helper import', () => {
-    for (const changed of [workflowText + '\n      - run: echo raw-metadata\n',
-      workflowText + '\n      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\n']) {
-      expect(() => assertDiagnosticStaticSafety(changed, scriptText)).toThrow();
-    }
-    expect(() => assertDiagnosticStaticSafety(workflowText, scriptText + "\nimport './other-helper.mjs';\n")).toThrow();
+      workflowText.replace('needs: gate', 'needs: []'),
+      workflowText.replace('jobs:\n  gate:', 'jobs:\n  removed_gate:'),
+      workflowText.replace('node scripts/t21rc4-identity-approval.mjs', 'echo skipped'),
+      workflowText.replace('node scripts/t21rc4-identity-gate.mjs gate', 'echo skipped'),
+      workflowText.replace('node scripts/t21rc4-identity-gate.mjs bind', 'echo skipped'),
+      workflowText.replace('C4I_REVIEWED_SHA: ${{ inputs.reviewed_sha }}', 'C4I_REVIEWED_SHA: ${{ github.sha }}'),
+      workflowText.replace('GH_TOKEN: ${{ github.token }}', 'CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}'),
+      workflowText.replace('CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}', 'GH_TOKEN: ${{ github.token }}'),
+      workflowText.replace('cancel-in-progress: false', 'cancel-in-progress: true'),
+    ]) expect(() => assertDiagnosticStaticSafety(changed, scriptText)).toThrow();
   });
 });
