@@ -219,7 +219,7 @@ describe('T21R-C2 complete non-atomic two-read snapshot', () => {
   it('rejects tampering between private capture and credential-free classification', async () => {
     const captured = await fixture().run();
     captured.input.occurrences[0].required_quantity = 42;
-    await expect(classifyT21RC2Snapshot({ ...captured, authorization, authority: { authorityProof: proof } })).rejects.toThrow('T21RC2_CLASSIFICATION_REJECTED');
+    await expect(classifyT21RC2Snapshot({ ...captured, authorization, authority: { authorityProof: proof } })).rejects.toThrow('T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED');
   });
 });
 

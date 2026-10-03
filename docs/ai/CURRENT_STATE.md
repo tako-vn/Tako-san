@@ -1,3 +1,42 @@
+# T21R-C2D classification diagnostics — 2026-10-03 UTC
+
+Branch `codex/t21rc2d-classification-diagnostics` from certified main `78313ab`.
+Implementation checkpoints `fbce4a1`, `3054b4a`, `4be7e18`; final head and fresh
+hosted PR CI receipt are recorded in the draft PR, not self-referenced here.
+
+Source run 37135187427 attempt 1: gate/capture/cleanup PASS, classify FAIL with
+`T21RC2_CLASSIFICATION_REJECTED`, artifact SKIPPED. Metadata was read without
+raw logs or evidence. Snapshot CAPTURED_STABLE_NON_ATOMIC; production relation
+to V1 UNKNOWN_BECAUSE_CLASSIFIER_DID_NOT_COMPLETE. Identity/database/ledger/
+roster/fixed-SELECT/stability/write guards remain proven by capture success.
+
+Classification now distinguishes capture_binding, authority, reconciliation,
+schema, aggregate and digest with fixed `T21RC2_CLASSIFICATION_<STAGE>_REJECTED`
+codes. Tiny diagnostic receipts reconstruct only code/stage; no Ajv paths/data
+or raw context. No workflow/failure upload/capture/SQL/credential change.
+
+Offline repro fixes: an uncaptured parent now remains malformed/unattributed,
+not an extra recipe summary; aggregate validation checks recipe-local candidates,
+derived recipe status and drift/conflict indexes. All nine enum families match
+the unchanged closed schema. Offline authority remains 500/2702 and the certified
+release/fingerprint. Divergence, extreme drift, malformed rows and duplicate
+physical IDs all produce valid manifests. These bugs do not prove the historical
+production rejection's cause; its stage remains unresolved.
+
+Final focused C2 suites: 6 files / 375 PASS. Final `pnpm lint`, `pnpm typecheck`,
+`pnpm check:migrations`, `pnpm build`, `git diff --check` PASS;
+`TZ=UTC pnpm exec vitest run --maxWorkers=1`: 235 files / 5384 PASS, exit 0.
+Hosted CI is pending at this documentation checkpoint; its exact-head receipt
+belongs in the draft PR. C2 old `a0d4bf9` binding rejects the implementation;
+73 bound entries unchanged. C4I execution/binding unchanged.
+
+Next: fresh exact-head attempt-1 PR CI, then independent review of all C2 stages
+and contract fixes. Do not merge or rerun C2/C4I. Production SQL/mutations and
+secret/token changes 0; repair NOT_AUTHORIZED; 0039/deploy STOPPED; T21G_NOT_READY.
+Report: `recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
+
+---
+
 # T21R-C4L Wrangler parsed-stdout remediation - 2026-10-03 UTC
 
 **State:** `T21RC4L_REMEDIATION_READY_FOR_REVIEW` pending fresh hosted PR CI.

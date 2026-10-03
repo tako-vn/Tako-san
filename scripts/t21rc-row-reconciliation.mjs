@@ -230,7 +230,8 @@ export function reconcileIngredientOccurrences({
           : reviewedNewIds.has(line.canonicalId) ? 'REVIEWED_NEW_ID'
             : line.ingredientId.startsWith('ING_ENR_') ? 'UNREVIEWED_ING_ENR' : 'UNKNOWN_ID';
     const evidence = {
-      occurrenceKey: line.occurrenceKey, recipeId: line.recipeId,
+      // An uncaptured parent is malformed evidence, not an additional captured recipe.
+      occurrenceKey: line.occurrenceKey, recipeId: capturedIds.has(line.recipeId) ? line.recipeId : null,
       productionIngredientId: line.ingredientId, targetIngredientId: null,
       candidateTargetOccurrenceKeys: [], classification: 'AMBIGUOUS', confidence: 'UNKNOWN',
       authority: ['V1_RELEASE'], mapping: 'UNRESOLVED',

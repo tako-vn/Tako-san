@@ -1,11 +1,21 @@
 import { constants, lstatSync, mkdirSync, openSync, closeSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+export const T21RC2_CLASSIFICATION_STAGES = Object.freeze({
+  T21RC2_CLASSIFICATION_CAPTURE_BINDING_REJECTED: 'capture_binding',
+  T21RC2_CLASSIFICATION_AUTHORITY_REJECTED: 'authority',
+  T21RC2_CLASSIFICATION_RECONCILIATION_REJECTED: 'reconciliation',
+  T21RC2_CLASSIFICATION_SCHEMA_REJECTED: 'schema',
+  T21RC2_CLASSIFICATION_AGGREGATE_REJECTED: 'aggregate',
+  T21RC2_CLASSIFICATION_DIGEST_REJECTED: 'digest',
+});
+
 export const T21RC2_ERROR_CODES = Object.freeze([
   'T21RC2_GATE_REJECTED', 'T21RC2_REVIEW_BINDING_REJECTED', 'T21RC2_APPROVAL_REJECTED', 'T21RC2_IDENTITY_REJECTED',
   'T21RC2_QUERY_REJECTED', 'T21RC2_QUERY_FAILED', 'T21RC2_CAPTURE_INCOMPLETE',
   'T21RC2_RECIPE_ROSTER_CHANGED', 'T21RC2_LEDGER_CHANGED',
   'T21RC2_PRODUCTION_SNAPSHOT_UNSTABLE', 'T21RC2_CLASSIFICATION_REJECTED',
+  ...Object.keys(T21RC2_CLASSIFICATION_STAGES),
   'T21RC2_RECEIPT_REJECTED', 'T21RC2_PRIVATE_PATH_REJECTED',
 ]);
 const PRIVATE_FILES = new Set([
@@ -91,8 +101,14 @@ export function removePublicReceipt(env = process.env, cwd = process.cwd()) {
 }
 
 export function buildT21RC2FailureReceipt(error) {
+  const reason = safeT21RC2Error(error);
   return {
-    schemaVersion: 1, status: 'T21RC2_CAPTURE_BLOCKED', reason: safeT21RC2Error(error),
+    schemaVersion: 1, status: 'T21RC2_CAPTURE_BLOCKED', reason,
+    ...(Object.hasOwn(T21RC2_CLASSIFICATION_STAGES, reason) ? {
+      classificationDiagnostic: {
+        schemaVersion: 1, status: reason, stage: T21RC2_CLASSIFICATION_STAGES[reason],
+      },
+    } : {}),
     certification: 'NOT_A_RELEASE_CERTIFICATION', readOnly: true,
     productionMutations: 0, sqlWrites: 0, restores: 0, migrations: 0,
     applied0039: false, deploys: 0, repairAuthorized: false, t21gStatus: 'T21G_NOT_READY',

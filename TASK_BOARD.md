@@ -1,3 +1,17 @@
+# Current — T21R-C2D classification diagnostics (2026-10-03 UTC)
+
+Six sanitized classification stages, static failure diagnostic, and separately
+proven malformed-parent/aggregate fixes. Source run 37135187427 capture PASS;
+production/V1 relation remains UNKNOWN because classification did not complete.
+Focused 375 PASS; UTC full 235 files / 5384 PASS; lint/typecheck/migration smoke/
+build/diff PASS. Hosted CI pending at docs checkpoint. Old C2 `a0d4bf9` review
+authority intentionally invalidated; C4I/capture/SELECT/schema/V1 unchanged.
+Next: independent exact-head review after fresh PR CI. No merge, C2/C4I rerun,
+production SQL, repair, secret/token changes, 0039 or deploy.
+Report: `docs/ai/recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
+
+---
+
 # Current - T21R-C4L Wrangler parsed-stdout remediation (2026-10-03 UTC)
 
 Draft PR only. `WRANGLER_LOG=error` hid Wrangler 3.114.17 whoami/d1 list/d1
