@@ -74,6 +74,18 @@ Production run 37135187427's stage remains unknown; a completed capture followed
 by classification failure is not evidence of V1 divergence or repair readiness.
 See `recipe-catalog/T21RC2D_CLASSIFICATION_DIAGNOSTICS.md`.
 
+**C2S schema boundary:** Preserve the closed schema and Ajv 6's first-error,
+`allErrors:false` behavior. Only actual schema validation can create a branded
+failure category. Reconstruct section/field/keyword/code from explicit static
+allowlists and known schema rules, including referenced and conditional rules;
+unmapped errors return `UNKNOWN_SCHEMA_CONTRACT`. No raw Ajv context or caller
+diagnostic metadata is published. The existing failure log/receipt may contain
+this fingerprint; failure upload remains disabled. Unique target mappings list
+only satisfying witnesses; unresolved identity or content-conflict competition
+remains ambiguous with its candidate graph intact. Keep the 73-entry review
+closure, capture/SELECT authority and C4I unchanged; renewed exact-head review is
+required. See `recipe-catalog/T21RC2S_SCHEMA_BOUNDARY_FORENSIC.md`.
+
 **Consequences:** A later separately authorized capture can establish only
 `OBSERVED_STABLE_NON_ATOMIC`, never repair readiness or atomicity. No T19/T20
 runtime, migration, database, catalog, deployment or Environment policy changes.

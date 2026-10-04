@@ -1,3 +1,35 @@
+# T21R-C2S schema boundary — 2026-10-04 UTC
+
+- [x] Verify repository 1385308553 and fetched exact main
+  `b9bc66acfe660329103c08be1f5cff90ed175aba`; no rebase or unrelated integration.
+- [x] Preserve latest source run 37158525748 schema-stage evidence and UNKNOWN
+  production/V1 relation, without production rows/logs/credentials or reruns.
+- [x] Prove original-main schema-only failure for exact witness plus unresolved
+  or cross-ID competitor; aggregate/digest PASS. Fix classifier candidate publication
+  without weakening schema, ambiguity or existing exact-tuple compatibility.
+- [x] Actual-validator-only static schema fingerprint, explicit allowlists,
+  reference/conditional/contains mapping, deterministic unknown fallback,
+  caller/accessor redaction and credential-free real classify-CLI regression.
+- [x] All production/target classes; malformed/duplicate/bridge/conflict/taint
+  corpus; 500 recipes / 2702 targets with 2702, 3002 and 8106 production rows;
+  target-only and 2702-candidate structures.
+- [x] Final focused 8 files / 420 PASS; UTC single-worker full 237 files / 5429 PASS;
+  lint/typecheck/local migration smoke/build/diff PASS. Initial full-shell timeout
+  and test-harness/overbroad-guard failures recorded and recovered without weakening.
+- [x] 73-entry closure retained; old reviewed `95b1746819c4690d267985ce55cb0ba673373a95`
+  rejects; capture/SQL/C4I/workflow/V1/runtime untouched.
+- [x] Code checkpoint `946a7be`; draft PR #41 published and auto-fix subscription
+  enabled. Exact docs-inclusive head and fresh CI receipt are anchored in the PR.
+- [ ] Independent review of the exact final head after attempt-1 PR CI SUCCESS.
+  Any automated branch change requires a new frozen head and new review authority.
+
+Production operations and secret/token changes 0; token read-only proof false/
+scope UNKNOWN; repair NOT_AUTHORIZED; 0039/deploy STOPPED; T21G_NOT_READY.
+No merge or C2/C4I rerun. Report:
+`recipe-catalog/T21RC2S_SCHEMA_BOUNDARY_FORENSIC.md`.
+
+---
+
 # T21R-C2D classification diagnostics — 2026-10-03 UTC
 
 - [x] Fetch and verify certified main `78313ab`; metadata-only inspection of

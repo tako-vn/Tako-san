@@ -1,3 +1,61 @@
+# T21R-C2S schema boundary — 2026-10-04 UTC
+
+Offline implementation checkpoint `946a7be` on
+`codex/t21rc2s-schema-forensic`, from fetched certified main
+`b9bc66acfe660329103c08be1f5cff90ed175aba`. Draft PR
+[#41](https://github.com/vn-tak/Tako-san/pull/41) is open; its final
+docs-inclusive SHA and exact-head CI receipt are maintained there, not
+self-referenced in this checkpoint. Independent review remains required.
+
+Latest source evidence is the task packet's run 37158525748, attempt 1:
+capture/cleanup PASS, `OBSERVED_STABLE_NON_ATOMIC`, engine completed,
+`T21RC2_CLASSIFICATION_SCHEMA_REJECTED`, artifacts 0. No raw production evidence
+was retrieved. Production/V1 relation stays UNKNOWN; repair need UNDETERMINED.
+The older generic run 37135187427 does not supersede this schema-stage evidence.
+
+Confirmed offline defect `T21RC2S_ROOT_CAUSE_CLASSIFIER_SHAPE_BUG`:
+`T21RC2S_TARGET_UNIQUE_CANDIDATE_CARDINALITY`. Original certified-main modules
+emit a `UNIQUE` target with two candidates for one exact witness plus an unresolved
+or cross-ID competitor: schema FAIL while aggregate/digest PASS. The unchanged
+schema is correct. Targets now retain ambiguity/full candidate evidence for
+competition; an uncontested unique target contains only its satisfying witness,
+preserving the existing exact-tuple/same-ID-drift contract. The precise historical
+production condition remains unverified.
+
+Schema failures now expose only reconstructed `section/field/keyword/code` from
+actual-validator-only private categories, fixed allowlists and known schema rules.
+Ajv 6.15.0 retains `allErrors:false` / `jsonPointers:true`; unknowns fail closed.
+Caller metadata, accessor races, raw paths/indices/values/messages/params/data,
+causes and subprocess output do not enter diagnostics. No failure artifact upload.
+
+Final local focused command with all eight C2 suite paths: 8 files / 420 PASS.
+`TZ=UTC pnpm exec vitest run --maxWorkers=1`: 237 files / 5429 PASS, exit 0,
+676.74 seconds, Node 24.21.0. `pnpm lint`, `pnpm typecheck`,
+`pnpm check:migrations`, `pnpm build`, `git diff --check` PASS.
+The initial full command hit the 600-second shell limit (exit 124, incomplete,
+not a test pass); the unchanged command completed under an 1800-second budget.
+Interim TS declarations, overbroad A3 ambiguity and CLI loader escaping failures
+were corrected without suppressions, assertion weakening or timeout-threshold edits.
+
+All 73 C2 bound entries remain; old reviewed head
+`95b1746819c4690d267985ce55cb0ba673373a95` rejects the new execution bytes.
+Capture/11-read SELECT authority, workflow, closed schema, V1, C4I, packages,
+migrations and application runtime are unchanged. Auto-fix subscription is enabled;
+any branch advance invalidates review of an earlier exact head. No auto-merge.
+The separately observed baselineComparison aggregate gap is documented, not
+repaired or confused with the schema defect.
+
+Production C2/C4I runs, production SQL, mutations, secret/token changes,
+migrations and deploys are 0. Local migration smoke uses in-memory SQLite only.
+Token scope UNKNOWN/read-only proof false; repair NOT_AUTHORIZED;
+0039/deploy STOPPED; T21G_NOT_READY.
+
+Next: confirm the PR's fresh attempt-1 final-head CI, independently review that
+exact immutable SHA, and do not merge, rerun C2/C4I or repair production.
+Report: `recipe-catalog/T21RC2S_SCHEMA_BOUNDARY_FORENSIC.md`.
+
+---
+
 # T21R-C2D classification diagnostics — 2026-10-03 UTC
 
 Branch `codex/t21rc2d-classification-diagnostics` from certified main `78313ab`.
