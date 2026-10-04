@@ -1,3 +1,32 @@
+# Current — T21R-C2S schema boundary (2026-10-04 UTC)
+
+Offline-only schema defect reproduced on certified main
+`b9bc66acfe660329103c08be1f5cff90ed175aba` and fixed at `946a7be`: unique target
+publication cannot carry competing candidates; preserve ambiguity and exact-tuple
+witness compatibility without changing the closed schema. Actual validation
+privately creates safe static section/field/keyword/code diagnostics; no raw Ajv
+context, values or failure artifact upload.
+
+Latest task-supplied run 37158525748: capture PASS, engine completed, schema
+REJECTED, cleanup PASS, artifacts 0. Production/V1 relation UNKNOWN and actual
+production failure condition unverified. Synthetic scale/reachability/privacy/CLI
+PASS; focused 8 files / 420 tests PASS; full UTC one-worker 237 files / 5429 PASS;
+lint/typecheck/in-memory migration smoke/build/diff PASS. Initial 600-second
+full-command interruption recovered under an 1800-second budget; no coverage
+or threshold was weakened.
+
+All 73 bound entries retained; reviewed `95b1746819c4690d267985ce55cb0ba673373a95` rejects.
+Capture/SELECTs/C4I/workflows/V1/runtime unchanged. Draft
+[PR #41](https://github.com/vn-tak/Tako-san/pull/41) owns the exact final SHA and
+fresh attempt-1 CI receipt. Auto-fix subscription is enabled; review must pin
+an immutable head, never a moving branch. Next: independently review that exact
+head after CI SUCCESS. Do not merge, rerun C2/C4I, repair, use production
+credentials/SQL, change secrets/tokens, apply 0039 or deploy. Production counters
+0; token scope UNKNOWN/read-only proof false; T21G_NOT_READY.
+Report: `docs/ai/recipe-catalog/T21RC2S_SCHEMA_BOUNDARY_FORENSIC.md`.
+
+---
+
 # Current — T21R-C2D classification diagnostics (2026-10-03 UTC)
 
 Six sanitized classification stages, static failure diagnostic, and separately

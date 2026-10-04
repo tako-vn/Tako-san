@@ -1,3 +1,52 @@
+# T21R-C2S schema-boundary handoff — 2026-10-04 UTC
+
+**State:** Offline implementation verified at code checkpoint `946a7be`, branch
+`codex/t21rc2s-schema-forensic`, certified base
+`b9bc66acfe660329103c08be1f5cff90ed175aba`. Draft PR
+[#41](https://github.com/vn-tak/Tako-san/pull/41); final docs-inclusive head and
+attempt-1 hosted CI receipt belong in the PR. No independent review or execution
+authority is granted here.
+
+**Evidence:** Task-provided run 37158525748 attempt 1 completed reconciliation but
+failed schema validation; capture/cleanup PASS, snapshot OBSERVED_STABLE_NON_ATOMIC,
+artifacts 0. Production relation to V1 remains UNKNOWN. Original certified-main
+module bytes reject minimized exact-plus-unknown and exact-plus-conflict cases
+only at schema; aggregate and digest PASS. The production-only condition is
+unverified, not inferred from the older generic run.
+
+**Changes:** Fix unique target candidate publication without changing the closed
+schema. Keep competing identity/content evidence ambiguous and intact; publish
+only satisfying unique witnesses and preserve P1 A3 exact-tuple compatibility.
+Actual schema validation privately brands failures; static allowlists/rules
+reconstruct four safe fields, with unknown fallback, conditional/reference
+coverage and single-read accessor protection. Preserve six C2D stages, aggregate/
+digest guards, capture/SQL/11 reads, V1, C4I, workflow and 73-entry closure.
+Old reviewed head `95b1746819c4690d267985ce55cb0ba673373a95` rejects intentionally.
+
+**Checks/failures:** Final focused 8 files / 420 PASS. Exact full command
+`TZ=UTC pnpm exec vitest run --maxWorkers=1`: 237 files / 5429 PASS, exit 0,
+676.74 seconds. `pnpm lint`, `pnpm typecheck`, `pnpm check:migrations`,
+`pnpm build`, `git diff --check` PASS. First full invocation was interrupted at
+the 600-second command limit (exit 124); rerun budget 1800 completed unchanged
+coverage. Initial .ts declaration failure, overbroad A3 guard and test loader
+newline failure were fixed. One auxiliary concurrent-load C2D stress timeout
+recovered in standalone/final focused runs; no test threshold was weakened.
+Real credential-free classify CLI, privacy adversaries and deterministic
+unknown/known diagnostics PASS. Synthetic 500/2702 structures cover 2702, 3002
+and 8106 production rows, target-only input and 2702 candidates.
+
+**Next:** Require fresh exact-final-head attempt-1 PR CI, then independent review
+of that immutable SHA. Auto-fix subscription is enabled and may advance the branch;
+no review authority follows a moving head. PR stays draft; no auto-merge, merge,
+C2/C4I rerun, Cloudflare credential use, production SQL, repair, secret/token
+change, 0039 or deploy. Production counters 0; token scope UNKNOWN/read-only proof
+false; repair NOT_AUTHORIZED; T21G_NOT_READY. Separate baselineComparison aggregate
+gap remains documented and outside this schema-only remediation.
+
+**Report:** `recipe-catalog/T21RC2S_SCHEMA_BOUNDARY_FORENSIC.md`.
+
+---
+
 # T21R-C2D classification diagnostics handoff — 2026-10-03 UTC
 
 **State:** Implementation on `codex/t21rc2d-classification-diagnostics` from

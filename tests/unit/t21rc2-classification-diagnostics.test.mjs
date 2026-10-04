@@ -281,13 +281,21 @@ describe('T21R-C2D diagnostic receipts reconstruct only static metadata', () => 
     const env = { RUNNER_TEMP: temp() };
     recordT21RC2Failure(failure, env);
     const receipt = JSON.parse(readFileSync(runnerPaths(env).publicReceipt, 'utf8'));
-    expect(receipt.classificationDiagnostic).toEqual({ schemaVersion: 1, status: code, stage });
-    const output = `${failure.message}\n${safeT21RC2Error(failure)}\n${JSON.stringify(receipt)}`;
+    const diagnostic = { section: 'root', field: 'unknown', keyword: 'additionalProperties',
+      code: 'ROOT_ADDITIONAL_PROPERTIES' };
+    expect(receipt.classificationDiagnostic).toEqual({ schemaVersion: 1, status: code, stage,
+      ...(stage === 'schema' ? { diagnostic } : {}) });
+    const output = `${failure.message}\n${safeT21RC2Error(failure)}\n${JSON.stringify(receipt)}\n${JSON.stringify(spies.map((spy) => spy.mock.calls))}`;
     privateMarkers.forEach((marker) => expect(output).not.toContain(marker));
     for (const field of ['instancePath', 'dataPath', 'params', 'parentSchema', 'stdout', 'stderr', 'unit', 'manifest']) {
       expect(output).not.toContain(`"${field}"`);
     }
-    spies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    if (stage === 'schema') {
+      expect(spies[1]).toHaveBeenCalledExactlyOnceWith(`t21rc2_schema=${JSON.stringify(diagnostic)}`);
+      [spies[0], spies[2], spies[3]].forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    } else {
+      spies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    }
   });
 
   it('never trusts caller-provided Ajv metadata, stage, cause, or receipt extras', () => {
@@ -295,9 +303,36 @@ describe('T21R-C2D diagnostic receipts reconstruct only static metadata', () => 
       stage: privateMarkers[0], classificationDiagnostic: { keyword: privateMarkers[1], data: privateMarkers } });
     const receipt = buildT21RC2FailureReceipt(error);
     expect(receipt.classificationDiagnostic).toEqual({ schemaVersion: 1,
-      status: 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED', stage: 'schema' });
+      status: 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED', stage: 'schema', diagnostic: {
+        section: 'unknown', field: 'unknown', keyword: 'unknown', code: 'UNKNOWN_SCHEMA_CONTRACT',
+      } });
     privateMarkers.forEach((marker) => expect(JSON.stringify(receipt)).not.toContain(marker));
     expect(buildT21RC2FailureReceipt({ code: privateMarkers[0] })).not.toHaveProperty('classificationDiagnostic');
+  });
+
+  it('snapshots allowlisted caller codes and redacts throwing code accessors', () => {
+    let reads = 0;
+    const changing = { get code() {
+      return ++reads === 1 ? 'T21RC2_CLASSIFICATION_SCHEMA_REJECTED' : privateMarkers.join(' ');
+    } };
+    expect(safeT21RC2Error(changing)).toBe('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
+    expect(reads).toBe(1);
+    reads = 0;
+    const receipt = buildT21RC2FailureReceipt(changing);
+    expect(reads).toBe(1);
+    expect(receipt.reason).toBe('T21RC2_CLASSIFICATION_SCHEMA_REJECTED');
+    expect(receipt.classificationDiagnostic.diagnostic).toEqual({
+      section: 'unknown', field: 'unknown', keyword: 'unknown', code: 'UNKNOWN_SCHEMA_CONTRACT',
+    });
+    const throwing = { get code() { throw new Error(privateMarkers.join(' ')); } };
+    const env = { RUNNER_TEMP: temp() };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(safeT21RC2Error(throwing)).toBe('T21RC2_CAPTURE_INCOMPLETE');
+    recordT21RC2Failure(throwing, env);
+    expect(log).not.toHaveBeenCalled();
+    const recorded = readFileSync(runnerPaths(env).publicReceipt, 'utf8');
+    expect(JSON.parse(recorded).reason).toBe('T21RC2_CAPTURE_INCOMPLETE');
+    privateMarkers.forEach((marker) => expect(`${JSON.stringify(receipt)}${recorded}`).not.toContain(marker));
   });
 });
 
